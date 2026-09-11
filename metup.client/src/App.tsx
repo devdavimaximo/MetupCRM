@@ -1,6 +1,7 @@
 import { useState } from "react"
 
-import { DashboardStub } from "@/features/dashboard/DashboardStub"
+import { AppShell } from "@/components/AppShell"
+import { CompaniesPage } from "@/features/companies/CompaniesPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { clearSession, getSession, type Session } from "@/lib/auth"
 
@@ -12,13 +13,15 @@ function App() {
   }
 
   return (
-    <DashboardStub
+    <AppShell
       session={session}
       onLogout={() => {
         clearSession()
         setSession(null)
       }}
-    />
+    >
+      <CompaniesPage />
+    </AppShell>
   )
 }
 

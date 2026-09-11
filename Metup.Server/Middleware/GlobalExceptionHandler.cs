@@ -19,6 +19,14 @@ public class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status401Unauthorized,
                 exception.Message,
                 null),
+            MissingOrganizationScopeException => (
+                StatusCodes.Status401Unauthorized,
+                exception.Message,
+                null),
+            NotFoundException => (
+                StatusCodes.Status404NotFound,
+                exception.Message,
+                null),
             _ => (StatusCodes.Status500InternalServerError, "Erro interno do servidor", null),
         };
 
