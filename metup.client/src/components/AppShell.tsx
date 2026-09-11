@@ -22,6 +22,7 @@ const roleLabels: Record<Session["user"]["role"], string> = {
 const navItems: { view: View; label: string }[] = [
   { view: "empresas", label: "Empresas" },
   { view: "pipeline", label: "Pipeline" },
+  { view: "tarefas", label: "Tarefas" },
 ]
 
 export function AppShell({ session, onLogout, view, onNavigate, children }: Props) {

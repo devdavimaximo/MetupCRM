@@ -1,4 +1,6 @@
-export type View = "empresas" | "pipeline"
+export type View = "empresas" | "pipeline" | "tarefas"
+
+const VIEWS: View[] = ["empresas", "pipeline", "tarefas"]
 
 /**
  * Estado navegável na URL (aba ativa, busca, empresa e negócio abertos), para o SDR poder
@@ -6,8 +8,9 @@ export type View = "empresas" | "pipeline"
  */
 export function readUrlState() {
   const params = new URLSearchParams(window.location.search)
+  const vista = params.get("vista")
   return {
-    view: (params.get("vista") === "pipeline" ? "pipeline" : "empresas") as View,
+    view: (VIEWS.includes(vista as View) ? vista : "empresas") as View,
     search: params.get("busca") ?? "",
     companyId: params.get("empresa"),
     dealId: params.get("negocio"),
@@ -26,8 +29,8 @@ export function writeUrlState(state: UrlStatePatch) {
   const params = new URLSearchParams(window.location.search)
 
   if (state.view !== undefined) {
-    if (state.view === "pipeline") params.set("vista", "pipeline")
-    else params.delete("vista")
+    if (state.view === "empresas") params.delete("vista")
+    else params.set("vista", state.view)
   }
 
   if (state.search !== undefined) {

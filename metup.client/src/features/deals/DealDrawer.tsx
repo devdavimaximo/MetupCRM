@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Building2, Loader2 } from "lucide-react"
+import { Building2, CalendarClock, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { toMessage } from "@/features/companies/form-errors"
 import { getCompany } from "@/features/companies/api"
+import { activityTypeLabels } from "@/features/activities/activity-labels"
+import { ActivityTimeline } from "@/features/activities/ActivityTimeline"
+import { LogActivityForm } from "@/features/activities/LogActivityForm"
+import { listActivitiesByDeal, type Activity, type LogActivityResult } from "@/features/activities/api"
 import { formatMoney, parseMoney } from "@/lib/money"
 import { DealForm } from "./DealForm"
 import { StageHistory } from "./StageHistory"
@@ -35,11 +39,17 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
   const [loadError, setLoadError] = useState<string | null>(null)
   const [closingAs, setClosingAs] = useState<"won" | "lost" | null>(null)
 
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [activitiesError, setActivitiesError] = useState<string | null>(null)
+  const [lastNextAction, setLastNextAction] = useState<LogActivityResult["nextAction"]>(null)
+
   useEffect(() => {
     setClosingAs(null)
 
     if (!target) {
       setDeal(null)
+      setActivities([])
+      setLastNextAction(null)
       return
     }
 
@@ -57,11 +67,13 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
           setDeal(loadedDeal)
           setCompanyName(loadedDeal.companyName)
           setContacts(company.contacts.map((c) => ({ id: c.id, name: c.name })))
+          await loadActivities(target!.id, controller.signal)
         } else {
           const company = await getCompany(companyId!, controller.signal)
           setDeal(null)
           setCompanyName(company.name)
           setContacts(company.contacts.map((c) => ({ id: c.id, name: c.name })))
+          setActivities([])
         }
       } catch (err) {
         if (controller.signal.aborted) return
@@ -75,9 +87,25 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
     return () => controller.abort()
   }, [target])
 
+  async function loadActivities(dealId: string, signal?: AbortSignal) {
+    setActivitiesError(null)
+    try {
+      const items = await listActivitiesByDeal(dealId, signal)
+      setActivities(items)
+    } catch (err) {
+      if (signal?.aborted) return
+      setActivitiesError(toMessage(err, "Não foi possível carregar a timeline."))
+    }
+  }
+
   function handleSaved(saved: Deal) {
     setDeal(saved)
     onSaved()
+  }
+
+  function handleActivityLogged(result: LogActivityResult) {
+    setActivities((current) => [result.activity, ...current])
+    setLastNextAction(result.nextAction)
   }
 
   const openCompanyId = target?.mode === "deal" ? (deal?.companyId ?? null) : (target?.companyId ?? null)
@@ -147,6 +175,36 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
                   onStartClosing={setClosingAs}
                   onClosed={handleSaved}
                 />
+              )}
+
+              {deal && (
+                <section aria-labelledby="deal-log-heading" className="flex flex-col gap-3">
+                  <h3 id="deal-log-heading" className="text-sm font-semibold text-foreground">
+                    Registrar atividade
+                  </h3>
+                  <LogActivityForm dealId={deal.id} contacts={contacts} onLogged={handleActivityLogged} />
+                  {lastNextAction && (
+                    <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <CalendarClock className="size-3.5 shrink-0" aria-hidden="true" />
+                      Próxima ação agendada: {activityTypeLabels[lastNextAction.type]} em{" "}
+                      {new Date(lastNextAction.dueDate).toLocaleString("pt-BR")}.
+                    </p>
+                  )}
+                </section>
+              )}
+
+              {deal && (
+                <section aria-labelledby="deal-timeline-heading" className="flex flex-col gap-3">
+                  <h3 id="deal-timeline-heading" className="text-sm font-semibold text-foreground">
+                    Timeline
+                  </h3>
+                  {activitiesError && (
+                    <p role="alert" className="text-sm font-medium text-destructive">
+                      {activitiesError}
+                    </p>
+                  )}
+                  <ActivityTimeline activities={activities} />
+                </section>
               )}
 
               {deal && (

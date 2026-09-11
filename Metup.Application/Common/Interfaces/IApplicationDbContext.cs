@@ -1,7 +1,9 @@
+using Metup.Domain.Activities;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
 using Metup.Domain.Deals;
 using Metup.Domain.Organizations;
+using Metup.Domain.Tasks;
 using Metup.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +22,10 @@ public interface IApplicationDbContext
     DbSet<Deal> Deals { get; }
 
     DbSet<StageChange> StageChanges { get; }
+
+    DbSet<Activity> Activities { get; }
+
+    DbSet<TaskItem> Tasks { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

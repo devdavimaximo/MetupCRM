@@ -1,8 +1,10 @@
 using Metup.Application.Common.Interfaces;
+using Metup.Domain.Activities;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
 using Metup.Domain.Deals;
 using Metup.Domain.Organizations;
+using Metup.Domain.Tasks;
 using Metup.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +23,10 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options) : DbContex
     public DbSet<Deal> Deals => Set<Deal>();
 
     public DbSet<StageChange> StageChanges => Set<StageChange>();
+
+    public DbSet<Activity> Activities => Set<Activity>();
+
+    public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

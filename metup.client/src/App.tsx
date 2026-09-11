@@ -3,6 +3,7 @@ import { useState } from "react"
 import { AppShell } from "@/components/AppShell"
 import { CompaniesPage } from "@/features/companies/CompaniesPage"
 import { PipelinePage } from "@/features/deals/PipelinePage"
+import { TasksPage } from "@/features/tasks/TasksPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { clearSession, getSession, type Session } from "@/lib/auth"
 import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
@@ -71,6 +72,7 @@ function App() {
           newDealIntent={newDealIntent}
         />
       )}
+      {view === "tarefas" && <TasksPage key={`tarefas-${navSeed}`} onOpenDeal={openDeal} />}
     </AppShell>
   )
 }
