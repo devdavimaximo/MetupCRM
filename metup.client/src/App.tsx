@@ -1,8 +1,24 @@
+import { useState } from "react"
+
+import { DashboardStub } from "@/features/dashboard/DashboardStub"
+import { LoginPage } from "@/features/auth/LoginPage"
+import { clearSession, getSession, type Session } from "@/lib/auth"
+
 function App() {
+  const [session, setSession] = useState<Session | null>(() => getSession())
+
+  if (!session) {
+    return <LoginPage onLoggedIn={setSession} />
+  }
+
   return (
-    <main className="flex min-h-svh items-center justify-center">
-      <h1 className="text-2xl font-semibold text-foreground">Metup CRM</h1>
-    </main>
+    <DashboardStub
+      session={session}
+      onLogout={() => {
+        clearSession()
+        setSession(null)
+      }}
+    />
   )
 }
 

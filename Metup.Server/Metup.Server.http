@@ -4,3 +4,31 @@ GET {{Metup.Server_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+POST {{Metup.Server_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "organizationName": "Metup",
+  "adminName": "Davi Maximo",
+  "adminEmail": "davi@metup.com.br",
+  "adminPassword": "SenhaForte123"
+}
+
+###
+
+# @name login
+POST {{Metup.Server_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "davi@metup.com.br",
+  "password": "SenhaForte123"
+}
+
+###
+
+GET {{Metup.Server_HostAddress}}/api/auth/me
+Authorization: Bearer {{login.response.body.token}}
+
+###
