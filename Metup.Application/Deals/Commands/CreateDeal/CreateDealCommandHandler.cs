@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Deals.Common;
 using Metup.Domain.Deals;
+using Metup.Domain.Integrations;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -57,6 +59,20 @@ public class CreateDealCommandHandler(
             DateTime.UtcNow);
 
         context.Deals.Add(deal);
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            dealId = deal.Id,
+            companyId = deal.CompanyId,
+            contactId = deal.ContactId,
+            source = deal.Source.ToString(),
+            stage = deal.Stage.ToString(),
+            createdAt = deal.CreatedAt,
+        });
+
+        context.IntegrationEvents.Add(
+            IntegrationEvent.Create(organizationId, IntegrationEventTypes.DealCreated, payload));
+
         await context.SaveChangesAsync(cancellationToken);
 
         return await context.Deals

@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Metup.Application.Activities.Common;
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Tasks.Common;
 using Metup.Domain.Activities;
+using Metup.Domain.Integrations;
 using Metup.Domain.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -65,6 +67,19 @@ public class LogActivityCommandHandler(
 
             context.Tasks.Add(task);
         }
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            activityId = activity.Id,
+            dealId = activity.DealId,
+            type = activity.Type.ToString(),
+            outcome = activity.Outcome?.ToString(),
+            authorUserId = activity.AuthorUserId,
+            occurredAt = activity.OccurredAt,
+        });
+
+        context.IntegrationEvents.Add(
+            IntegrationEvent.Create(organizationId, IntegrationEventTypes.ActivityLogged, payload));
 
         await context.SaveChangesAsync(cancellationToken);
 

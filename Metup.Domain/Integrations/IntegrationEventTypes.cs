@@ -9,4 +9,7 @@ namespace Metup.Domain.Integrations;
 public static class IntegrationEventTypes
 {
     public const string WhatsAppMessageSendRequested = "whatsapp.message.send_requested";
+    public const string DealCreated = "deal.created";
+    public const string StageChanged = "stage.changed";
+    public const string ActivityLogged = "activity.logged";
 }

@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Deals.Common;
+using Metup.Domain.Integrations;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +27,18 @@ public class ChangeDealStageCommandHandler(
         // EF Core não reconhece esse StageChange como "novo" só por estar na coleção do Deal
         // (o Guid já vem atribuído) — precisa ser rastreado explicitamente ou vira um UPDATE.
         context.StageChanges.Add(stageChange);
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            dealId = stageChange.DealId,
+            fromStage = stageChange.FromStage?.ToString(),
+            toStage = stageChange.ToStage.ToString(),
+            changedByUserId = stageChange.ChangedByUserId,
+            changedAt = stageChange.ChangedAt,
+        });
+
+        context.IntegrationEvents.Add(
+            IntegrationEvent.Create(organizationId, IntegrationEventTypes.StageChanged, payload));
 
         await context.SaveChangesAsync(cancellationToken);
 
