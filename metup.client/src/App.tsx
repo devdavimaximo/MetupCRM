@@ -2,6 +2,7 @@ import { useState } from "react"
 
 import { AppShell } from "@/components/AppShell"
 import { CompaniesPage } from "@/features/companies/CompaniesPage"
+import { DashboardPage } from "@/features/dashboard/DashboardPage"
 import { PipelinePage } from "@/features/deals/PipelinePage"
 import { TasksPage } from "@/features/tasks/TasksPage"
 import { LoginPage } from "@/features/auth/LoginPage"
@@ -58,6 +59,7 @@ function App() {
         setSession(null)
       }}
     >
+      {view === "dashboard" && <DashboardPage key={`dashboard-${navSeed}`} onOpenDeal={openDeal} />}
       {view === "empresas" && (
         <CompaniesPage
           key={`empresas-${navSeed}`}

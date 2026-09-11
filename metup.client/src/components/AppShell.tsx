@@ -20,6 +20,7 @@ const roleLabels: Record<Session["user"]["role"], string> = {
 }
 
 const navItems: { view: View; label: string }[] = [
+  { view: "dashboard", label: "Dashboard" },
   { view: "empresas", label: "Empresas" },
   { view: "pipeline", label: "Pipeline" },
   { view: "tarefas", label: "Tarefas" },
