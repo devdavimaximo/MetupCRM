@@ -1,6 +1,6 @@
-export type View = "dashboard" | "empresas" | "pipeline" | "tarefas"
+export type View = "dashboard" | "empresas" | "pipeline" | "tarefas" | "inbox"
 
-const VIEWS: View[] = ["dashboard", "empresas", "pipeline", "tarefas"]
+const VIEWS: View[] = ["dashboard", "empresas", "pipeline", "tarefas", "inbox"]
 
 /**
  * Estado navegável na URL (aba ativa, busca, filtros e fichas abertas), para o SDR poder
@@ -14,6 +14,7 @@ export function readUrlState() {
     search: params.get("busca") ?? "",
     companyId: params.get("empresa"),
     dealId: params.get("negocio"),
+    conversationId: params.get("conversa"),
     segment: params.get("segmento") ?? "",
     city: params.get("cidade") ?? "",
     ownerUserId: params.get("responsavel") ?? "",
@@ -29,6 +30,7 @@ type UrlStatePatch = {
   search?: string
   companyId?: string | null
   dealId?: string | null
+  conversationId?: string | null
   segment?: string
   city?: string
   ownerUserId?: string
@@ -73,6 +75,11 @@ export function writeUrlState(state: UrlStatePatch) {
   if (state.dealId !== undefined) {
     if (state.dealId) params.set("negocio", state.dealId)
     else params.delete("negocio")
+  }
+
+  if (state.conversationId !== undefined) {
+    if (state.conversationId) params.set("conversa", state.conversationId)
+    else params.delete("conversa")
   }
 
   const query = params.toString()

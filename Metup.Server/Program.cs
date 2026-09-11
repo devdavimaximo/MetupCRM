@@ -7,7 +7,9 @@ using Metup.Application.Common.Interfaces;
 using Metup.Infrastructure;
 using Metup.Infrastructure.Security;
 using Metup.Server.Middleware;
+using Metup.Server.Security;
 using Metup.Server.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -57,7 +59,9 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret)),
             ClockSkew = TimeSpan.Zero,
         };
-    });
+    })
+    .AddScheme<AuthenticationSchemeOptions, ServiceTokenAuthenticationHandler>(
+        ServiceTokenAuthenticationHandler.SchemeName, _ => { });
 
 builder.Services.AddAuthorization();
 

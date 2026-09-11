@@ -1,7 +1,9 @@
 using Metup.Domain.Activities;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
+using Metup.Domain.Conversations;
 using Metup.Domain.Deals;
+using Metup.Domain.Integrations;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
 using Metup.Domain.Users;
@@ -26,6 +28,12 @@ public interface IApplicationDbContext
     DbSet<Activity> Activities { get; }
 
     DbSet<TaskItem> Tasks { get; }
+
+    DbSet<Conversation> Conversations { get; }
+
+    DbSet<Message> Messages { get; }
+
+    DbSet<IntegrationEvent> IntegrationEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

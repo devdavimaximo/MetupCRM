@@ -18,6 +18,10 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
             .HasMaxLength(200)
             .IsRequired();
 
+        builder.Property(o => o.IntegrationTokenHash)
+            .HasColumnName("integration_token_hash")
+            .HasMaxLength(500);
+
         builder.Property(o => o.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

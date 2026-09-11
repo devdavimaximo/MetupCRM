@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell"
 import { CompaniesPage } from "@/features/companies/CompaniesPage"
 import { DashboardPage } from "@/features/dashboard/DashboardPage"
 import { PipelinePage } from "@/features/deals/PipelinePage"
+import { InboxPage } from "@/features/inbox/InboxPage"
 import { TasksPage } from "@/features/tasks/TasksPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { clearSession, getSession, type Session } from "@/lib/auth"
@@ -77,6 +78,7 @@ function App() {
       {view === "tarefas" && (
         <TasksPage key={`tarefas-${navSeed}`} role={session.user.role} onOpenDeal={openDeal} />
       )}
+      {view === "inbox" && <InboxPage key={`inbox-${navSeed}`} onOpenDeal={openDeal} />}
     </AppShell>
   )
 }

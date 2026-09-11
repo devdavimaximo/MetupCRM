@@ -2,7 +2,9 @@ using Metup.Application.Common.Interfaces;
 using Metup.Domain.Activities;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
+using Metup.Domain.Conversations;
 using Metup.Domain.Deals;
+using Metup.Domain.Integrations;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
 using Metup.Domain.Users;
@@ -27,6 +29,12 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options) : DbContex
     public DbSet<Activity> Activities => Set<Activity>();
 
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+
+    public DbSet<Message> Messages => Set<Message>();
+
+    public DbSet<IntegrationEvent> IntegrationEvents => Set<IntegrationEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
