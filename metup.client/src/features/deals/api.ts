@@ -72,13 +72,21 @@ export type CreateDealInput = DealInput & {
 
 /** A organização nunca é enviada: o servidor a resolve pelo token. */
 export function listDeals(
-  params: { companyId?: string; stage?: DealStage; ownerUserId?: string; page?: number; pageSize?: number },
+  params: {
+    companyId?: string
+    stage?: DealStage
+    ownerUserId?: string
+    source?: DealSource
+    page?: number
+    pageSize?: number
+  },
   signal?: AbortSignal
 ) {
   const query = new URLSearchParams()
   if (params.companyId) query.set("companyId", params.companyId)
   if (params.stage) query.set("stage", params.stage)
   if (params.ownerUserId) query.set("ownerUserId", params.ownerUserId)
+  if (params.source) query.set("source", params.source)
   query.set("page", String(params.page ?? 1))
   query.set("pageSize", String(params.pageSize ?? 200))
 

@@ -4,12 +4,27 @@ import { AlertCircle, Building2, CalendarClock, Check, Loader2, X } from "lucide
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { activityTypeLabels } from "@/features/activities/activity-labels"
 import { toMessage } from "@/features/companies/form-errors"
+import { listUsers, type UserSummary } from "@/features/deals/api"
+import type { AuthenticatedUser } from "@/lib/auth"
+import { readUrlState, writeUrlState } from "@/lib/url-state"
 import { cancelTask, completeTask, listTasks, rescheduleTask, type TaskItem, type TaskStatus } from "./api"
 
 type Props = {
+  role: AuthenticatedUser["role"]
   onOpenDeal: (dealId: string) => void
+}
+
+/** Data local (YYYY-MM-DD) do input type="date" convertida para o início/fim do dia em ISO. */
+function toIsoDayStart(date: string): string | undefined {
+  return date ? new Date(`${date}T00:00:00`).toISOString() : undefined
+}
+
+function toIsoDayEnd(date: string): string | undefined {
+  return date ? new Date(`${date}T23:59:59.999`).toISOString() : undefined
 }
 
 type Bucket = "overdue" | "today" | "upcoming"
@@ -36,9 +51,18 @@ function toLocalInputValue(date: Date): string {
 }
 
 /** "Hoje você tem N contatos que precisam de follow-up" (seção 3.5 do CLAUDE.md) — versão simples, sem dashboard ainda. */
-export function TasksPage({ onOpenDeal }: Props) {
+export function TasksPage({ role, onOpenDeal }: Props) {
+  const initialUrlState = readUrlState()
+  const canFilterByOwner = role === "Admin" || role === "Closer"
+
   const [tasks, setTasks] = useState<TaskItem[]>([])
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "Pendente">("Pendente")
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | "Pendente">(
+    initialUrlState.taskStatus === "Concluida" ? "Concluida" : "Pendente"
+  )
+  const [ownerUserId, setOwnerUserId] = useState(canFilterByOwner ? initialUrlState.ownerUserId : "")
+  const [dueFrom, setDueFrom] = useState(initialUrlState.dueFrom)
+  const [dueTo, setDueTo] = useState(initialUrlState.dueTo)
+  const [users, setUsers] = useState<UserSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadVersion, setReloadVersion] = useState(0)
@@ -46,22 +70,49 @@ export function TasksPage({ onOpenDeal }: Props) {
   const reload = useCallback(() => setReloadVersion((v) => v + 1), [])
 
   useEffect(() => {
+    if (!canFilterByOwner) return
+    const controller = new AbortController()
+    listUsers(controller.signal)
+      .then(setUsers)
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [canFilterByOwner])
+
+  useEffect(() => {
     const controller = new AbortController()
     setIsLoading(true)
     setError(null)
 
-    listTasks({ status: statusFilter === "Pendente" ? "Pendente" : undefined, pageSize: 200 }, controller.signal)
+    listTasks(
+      {
+        status: statusFilter === "Pendente" ? "Pendente" : undefined,
+        ownerUserId: ownerUserId || undefined,
+        dueFrom: toIsoDayStart(dueFrom),
+        dueTo: toIsoDayEnd(dueTo),
+        pageSize: 200,
+      },
+      controller.signal
+    )
       .then((result) => setTasks(result.items))
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
-        setError(toMessage(err, "Não foi possível carregar suas tarefas."))
+        setError(toMessage(err, "Não foi possível carregar as tarefas."))
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false)
       })
 
     return () => controller.abort()
-  }, [statusFilter, reloadVersion])
+  }, [statusFilter, ownerUserId, dueFrom, dueTo, reloadVersion])
+
+  useEffect(() => {
+    writeUrlState({
+      taskStatus: statusFilter === "Pendente" ? "" : statusFilter,
+      ownerUserId,
+      dueFrom,
+      dueTo,
+    })
+  }, [statusFilter, ownerUserId, dueFrom, dueTo])
 
   function handleChanged(updated: TaskItem) {
     setTasks((current) =>
@@ -77,11 +128,15 @@ export function TasksPage({ onOpenDeal }: Props) {
     items: tasks.filter((t) => bucketOf(t) === bucket),
   }))
 
+  const hasExtraFilters = Boolean(ownerUserId || dueFrom || dueTo)
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Minhas tarefas</h1>
+          <h1 className="text-xl font-semibold text-foreground">
+            {canFilterByOwner && ownerUserId ? "Tarefas" : "Minhas tarefas"}
+          </h1>
           <p className="text-sm text-muted-foreground">
             {isLoading ? "Carregando…" : `${tasks.length} ${tasks.length === 1 ? "tarefa" : "tarefas"}`}
           </p>
@@ -106,6 +161,68 @@ export function TasksPage({ onOpenDeal }: Props) {
           </Button>
         </div>
       </header>
+
+      <div className="flex flex-wrap items-end gap-2">
+        {canFilterByOwner && (
+          <div className="w-44">
+            <Label htmlFor="tasks-filter-owner" className="sr-only">
+              Filtrar por responsável
+            </Label>
+            <Select id="tasks-filter-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}>
+              <option value="">Minhas tarefas</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tasks-filter-due-from" className="text-xs text-muted-foreground">
+            De
+          </Label>
+          <Input
+            id="tasks-filter-due-from"
+            type="date"
+            className="w-36"
+            value={dueFrom}
+            max={dueTo || undefined}
+            onChange={(e) => setDueFrom(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tasks-filter-due-to" className="text-xs text-muted-foreground">
+            Até
+          </Label>
+          <Input
+            id="tasks-filter-due-to"
+            type="date"
+            className="w-36"
+            value={dueTo}
+            min={dueFrom || undefined}
+            onChange={(e) => setDueTo(e.target.value)}
+          />
+        </div>
+
+        {hasExtraFilters && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setOwnerUserId("")
+              setDueFrom("")
+              setDueTo("")
+            }}
+          >
+            <X aria-hidden="true" />
+            Limpar filtros
+          </Button>
+        )}
+      </div>
 
       {error && (
         <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">

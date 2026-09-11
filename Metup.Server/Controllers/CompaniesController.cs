@@ -4,6 +4,7 @@ using Metup.Application.Companies.Commands.UpdateCompany;
 using Metup.Application.Companies.Common;
 using Metup.Application.Companies.Queries.GetCompanyById;
 using Metup.Application.Companies.Queries.ListCompanies;
+using Metup.Application.Companies.Queries.ListCompanyFilterOptions;
 using Metup.Application.Contacts.Commands.CreateContact;
 using Metup.Application.Contacts.Common;
 using Metup.Application.Contacts.Queries.ListContactsByCompany;
@@ -65,6 +66,10 @@ public class CompaniesController(ISender sender) : ControllerBase
         var query = new ListCompaniesQuery(search, segment, city, page, pageSize);
         return Ok(await sender.Send(query, cancellationToken));
     }
+
+    [HttpGet("filter-options")]
+    public async Task<ActionResult<CompanyFilterOptionsDto>> ListFilterOptions(CancellationToken cancellationToken) =>
+        Ok(await sender.Send(new ListCompanyFilterOptionsQuery(), cancellationToken));
 
     [HttpGet("{companyId:guid}/contacts")]
     public async Task<ActionResult<IReadOnlyList<ContactDto>>> ListContacts(

@@ -1,6 +1,8 @@
+using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Models;
 using Metup.Application.Tasks.Common;
+using Metup.Domain.Users;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +15,13 @@ public class ListTasksQueryHandler(
     public async Task<PagedResult<TaskDto>> Handle(ListTasksQuery request, CancellationToken cancellationToken)
     {
         var organizationId = currentUserService.RequireOrganizationId();
-        var ownerUserId = request.OwnerUserId ?? currentUserService.RequireUserId();
+        var currentUserId = currentUserService.RequireUserId();
+        var ownerUserId = request.OwnerUserId ?? currentUserId;
+
+        if (ownerUserId != currentUserId && currentUserService.Role is not (nameof(UserRole.Admin) or nameof(UserRole.Closer)))
+        {
+            throw new ForbiddenAccessException("Sem permissão para ver as tarefas de outro usuário.");
+        }
 
         var query = context.Tasks
             .AsNoTracking()

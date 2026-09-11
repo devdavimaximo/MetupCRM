@@ -13,8 +13,8 @@ namespace Metup.Server.Controllers;
 
 /// <remarks>
 /// Regra de acesso atual: sem ownerUserId informado, a listagem é sempre "minhas tarefas"
-/// (o usuário logado) — ver as tarefas de outra pessoa fica para quando houver um papel/
-/// permissão dedicado para isso.
+/// (o usuário logado). Pedir tarefas de outra pessoa só é permitido para Admin/Closer —
+/// o handler (ListTasksQueryHandler) rejeita a tentativa de um SDR.
 /// </remarks>
 [ApiController]
 [Authorize]

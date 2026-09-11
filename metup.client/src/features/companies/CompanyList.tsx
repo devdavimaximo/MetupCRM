@@ -1,20 +1,26 @@
-import { Building2, Loader2, Plus, Search } from "lucide-react"
+import { Building2, Loader2, Plus, Search, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import type { CompanyListItem } from "./api"
+import type { CompanyFilterOptions, CompanyListItem } from "./api"
 
 type Props = {
   companies: CompanyListItem[]
   totalCount: number
   selectedId: string | null
   search: string
+  segment: string
+  city: string
+  filterOptions: CompanyFilterOptions
   isLoading: boolean
   error: string | null
   onSearchChange: (search: string) => void
+  onSegmentChange: (segment: string) => void
+  onCityChange: (city: string) => void
   onSelect: (companyId: string) => void
   onCreate: () => void
   onRetry: () => void
@@ -25,13 +31,26 @@ export function CompanyList({
   totalCount,
   selectedId,
   search,
+  segment,
+  city,
+  filterOptions,
   isLoading,
   error,
   onSearchChange,
+  onSegmentChange,
+  onCityChange,
   onSelect,
   onCreate,
   onRetry,
 }: Props) {
+  const hasFilters = Boolean(search || segment || city)
+
+  function clearFilters() {
+    onSearchChange("")
+    onSegmentChange("")
+    onCityChange("")
+  }
+
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <div className="flex flex-col gap-2">
@@ -56,17 +75,59 @@ export function CompanyList({
           />
         </div>
 
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label htmlFor="company-filter-segment" className="sr-only">
+              Filtrar por segmento
+            </Label>
+            <Select
+              id="company-filter-segment"
+              value={segment}
+              onChange={(e) => onSegmentChange(e.target.value)}
+            >
+              <option value="">Todos os segmentos</option>
+              {filterOptions.segments.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="company-filter-city" className="sr-only">
+              Filtrar por cidade
+            </Label>
+            <Select id="company-filter-city" value={city} onChange={(e) => onCityChange(e.target.value)}>
+              <option value="">Todas as cidades</option>
+              {filterOptions.cities.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+
         <Button type="button" onClick={onCreate} className="w-full">
           <Plus aria-hidden="true" />
           Nova Empresa
         </Button>
       </div>
 
-      <p className="tabular text-xs text-muted-foreground" aria-live="polite">
-        {isLoading
-          ? "Carregando…"
-          : `${totalCount} ${totalCount === 1 ? "empresa" : "empresas"}${search ? " encontradas" : ""}`}
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="tabular text-xs text-muted-foreground" aria-live="polite">
+          {isLoading
+            ? "Carregando…"
+            : `${totalCount} ${totalCount === 1 ? "empresa" : "empresas"}${hasFilters ? " encontradas" : ""}`}
+        </p>
+        {hasFilters && (
+          <Button type="button" size="sm" variant="ghost" className="h-auto p-0 text-xs" onClick={clearFilters}>
+            <X className="size-3" aria-hidden="true" />
+            Limpar filtros
+          </Button>
+        )}
+      </div>
 
       {error && (
         <div role="alert" className="flex flex-col items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">
@@ -85,7 +146,7 @@ export function CompanyList({
       )}
 
       {!isLoading && !error && companies.length === 0 && (
-        <EmptyState search={search} onCreate={onCreate} onClearSearch={() => onSearchChange("")} />
+        <EmptyState hasFilters={hasFilters} onCreate={onCreate} onClearFilters={clearFilters} />
       )}
 
       {companies.length > 0 && (
@@ -140,22 +201,20 @@ export function CompanyList({
 }
 
 function EmptyState({
-  search,
+  hasFilters,
   onCreate,
-  onClearSearch,
+  onClearFilters,
 }: {
-  search: string
+  hasFilters: boolean
   onCreate: () => void
-  onClearSearch: () => void
+  onClearFilters: () => void
 }) {
-  if (search) {
+  if (hasFilters) {
     return (
       <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border px-4 py-6">
-        <p className="text-sm text-muted-foreground">
-          Nenhuma empresa encontrada para “{search}”.
-        </p>
-        <Button type="button" size="sm" variant="outline" onClick={onClearSearch}>
-          Limpar Busca
+        <p className="text-sm text-muted-foreground">Nenhuma empresa encontrada para esses filtros.</p>
+        <Button type="button" size="sm" variant="outline" onClick={onClearFilters}>
+          Limpar Filtros
         </Button>
       </div>
     )

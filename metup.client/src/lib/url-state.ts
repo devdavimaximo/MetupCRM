@@ -3,8 +3,8 @@ export type View = "dashboard" | "empresas" | "pipeline" | "tarefas"
 const VIEWS: View[] = ["dashboard", "empresas", "pipeline", "tarefas"]
 
 /**
- * Estado navegável na URL (aba ativa, busca, empresa e negócio abertos), para o SDR poder
- * recarregar a página ou mandar o link de uma ficha sem perder o contexto.
+ * Estado navegável na URL (aba ativa, busca, filtros e fichas abertas), para o SDR poder
+ * recarregar a página ou mandar o link de uma tela filtrada sem perder o contexto.
  */
 export function readUrlState() {
   const params = new URLSearchParams(window.location.search)
@@ -14,6 +14,13 @@ export function readUrlState() {
     search: params.get("busca") ?? "",
     companyId: params.get("empresa"),
     dealId: params.get("negocio"),
+    segment: params.get("segmento") ?? "",
+    city: params.get("cidade") ?? "",
+    ownerUserId: params.get("responsavel") ?? "",
+    source: params.get("origem") ?? "",
+    taskStatus: params.get("status") ?? "",
+    dueFrom: params.get("prazoDe") ?? "",
+    dueTo: params.get("prazoAte") ?? "",
   }
 }
 
@@ -22,7 +29,25 @@ type UrlStatePatch = {
   search?: string
   companyId?: string | null
   dealId?: string | null
+  segment?: string
+  city?: string
+  ownerUserId?: string
+  source?: string
+  taskStatus?: string
+  dueFrom?: string
+  dueTo?: string
 }
+
+const STRING_KEYS = [
+  ["search", "busca"],
+  ["segment", "segmento"],
+  ["city", "cidade"],
+  ["ownerUserId", "responsavel"],
+  ["source", "origem"],
+  ["taskStatus", "status"],
+  ["dueFrom", "prazoDe"],
+  ["dueTo", "prazoAte"],
+] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */
 export function writeUrlState(state: UrlStatePatch) {
@@ -33,9 +58,11 @@ export function writeUrlState(state: UrlStatePatch) {
     else params.set("vista", state.view)
   }
 
-  if (state.search !== undefined) {
-    if (state.search) params.set("busca", state.search)
-    else params.delete("busca")
+  for (const [key, param] of STRING_KEYS) {
+    const value = state[key]
+    if (value === undefined) continue
+    if (value) params.set(param, value)
+    else params.delete(param)
   }
 
   if (state.companyId !== undefined) {

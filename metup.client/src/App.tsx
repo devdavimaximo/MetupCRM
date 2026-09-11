@@ -74,7 +74,9 @@ function App() {
           newDealIntent={newDealIntent}
         />
       )}
-      {view === "tarefas" && <TasksPage key={`tarefas-${navSeed}`} onOpenDeal={openDeal} />}
+      {view === "tarefas" && (
+        <TasksPage key={`tarefas-${navSeed}`} role={session.user.role} onOpenDeal={openDeal} />
+      )}
     </AppShell>
   )
 }

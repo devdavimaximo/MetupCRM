@@ -28,6 +28,10 @@ public class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status401Unauthorized,
                 exception.Message,
                 null),
+            ForbiddenAccessException => (
+                StatusCodes.Status403Forbidden,
+                exception.Message,
+                null),
             NotFoundException => (
                 StatusCodes.Status404NotFound,
                 exception.Message,
