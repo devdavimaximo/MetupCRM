@@ -3,10 +3,13 @@ import { LogOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { Session } from "@/lib/auth"
+import type { View } from "@/lib/url-state"
 
 type Props = {
   session: Session
   onLogout: () => void
+  view: View
+  onNavigate: (view: View) => void
   children: ReactNode
 }
 
@@ -16,7 +19,12 @@ const roleLabels: Record<Session["user"]["role"], string> = {
   Sdr: "SDR",
 }
 
-export function AppShell({ session, onLogout, children }: Props) {
+const navItems: { view: View; label: string }[] = [
+  { view: "empresas", label: "Empresas" },
+  { view: "pipeline", label: "Pipeline" },
+]
+
+export function AppShell({ session, onLogout, view, onNavigate, children }: Props) {
   return (
     <div className="min-h-svh bg-background">
       <a
@@ -33,12 +41,24 @@ export function AppShell({ session, onLogout, children }: Props) {
           </p>
 
           <nav aria-label="Principal" className="flex items-center gap-1">
-            <span
-              aria-current="page"
-              className="rounded-md bg-accent px-2.5 py-1 text-sm font-medium text-accent-foreground"
-            >
-              Empresas
-            </span>
+            {navItems.map((item) => {
+              const isActive = item.view === view
+              return (
+                <button
+                  key={item.view}
+                  type="button"
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => onNavigate(item.view)}
+                  className={
+                    isActive
+                      ? "rounded-md bg-accent px-2.5 py-1 text-sm font-medium text-accent-foreground"
+                      : "rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  }
+                >
+                  {item.label}
+                </button>
+              )
+            })}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">

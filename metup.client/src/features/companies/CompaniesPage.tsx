@@ -10,7 +10,12 @@ import { toMessage } from "./form-errors"
 /** Ficha aberta: uma empresa carregada, ou o formulário em branco de cadastro. */
 type Selection = { mode: "none" } | { mode: "new" } | { mode: "company"; id: string }
 
-export function CompaniesPage() {
+type Props = {
+  onOpenDeal: (dealId: string) => void
+  onNewDealForCompany: (companyId: string, companyName: string) => void
+}
+
+export function CompaniesPage({ onOpenDeal, onNewDealForCompany }: Props) {
   const initialUrlState = readUrlState()
 
   const [search, setSearch] = useState(initialUrlState.search)
@@ -132,6 +137,8 @@ export function CompaniesPage() {
             onCompanySaved={handleCompanySaved}
             onContactsChanged={setCompany}
             onBack={() => setSelection({ mode: "none" })}
+            onOpenDeal={onOpenDeal}
+            onNewDealForCompany={onNewDealForCompany}
           />
         )}
 
@@ -144,6 +151,8 @@ export function CompaniesPage() {
               reloadList()
             }}
             onBack={() => setSelection({ mode: "none" })}
+            onOpenDeal={onOpenDeal}
+            onNewDealForCompany={onNewDealForCompany}
           />
         )}
 

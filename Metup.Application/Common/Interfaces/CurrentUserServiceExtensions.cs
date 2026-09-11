@@ -10,4 +10,8 @@ public static class CurrentUserServiceExtensions
     /// </summary>
     public static Guid RequireOrganizationId(this ICurrentUserService currentUserService) =>
         currentUserService.OrganizationId ?? throw new MissingOrganizationScopeException();
+
+    /// <summary>Ponto único de leitura do autor da ação (quem registrou a mudança) nos casos de uso.</summary>
+    public static Guid RequireUserId(this ICurrentUserService currentUserService) =>
+        currentUserService.UserId ?? throw new MissingUserContextException();
 }

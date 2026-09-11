@@ -1,5 +1,6 @@
 using FluentValidation;
 using Metup.Application.Common.Exceptions;
+using Metup.Domain.Common.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,8 +24,16 @@ public class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status401Unauthorized,
                 exception.Message,
                 null),
+            MissingUserContextException => (
+                StatusCodes.Status401Unauthorized,
+                exception.Message,
+                null),
             NotFoundException => (
                 StatusCodes.Status404NotFound,
+                exception.Message,
+                null),
+            DomainRuleException => (
+                StatusCodes.Status409Conflict,
                 exception.Message,
                 null),
             _ => (StatusCodes.Status500InternalServerError, "Erro interno do servidor", null),

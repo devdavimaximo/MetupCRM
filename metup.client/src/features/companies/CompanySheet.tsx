@@ -4,6 +4,7 @@ import { ArrowLeft, AtSign, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { instagramHref } from "@/lib/contact-links"
+import { CompanyDealList } from "./CompanyDealList"
 import { CompanyForm } from "./CompanyForm"
 import { ContactForm } from "./ContactForm"
 import { ContactList } from "./ContactList"
@@ -15,10 +16,19 @@ type Props = {
   onCompanySaved: (company: Company) => void
   onContactsChanged: (company: Company) => void
   onBack: () => void
+  onOpenDeal: (dealId: string) => void
+  onNewDealForCompany: (companyId: string, companyName: string) => void
 }
 
-/** A ficha: dados da empresa e os contatos dela, na mesma tela. */
-export function CompanySheet({ company, onCompanySaved, onContactsChanged, onBack }: Props) {
+/** A ficha: dados da empresa, os contatos e os negócios dela, na mesma tela. */
+export function CompanySheet({
+  company,
+  onCompanySaved,
+  onContactsChanged,
+  onBack,
+  onOpenDeal,
+  onNewDealForCompany,
+}: Props) {
   const [editingContactId, setEditingContactId] = useState<string | null>(null)
   const [isAddingContact, setIsAddingContact] = useState(false)
 
@@ -151,6 +161,16 @@ export function CompanySheet({ company, onCompanySaved, onContactsChanged, onBac
           />
         )}
       </section>
+
+      {company && (
+        <section aria-label="Negócios da empresa">
+          <CompanyDealList
+            companyId={company.id}
+            onOpenDeal={onOpenDeal}
+            onNewDeal={() => onNewDealForCompany(company.id, company.name)}
+          />
+        </section>
+      )}
     </div>
   )
 }
