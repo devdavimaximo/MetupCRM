@@ -1,0 +1,6 @@
+@Metup.Server_HostAddress = http://localhost:5100
+
+GET {{Metup.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
