@@ -24,6 +24,7 @@ export function readUrlState() {
     dueTo: params.get("prazoAte") ?? "",
     reportFrom: params.get("relatorioDe") ?? "",
     reportTo: params.get("relatorioAte") ?? "",
+    reportTab: params.get("relatorioAba") ?? "",
   }
 }
 
@@ -42,6 +43,7 @@ type UrlStatePatch = {
   dueTo?: string
   reportFrom?: string
   reportTo?: string
+  reportTab?: string
 }
 
 const STRING_KEYS = [
@@ -55,6 +57,7 @@ const STRING_KEYS = [
   ["dueTo", "prazoAte"],
   ["reportFrom", "relatorioDe"],
   ["reportTo", "relatorioAte"],
+  ["reportTab", "relatorioAba"],
 ] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */

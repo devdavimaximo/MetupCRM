@@ -5,7 +5,7 @@ import { CompaniesPage } from "@/features/companies/CompaniesPage"
 import { DashboardPage } from "@/features/dashboard/DashboardPage"
 import { PipelinePage } from "@/features/deals/PipelinePage"
 import { InboxPage } from "@/features/inbox/InboxPage"
-import { FunnelReportPage } from "@/features/reports/FunnelReportPage"
+import { ReportsPage } from "@/features/reports/ReportsPage"
 import { TasksPage } from "@/features/tasks/TasksPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { clearSession, getSession, type Session } from "@/lib/auth"
@@ -18,9 +18,9 @@ function App() {
   const [view, setView] = useState<View>(() => readUrlState().view)
   const [navSeed, setNavSeed] = useState(0)
   const [newDealIntent, setNewDealIntent] = useState<NewDealIntent>(null)
-  const [reportPeriod] = useState(() => {
+  const [reportState] = useState(() => {
     const initial = readUrlState()
-    return { from: initial.reportFrom, to: initial.reportTo }
+    return { from: initial.reportFrom, to: initial.reportTo, tab: initial.reportTab }
   })
 
   if (!session) {
@@ -85,11 +85,12 @@ function App() {
       )}
       {view === "inbox" && <InboxPage key={`inbox-${navSeed}`} onOpenDeal={openDeal} />}
       {view === "relatorios" && (
-        <FunnelReportPage
+        <ReportsPage
           key={`relatorios-${navSeed}`}
-          initialFrom={reportPeriod.from}
-          initialTo={reportPeriod.to}
-          onPeriodChange={({ from, to }) => writeUrlState({ reportFrom: from, reportTo: to })}
+          initialFrom={reportState.from}
+          initialTo={reportState.to}
+          initialTab={reportState.tab}
+          onStateChange={({ from, to, tab }) => writeUrlState({ reportFrom: from, reportTo: to, reportTab: tab === "funil" ? "" : tab })}
         />
       )}
     </AppShell>

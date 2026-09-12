@@ -1,5 +1,6 @@
 using Metup.Application.Reports.Common;
 using Metup.Application.Reports.Queries.GetFunnelReport;
+using Metup.Application.Reports.Queries.GetSalesPerformanceByOwner;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,4 +18,11 @@ public class ReportsController(ISender sender) : ControllerBase
         [FromQuery] DateTime? to,
         CancellationToken cancellationToken) =>
         Ok(await sender.Send(new GetFunnelReportQuery(from, to), cancellationToken));
+
+    [HttpGet("sales-by-owner")]
+    public async Task<ActionResult<SalesPerformanceReportDto>> GetSalesByOwner(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken) =>
+        Ok(await sender.Send(new GetSalesPerformanceByOwnerQuery(from, to), cancellationToken));
 }
