@@ -1,6 +1,6 @@
-export type View = "dashboard" | "empresas" | "pipeline" | "tarefas" | "inbox"
+export type View = "dashboard" | "empresas" | "pipeline" | "tarefas" | "inbox" | "relatorios"
 
-const VIEWS: View[] = ["dashboard", "empresas", "pipeline", "tarefas", "inbox"]
+const VIEWS: View[] = ["dashboard", "empresas", "pipeline", "tarefas", "inbox", "relatorios"]
 
 /**
  * Estado navegável na URL (aba ativa, busca, filtros e fichas abertas), para o SDR poder
@@ -22,6 +22,8 @@ export function readUrlState() {
     taskStatus: params.get("status") ?? "",
     dueFrom: params.get("prazoDe") ?? "",
     dueTo: params.get("prazoAte") ?? "",
+    reportFrom: params.get("relatorioDe") ?? "",
+    reportTo: params.get("relatorioAte") ?? "",
   }
 }
 
@@ -38,6 +40,8 @@ type UrlStatePatch = {
   taskStatus?: string
   dueFrom?: string
   dueTo?: string
+  reportFrom?: string
+  reportTo?: string
 }
 
 const STRING_KEYS = [
@@ -49,6 +53,8 @@ const STRING_KEYS = [
   ["taskStatus", "status"],
   ["dueFrom", "prazoDe"],
   ["dueTo", "prazoAte"],
+  ["reportFrom", "relatorioDe"],
+  ["reportTo", "relatorioAte"],
 ] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */

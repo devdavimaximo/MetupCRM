@@ -25,6 +25,7 @@ const navItems: { view: View; label: string }[] = [
   { view: "pipeline", label: "Pipeline" },
   { view: "tarefas", label: "Tarefas" },
   { view: "inbox", label: "Conversas" },
+  { view: "relatorios", label: "Relatórios" },
 ]
 
 export function AppShell({ session, onLogout, view, onNavigate, children }: Props) {
