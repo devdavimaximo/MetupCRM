@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CohortsSection } from "./CohortsSection"
+import { ForecastReportSection } from "./ForecastReportSection"
 import { FunnelReportSection } from "./FunnelReportSection"
 import { SalesByOwnerSection } from "./SalesByOwnerSection"
 import { SalesBySegmentSection } from "./SalesBySegmentSection"
 import { SalesBySourceSection } from "./SalesBySourceSection"
 import { TimeToCloseReportSection } from "./TimeToCloseReportSection"
 
-type ReportTab = "funil" | "responsaveis" | "segmentos" | "origens" | "tempo-fechamento" | "safras"
+type ReportTab = "funil" | "responsaveis" | "segmentos" | "origens" | "tempo-fechamento" | "safras" | "forecast"
 
 const TABS: { id: ReportTab; label: string }[] = [
   { id: "funil", label: "Funil" },
@@ -19,6 +20,7 @@ const TABS: { id: ReportTab; label: string }[] = [
   { id: "origens", label: "Por origem" },
   { id: "tempo-fechamento", label: "Tempo até fechamento" },
   { id: "safras", label: "Safras" },
+  { id: "forecast", label: "Forecast" },
 ]
 
 const TAB_IDS: ReportTab[] = TABS.map((t) => t.id)
@@ -166,6 +168,10 @@ export function ReportsPage({ initialFrom, initialTo, initialTab, onStateChange 
 
       <div id="report-panel-safras" role="tabpanel" aria-labelledby="report-tab-safras" hidden={tab !== "safras"}>
         {tab === "safras" && <CohortsSection fromIso={fromIso} toIso={toIso} />}
+      </div>
+
+      <div id="report-panel-forecast" role="tabpanel" aria-labelledby="report-tab-forecast" hidden={tab !== "forecast"}>
+        {tab === "forecast" && <ForecastReportSection fromIso={fromIso} toIso={toIso} />}
       </div>
     </div>
   )

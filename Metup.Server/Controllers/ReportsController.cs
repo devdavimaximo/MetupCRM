@@ -1,5 +1,6 @@
 using Metup.Application.Reports.Common;
 using Metup.Application.Reports.Queries.GetCohortReport;
+using Metup.Application.Reports.Queries.GetForecastReport;
 using Metup.Application.Reports.Queries.GetFunnelReport;
 using Metup.Application.Reports.Queries.GetSalesPerformanceByOwner;
 using Metup.Application.Reports.Queries.GetSalesPerformanceBySegment;
@@ -57,4 +58,11 @@ public class ReportsController(ISender sender) : ControllerBase
         [FromQuery] DateTime? to,
         CancellationToken cancellationToken) =>
         Ok(await sender.Send(new GetCohortReportQuery(from, to), cancellationToken));
+
+    [HttpGet("forecast")]
+    public async Task<ActionResult<ForecastReportDto>> GetForecast(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken) =>
+        Ok(await sender.Send(new GetForecastReportQuery(from, to), cancellationToken));
 }

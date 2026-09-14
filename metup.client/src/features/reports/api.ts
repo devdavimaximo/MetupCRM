@@ -116,3 +116,29 @@ export type CohortReport = {
 export function getCohortReport(params: { from?: string; to?: string }, signal?: AbortSignal) {
   return apiFetch<CohortReport>(`/api/reports/cohorts${buildQuery(params)}`, { signal })
 }
+
+/**
+ * Pipeline aberto por estágio (V3, sexta fatia): diferente dos demais relatórios, que olham para
+ * negócios fechados, este olha para o que ainda está em aberto. `winProbability` e `weightedAmount`
+ * vêm nulos quando não há histórico de negócios fechados que passaram pelo estágio — o back-end
+ * não inventa probabilidade sem base.
+ */
+export type ForecastByStage = {
+  stage: DealStage
+  openDealsCount: number
+  openAmount: number
+  winProbability: number | null
+  weightedAmount: number | null
+}
+
+export type ForecastReport = {
+  byStage: ForecastByStage[]
+  totalOpenDeals: number
+  totalPipelineAmount: number
+  totalWeightedForecast: number
+}
+
+/** Forecast / receita potencial (V3, sexta fatia) — from/to escopam apenas quando o negócio aberto entrou no funil. */
+export function getForecastReport(params: { from?: string; to?: string }, signal?: AbortSignal) {
+  return apiFetch<ForecastReport>(`/api/reports/forecast${buildQuery(params)}`, { signal })
+}
