@@ -16,12 +16,13 @@ type Props = {
   toIso?: string
   fetchReport: (params: { from?: string; to?: string }, signal: AbortSignal) => Promise<SalesPerformanceReport>
   mapGroup?: (group: SalesPerformanceGroup) => SalesPerformanceGroup
+  renderTable?: (groups: SalesPerformanceGroup[]) => React.ReactNode
 }
 
 /**
  * Seção genérica de desempenho comercial (V3, seção 7 do CLAUDE.md) — busca o relatório e renderiza
- * a tabela; reaproveitada pelas quebras por responsável, segmento e origem, que só variam nos
- * textos e na função de busca.
+ * a tabela; reaproveitada pelas quebras por responsável, segmento, origem e pelo ranking (mesmos
+ * dados, só a tabela final muda via `renderTable`).
  */
 export function SalesPerformanceSection({
   headingId,
@@ -34,6 +35,7 @@ export function SalesPerformanceSection({
   toIso,
   fetchReport,
   mapGroup,
+  renderTable,
 }: Props) {
   const [report, setReport] = useState<SalesPerformanceReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -74,7 +76,11 @@ export function SalesPerformanceSection({
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
-      <SalesPerformanceTable groupLabelHeader={groupLabelHeader} groups={groups} emptyMessage={emptyMessage} />
+      {renderTable ? (
+        renderTable(groups)
+      ) : (
+        <SalesPerformanceTable groupLabelHeader={groupLabelHeader} groups={groups} emptyMessage={emptyMessage} />
+      )}
     </section>
   )
 }
