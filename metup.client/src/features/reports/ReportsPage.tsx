@@ -3,15 +3,25 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { CohortsSection } from "./CohortsSection"
 import { FunnelReportSection } from "./FunnelReportSection"
 import { SalesByOwnerSection } from "./SalesByOwnerSection"
+import { SalesBySegmentSection } from "./SalesBySegmentSection"
+import { SalesBySourceSection } from "./SalesBySourceSection"
+import { TimeToCloseReportSection } from "./TimeToCloseReportSection"
 
-type ReportTab = "funil" | "responsaveis"
+type ReportTab = "funil" | "responsaveis" | "segmentos" | "origens" | "tempo-fechamento" | "safras"
 
 const TABS: { id: ReportTab; label: string }[] = [
   { id: "funil", label: "Funil" },
-  { id: "responsaveis", label: "Desempenho por responsável" },
+  { id: "responsaveis", label: "Por responsável" },
+  { id: "segmentos", label: "Por segmento" },
+  { id: "origens", label: "Por origem" },
+  { id: "tempo-fechamento", label: "Tempo até fechamento" },
+  { id: "safras", label: "Safras" },
 ]
+
+const TAB_IDS: ReportTab[] = TABS.map((t) => t.id)
 
 type Props = {
   initialFrom: string
@@ -24,7 +34,9 @@ type Props = {
 export function ReportsPage({ initialFrom, initialTo, initialTab, onStateChange }: Props) {
   const [from, setFrom] = useState(initialFrom)
   const [to, setTo] = useState(initialTo)
-  const [tab, setTab] = useState<ReportTab>(initialTab === "responsaveis" ? "responsaveis" : "funil")
+  const [tab, setTab] = useState<ReportTab>(
+    TAB_IDS.includes(initialTab as ReportTab) ? (initialTab as ReportTab) : "funil",
+  )
 
   useEffect(() => {
     onStateChange({ from, to, tab })
@@ -128,6 +140,32 @@ export function ReportsPage({ initialFrom, initialTo, initialTab, onStateChange 
         hidden={tab !== "responsaveis"}
       >
         {tab === "responsaveis" && <SalesByOwnerSection fromIso={fromIso} toIso={toIso} />}
+      </div>
+
+      <div
+        id="report-panel-segmentos"
+        role="tabpanel"
+        aria-labelledby="report-tab-segmentos"
+        hidden={tab !== "segmentos"}
+      >
+        {tab === "segmentos" && <SalesBySegmentSection fromIso={fromIso} toIso={toIso} />}
+      </div>
+
+      <div id="report-panel-origens" role="tabpanel" aria-labelledby="report-tab-origens" hidden={tab !== "origens"}>
+        {tab === "origens" && <SalesBySourceSection fromIso={fromIso} toIso={toIso} />}
+      </div>
+
+      <div
+        id="report-panel-tempo-fechamento"
+        role="tabpanel"
+        aria-labelledby="report-tab-tempo-fechamento"
+        hidden={tab !== "tempo-fechamento"}
+      >
+        {tab === "tempo-fechamento" && <TimeToCloseReportSection fromIso={fromIso} toIso={toIso} />}
+      </div>
+
+      <div id="report-panel-safras" role="tabpanel" aria-labelledby="report-tab-safras" hidden={tab !== "safras"}>
+        {tab === "safras" && <CohortsSection fromIso={fromIso} toIso={toIso} />}
       </div>
     </div>
   )

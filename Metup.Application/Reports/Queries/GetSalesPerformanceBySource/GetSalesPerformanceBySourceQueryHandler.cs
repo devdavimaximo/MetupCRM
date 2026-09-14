@@ -4,19 +4,21 @@ using Metup.Domain.Deals;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Metup.Application.Reports.Queries.GetSalesPerformanceByOwner;
+namespace Metup.Application.Reports.Queries.GetSalesPerformanceBySource;
 
 /// <summary>
-/// Conversão e ticket médio por responsável (V3, segunda fatia — seção 7 do CLAUDE.md): para cada
-/// dono de negócio, quantos negócios estão abertos/ganhos/perdidos, a taxa de fechamento e o
-/// ticket médio, calculados direto de Deal.Status e Deal.Amount (enum + decimal, nunca texto ou
-/// float). O período (quando informado) escopa tudo por Deal.CreatedAt.
+/// Conversão e ticket médio por origem do negócio (V3, terceira fatia — seção 7 do CLAUDE.md): para
+/// cada <see cref="DealSource"/>, quantos negócios estão abertos/ganhos/perdidos, a taxa de
+/// fechamento e o ticket médio, calculados direto de Deal.Status e Deal.Amount (enum + decimal,
+/// nunca texto ou float). O período (quando informado) escopa tudo por Deal.CreatedAt. GroupKey e
+/// GroupLabel saem como o nome do enum — a tradução para pt-br (seção 8) é feita na UI, junto com o
+/// mapeamento de DealSource já existente para o Pipeline.
 /// </summary>
-public class GetSalesPerformanceByOwnerQueryHandler(
+public class GetSalesPerformanceBySourceQueryHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<GetSalesPerformanceByOwnerQuery, SalesPerformanceReportDto>
+    ICurrentUserService currentUserService) : IRequestHandler<GetSalesPerformanceBySourceQuery, SalesPerformanceReportDto>
 {
-    public async Task<SalesPerformanceReportDto> Handle(GetSalesPerformanceByOwnerQuery request, CancellationToken cancellationToken)
+    public async Task<SalesPerformanceReportDto> Handle(GetSalesPerformanceBySourceQuery request, CancellationToken cancellationToken)
     {
         var organizationId = currentUserService.RequireOrganizationId();
 
@@ -35,10 +37,10 @@ public class GetSalesPerformanceByOwnerQueryHandler(
         }
 
         var stats = await deals
-            .GroupBy(d => d.OwnerUserId)
+            .GroupBy(d => d.Source)
             .Select(g => new
             {
-                OwnerUserId = g.Key,
+                Source = g.Key,
                 OpenDeals = g.Count(d => d.Status == DealStatus.Aberto),
                 WonDeals = g.Count(d => d.Status == DealStatus.Ganho),
                 LostDeals = g.Count(d => d.Status == DealStatus.Perdido),
@@ -47,23 +49,17 @@ public class GetSalesPerformanceByOwnerQueryHandler(
             })
             .ToListAsync(cancellationToken);
 
-        var ownerIds = stats.Select(s => s.OwnerUserId).ToList();
-        var ownerNames = await context.Users
-            .AsNoTracking()
-            .Where(u => ownerIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, u => u.Name, cancellationToken);
-
         var groups = stats
+            .OrderBy(s => (int)s.Source)
             .Select(s => new SalesPerformanceGroupDto(
-                s.OwnerUserId.ToString(),
-                ownerNames.GetValueOrDefault(s.OwnerUserId, "—"),
+                s.Source.ToString(),
+                s.Source.ToString(),
                 s.OpenDeals,
                 s.WonDeals,
                 s.LostDeals,
                 s.WonDeals + s.LostDeals > 0 ? (decimal)s.WonDeals / (s.WonDeals + s.LostDeals) : (decimal?)null,
                 s.AverageTicket,
                 s.TotalRevenue))
-            .OrderBy(g => g.GroupLabel)
             .ToList();
 
         return new SalesPerformanceReportDto(groups);
