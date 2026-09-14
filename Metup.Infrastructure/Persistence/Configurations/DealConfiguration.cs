@@ -44,6 +44,10 @@ public class DealConfiguration : IEntityTypeConfiguration<Deal>
             .HasColumnName("owner_user_id")
             .IsRequired();
 
+        builder.Property(d => d.ExternalLeadId)
+            .HasColumnName("external_lead_id")
+            .HasMaxLength(200);
+
         // Dinheiro sempre decimal, nunca float (regra 4.7 do CLAUDE.md).
         builder.Property(d => d.Ticket)
             .HasColumnName("ticket")
@@ -69,6 +73,12 @@ public class DealConfiguration : IEntityTypeConfiguration<Deal>
         // Pipeline por estágio e carteira por responsável são as duas consultas mais frequentes.
         builder.HasIndex(d => new { d.OrganizationId, d.Stage });
         builder.HasIndex(d => new { d.OrganizationId, d.OwnerUserId });
+
+        // Idempotência da ingestão de leads externos (ex.: Meta Ads) a nível de banco — mesmo
+        // padrão de MessageConfiguration.ExternalMessageId (regra "ingestão idempotente", seção 5).
+        builder.HasIndex(d => new { d.OrganizationId, d.ExternalLeadId })
+            .IsUnique()
+            .HasFilter("external_lead_id IS NOT NULL");
 
         builder.HasOne<Organization>()
             .WithMany()

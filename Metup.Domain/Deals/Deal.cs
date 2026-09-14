@@ -20,6 +20,12 @@ public class Deal : BaseEntity
 
     public Guid OwnerUserId { get; set; }
 
+    /// <summary>
+    /// Id do lead emitido pela fonte externa (ex.: leadgen_id do Meta Ads) — garante idempotência
+    /// se o n8n reenviar a ingestão. Nulo para negócios criados manualmente (fonte Sdr).
+    /// </summary>
+    public string? ExternalLeadId { get; set; }
+
     /// <summary>Ticket estimado ao entrar no funil — nunca <c>float</c> (regra 4.7).</summary>
     public decimal? Ticket { get; set; }
 
@@ -44,7 +50,8 @@ public class Deal : BaseEntity
         decimal? ticket,
         decimal? amount,
         Guid createdByUserId,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        string? externalLeadId = null)
     {
         if (IsTerminalStage(initialStage))
         {
@@ -59,6 +66,7 @@ public class Deal : BaseEntity
             Stage = initialStage,
             Source = source,
             OwnerUserId = ownerUserId,
+            ExternalLeadId = externalLeadId,
             Ticket = ticket,
             Amount = amount,
         };
