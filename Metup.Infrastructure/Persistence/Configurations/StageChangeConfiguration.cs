@@ -44,6 +44,9 @@ public class StageChangeConfiguration : IEntityTypeConfiguration<StageChange>
         // Histórico de um negócio, na ordem em que aconteceu — a consulta que alimenta a ficha.
         builder.HasIndex(sc => new { sc.DealId, sc.ChangedAt });
 
+        // Feed da operação: do mais recente para trás, dentro da organização.
+        builder.HasIndex(sc => new { sc.OrganizationId, sc.ChangedAt });
+
         builder.HasOne<Organization>()
             .WithMany()
             .HasForeignKey(sc => sc.OrganizationId)

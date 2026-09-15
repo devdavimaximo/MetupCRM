@@ -1,3 +1,4 @@
+using Metup.Application.Activities.Common;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
@@ -23,7 +24,8 @@ public class GetDashboardOverviewQueryHandlerTests
         var handler = new GetDashboardOverviewQueryHandler(
             context.Db,
             context.As(userId, role),
-            new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc));
+            new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc),
+            new ActivityFeedReader(context.Db));
 
         return handler.Handle(new GetDashboardOverviewQuery(days, scope), CancellationToken.None);
     }

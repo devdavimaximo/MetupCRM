@@ -1,3 +1,4 @@
+using Metup.Application.Activities.Common;
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
@@ -25,7 +26,8 @@ public class ExpectedCloseAndStalledTests
         new GetDashboardOverviewQueryHandler(
                 context.Db,
                 context.As(userId, role),
-                new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc))
+                new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc),
+                new ActivityFeedReader(context.Db))
             .Handle(new GetDashboardOverviewQuery(days, DealScope.Organization), TestContext.Current.CancellationToken);
 
     [Fact]

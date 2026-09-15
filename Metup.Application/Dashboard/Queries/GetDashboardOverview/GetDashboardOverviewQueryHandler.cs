@@ -1,3 +1,4 @@
+using Metup.Application.Activities.Common;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
@@ -23,7 +24,8 @@ namespace Metup.Application.Dashboard.Queries.GetDashboardOverview;
 public class GetDashboardOverviewQueryHandler(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
-    IOrganizationClock organizationClock) : IRequestHandler<GetDashboardOverviewQuery, DashboardOverviewDto>
+    IOrganizationClock organizationClock,
+    ActivityFeedReader feedReader) : IRequestHandler<GetDashboardOverviewQuery, DashboardOverviewDto>
 {
     private const int FeaturedDealsLimit = 5;
     private const int RecentEventsLimit = 5;
@@ -168,8 +170,12 @@ public class GetDashboardOverviewQueryHandler(
             })
             .ToList();
 
-        var dealById = deals.ToDictionary(d => d.Id);
-        var recentEvents = await LoadRecentEventsAsync(scope, dealIds, dealById, CompanyOf, UserOf, cancellationToken);
+        // Mesma composição do "Ver todas": os últimos eventos do escopo, sem depender do período.
+        var recentEvents = (await feedReader.ReadAsync(
+                scope,
+                new ActivityFeedRequest(null, [], null, RecentEventsLimit),
+                cancellationToken))
+            .Items;
 
         var sources = deals
             .Where(d => InPeriod(d.CreatedAt))
@@ -283,50 +289,6 @@ public class GetDashboardOverviewQueryHandler(
         }
 
         return (points, bucketDays == 1 ? "day" : "week");
-    }
-
-    private async Task<IReadOnlyList<RecentEventDto>> LoadRecentEventsAsync(
-        DealScopeFilter scope,
-        IReadOnlyList<Guid> dealIds,
-        IReadOnlyDictionary<Guid, DealRow> dealById,
-        Func<Guid, string> companyOf,
-        Func<Guid, string> userOf,
-        CancellationToken cancellationToken)
-    {
-        var activities = await ScopedActivities(scope, dealIds)
-            .OrderByDescending(a => a.OccurredAt)
-            .Take(RecentEventsLimit)
-            .Select(a => new { a.DealId, a.Type, a.Outcome, a.AuthorUserId, a.OccurredAt })
-            .ToListAsync(cancellationToken);
-
-        var stageChanges = await ScopedStageChanges(scope, dealIds)
-            .OrderByDescending(sc => sc.ChangedAt)
-            .Take(RecentEventsLimit)
-            .Select(sc => new { sc.DealId, sc.FromStage, sc.ToStage, sc.ChangedByUserId, sc.ChangedAt })
-            .ToListAsync(cancellationToken);
-
-        string CompanyOfDeal(Guid dealId) =>
-            dealById.TryGetValue(dealId, out var deal) ? companyOf(deal.CompanyId) : "—";
-
-        var events = activities
-            .Select(a => new RecentEventDto(
-                RecentEventKind.Activity, a.DealId, CompanyOfDeal(a.DealId), userOf(a.AuthorUserId),
-                a.OccurredAt, null, a.Type, a.Outcome, null))
-            .Concat(stageChanges.Select(sc => new RecentEventDto(
-                sc.ToStage switch
-                {
-                    DealStage.Ganho => RecentEventKind.DealWon,
-                    DealStage.Perdido => RecentEventKind.DealLost,
-                    _ when sc.FromStage is null => RecentEventKind.DealCreated,
-                    _ => RecentEventKind.StageAdvanced,
-                },
-                sc.DealId, CompanyOfDeal(sc.DealId), userOf(sc.ChangedByUserId), sc.ChangedAt, sc.ToStage, null, null,
-                sc.ToStage == DealStage.Ganho && dealById.TryGetValue(sc.DealId, out var deal) ? deal.Amount : null)));
-
-        return events
-            .OrderByDescending(e => e.OccurredAt)
-            .Take(RecentEventsLimit)
-            .ToList();
     }
 
     /// <summary>

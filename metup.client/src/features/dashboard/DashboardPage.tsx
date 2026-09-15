@@ -42,6 +42,7 @@ import {
   storePeriod,
   type DashboardPeriod,
 } from "./dashboard-period"
+import { ActivityFeedSheet } from "./ActivityFeedSheet"
 import { SideColumn } from "./dashboard-side"
 
 type Props = {
@@ -87,6 +88,17 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
   const [scope, setScope] = useState<DealScope>(() =>
     !canSwitchScope(role) || initialScope === "minha" ? "Mine" : "Organization"
   )
+
+  // O "Ver todas" da atividade fica na URL (?feed=1): recarregar ou compartilhar o link reabre o sheet.
+  const [feedOpen, setFeedOpenState] = useState(() => readUrlState().activityFeed === "1")
+  // Cada abertura remonta o sheet: filtros e lista começam limpos, e a animação de fechar se mantém.
+  const [feedSession, setFeedSession] = useState(0)
+  const feedTriggerRef = useRef<HTMLButtonElement>(null)
+  const setFeedOpen = useCallback((open: boolean) => {
+    writeUrlState({ activityFeed: open ? "1" : "" })
+    if (open) setFeedSession((session) => session + 1)
+    setFeedOpenState(open)
+  }, [])
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [loadedPeriod, setLoadedPeriod] = useState<DashboardPeriod>(period)
@@ -181,6 +193,8 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
       onRetryTasks={loadSummary}
       onOpenDeal={onOpenDeal}
       onSeeTasks={() => onNavigate("tarefas")}
+      onSeeAllActivity={() => setFeedOpen(true)}
+      seeAllActivityRef={feedTriggerRef}
       onTaskCompleted={handleTaskCompleted}
     />
   )
@@ -258,6 +272,18 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
           </div>
         )}
       </div>
+
+      <ActivityFeedSheet
+        key={feedSession}
+        open={feedOpen}
+        role={role}
+        onOpenChange={setFeedOpen}
+        returnFocusRef={feedTriggerRef}
+        onOpenDeal={(dealId) => {
+          setFeedOpen(false)
+          onOpenDeal(dealId)
+        }}
+      />
     </TooltipProvider>
   )
 }

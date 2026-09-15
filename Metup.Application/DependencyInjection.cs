@@ -1,4 +1,5 @@
 using FluentValidation;
+using Metup.Application.Activities.Common;
 using Metup.Application.Common.Behaviors;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,8 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
+
+        services.AddScoped<ActivityFeedReader>();
 
         return services;
     }

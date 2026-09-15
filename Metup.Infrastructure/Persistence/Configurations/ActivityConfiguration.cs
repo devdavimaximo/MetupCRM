@@ -58,6 +58,9 @@ public class ActivityConfiguration : IEntityTypeConfiguration<Activity>
         // Timeline do negócio, na ordem em que aconteceu — a consulta que alimenta a ficha.
         builder.HasIndex(a => new { a.DealId, a.OccurredAt });
 
+        // Feed da operação: do mais recente para trás, dentro da organização.
+        builder.HasIndex(a => new { a.OrganizationId, a.OccurredAt });
+
         builder.HasOne<Organization>()
             .WithMany()
             .HasForeignKey(a => a.OrganizationId)

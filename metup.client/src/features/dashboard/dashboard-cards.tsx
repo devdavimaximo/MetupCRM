@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react"
+import type { ComponentProps, ReactNode, Ref } from "react"
 import { ArrowDown, ArrowRight, ArrowUp, Building2, Ellipsis, Info, Minus, SquareArrowOutUpRight, type LucideIcon } from "lucide-react"
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -54,9 +54,18 @@ export function PanelHeading({
   )
 }
 
-export function SeeAll({ onClick, children = "Ver todas" }: { onClick: () => void; children?: ReactNode }) {
+export function SeeAll({
+  onClick,
+  children = "Ver todas",
+  ref,
+}: {
+  onClick: () => void
+  children?: ReactNode
+  ref?: Ref<HTMLButtonElement>
+}) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xs text-xs text-accent transition-colors hover:text-accent-hover focus-visible:focus-ring"

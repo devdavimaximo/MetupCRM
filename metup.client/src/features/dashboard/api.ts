@@ -83,7 +83,9 @@ export type ExpectedClose = {
 
 export type RecentEventKind = "DealCreated" | "StageAdvanced" | "DealWon" | "DealLost" | "Activity"
 
+/** Uma linha do feed da operação. `id` é o da atividade ou da transição, estável entre páginas. */
 export type RecentEvent = {
+  id: string
   kind: RecentEventKind
   dealId: string
   companyName: string
@@ -157,6 +159,38 @@ export function getDashboardOverview(
     params.set("to", period.to)
   }
   return apiFetch<DashboardOverview>(`/api/dashboard/overview?${params}`, { signal })
+}
+
+/** Filtros do feed: tipos de transição de estágio e, depois, tipos de atividade. Vazio = tudo. */
+export type ActivityFeedFilter =
+  | "DealCreated"
+  | "StageAdvanced"
+  | "DealWon"
+  | "DealLost"
+  | "Call"
+  | "WhatsApp"
+  | "Meeting"
+  | "Proposal"
+  | "Note"
+
+/** `nextCursor` nulo = fim do feed. */
+export type ActivityFeedPage = { items: RecentEvent[]; nextCursor: string | null }
+
+/**
+ * O feed completo, do mais recente para trás, sem depender do período do dashboard. O servidor aplica
+ * o escopo do papel: para o SDR, `ownerUserId` é ignorado.
+ */
+export function listActivityFeed(
+  params: { cursor?: string | null; kinds?: ActivityFeedFilter[]; ownerUserId?: string; pageSize?: number },
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams()
+  if (params.cursor) query.set("cursor", params.cursor)
+  if (params.kinds?.length) query.set("kinds", params.kinds.join(","))
+  if (params.ownerUserId) query.set("ownerUserId", params.ownerUserId)
+  if (params.pageSize) query.set("pageSize", String(params.pageSize))
+  const suffix = query.toString()
+  return apiFetch<ActivityFeedPage>(`/api/activity-feed${suffix ? `?${suffix}` : ""}`, { signal })
 }
 
 /** A fotografia de hoje: sempre "minha", o servidor resolve organização e usuário pelo token. */

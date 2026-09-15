@@ -1,3 +1,4 @@
+using Metup.Application.Activities.Common;
 using Metup.Application.Common.Models;
 using Metup.Domain.Activities;
 using Metup.Domain.Deals;
@@ -66,27 +67,6 @@ public record ExpectedCloseDto(
     int OverdueExpectedCount,
     int OpenDealsWithExpectedCloseDate);
 
-public enum RecentEventKind
-{
-    DealCreated,
-    StageAdvanced,
-    DealWon,
-    DealLost,
-    Activity,
-}
-
-/// <summary>Uma linha do feed da operação — atividade registrada ou transição de estágio.</summary>
-public record RecentEventDto(
-    RecentEventKind Kind,
-    Guid DealId,
-    string CompanyName,
-    string ActorName,
-    DateTime OccurredAt,
-    DealStage? ToStage,
-    ActivityType? ActivityType,
-    ActivityOutcome? Outcome,
-    decimal? Amount);
-
 /// <summary>Negócios que entraram no período por origem, e quantos deles já foram ganhos.</summary>
 public record SourceBreakdownDto(DealSource Source, int NewDeals, int WonDeals, decimal Revenue);
 
@@ -141,6 +121,6 @@ public record DashboardOverviewDto(
     int OpenDealsWithoutAmount,
     int StalledAfterDays,
     IReadOnlyList<FeaturedDealDto> FeaturedDeals,
-    IReadOnlyList<RecentEventDto> RecentEvents,
+    IReadOnlyList<ActivityFeedItemDto> RecentEvents,
     IReadOnlyList<SourceBreakdownDto> Sources,
     IReadOnlyList<OwnerPerformanceDto> Owners);

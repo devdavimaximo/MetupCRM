@@ -29,37 +29,38 @@ function App() {
     return <LoginPage onLoggedIn={setSession} />
   }
 
-  // `etapa` é um destaque de chegada no Pipeline: toda outra navegação o descarta.
+  // `etapa` é um destaque de chegada no Pipeline e `feed` é o sheet da atividade no dashboard: toda
+  // navegação descarta os dois.
   function navigate(nextView: View) {
-    writeUrlState({ view: nextView, companyId: null, dealId: null, pipelineStage: "" })
+    writeUrlState({ view: nextView, companyId: null, dealId: null, pipelineStage: "", activityFeed: "" })
     setNewDealIntent(null)
     setView(nextView)
     setNavSeed((seed) => seed + 1)
   }
 
   function openCompany(companyId: string) {
-    writeUrlState({ view: "empresas", companyId, dealId: null, search: "", pipelineStage: "" })
+    writeUrlState({ view: "empresas", companyId, dealId: null, search: "", pipelineStage: "", activityFeed: "" })
     setNewDealIntent(null)
     setView("empresas")
     setNavSeed((seed) => seed + 1)
   }
 
   function openDeal(dealId: string) {
-    writeUrlState({ view: "pipeline", dealId, companyId: null, pipelineStage: "" })
+    writeUrlState({ view: "pipeline", dealId, companyId: null, pipelineStage: "", activityFeed: "" })
     setNewDealIntent(null)
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
   }
 
   function openPipelineAtStage(stage: DealStage) {
-    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: stage })
+    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: stage, activityFeed: "" })
     setNewDealIntent(null)
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
   }
 
   function openNewDealForCompany(companyId: string, companyName: string) {
-    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: "" })
+    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: "", activityFeed: "" })
     setNewDealIntent({ companyId, companyName })
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
