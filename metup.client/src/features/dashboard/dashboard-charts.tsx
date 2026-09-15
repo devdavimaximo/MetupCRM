@@ -1,5 +1,19 @@
 import { createContext, useContext, useId, useMemo, useState } from "react"
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip, XAxis, YAxis } from "recharts"
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Sector,
+  Tooltip,
+  XAxis,
+  YAxis,
+  useYAxisScale,
+} from "recharts"
 import type { PieSectorShapeProps } from "recharts/types/polar/Pie"
 
 import { Hint } from "@/components/ui/tooltip"
@@ -8,7 +22,16 @@ import { sourceLabels } from "@/features/deals/stage-labels"
 import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { SourceBreakdown } from "./api"
-import { DONUT_COLORS, formatLocalDay, formatMoneyCompact, formatMoneyWhole, formatPercent, smoothSeries } from "./dashboard-format"
+import {
+  MAX_ORIGIN_SLICES,
+  OTHER_SOURCES_COLOR,
+  SOURCE_COLORS,
+  formatLocalDay,
+  formatMoneyCompact,
+  formatMoneyWhole,
+  formatPercent,
+  smoothSeries,
+} from "./dashboard-format"
 
 const ACCENT = "var(--color-accent)"
 
@@ -65,8 +88,54 @@ function RevenueTooltip({ active, payload }: { active?: boolean; payload?: Reado
   )
 }
 
-/** Receita acumulada no período — no B2B a receita diária é quase sempre zero; o acumulado mostra a direção. */
-export function RevenueAreaChart({ data }: { data: RevenueDatum[] }) {
+type ActiveDotProps = { cx?: number; cy?: number; payload?: RevenueDatum }
+
+const ACTIVE_DOT_GAP_PX = 4
+
+/**
+ * O ponto sob o cursor fica no valor real (`cumulative`), não na curva suavizada: é o mesmo número do
+ * tooltip. Quando a curva passa longe do valor real, um filete liga os dois, e fica claro que a curva
+ * é só tendência.
+ */
+function RealValueDot({ cx, cy, payload, glowId }: ActiveDotProps & { glowId: string }) {
+  const yScale = useYAxisScale()
+  const realY = payload && yScale ? yScale(payload.cumulative) : undefined
+  if (cx == null || cy == null || realY == null) return null
+  return (
+    <g data-testid="revenue-active-dot" data-real-y={realY}>
+      {Math.abs(realY - cy) > ACTIVE_DOT_GAP_PX && (
+        <line x1={cx} x2={cx} y1={cy} y2={realY} stroke={ACCENT} strokeOpacity={0.55} strokeWidth={1} />
+      )}
+      <circle cx={cx} cy={realY} r={5} fill={ACCENT} stroke="var(--color-bg)" strokeWidth={2} filter={`url(#${glowId})`} />
+    </g>
+  )
+}
+
+/** Rótulo à direita da linha do período anterior, dentro da área do gráfico. */
+function PreviousPeriodLabel({ viewBox }: { viewBox?: { x?: number; y?: number; width?: number } }) {
+  if (viewBox?.x == null || viewBox.y == null || viewBox.width == null) return null
+  return (
+    // Contorno da cor do painel: o rótulo continua legível quando a curva passa por baixo dele.
+    <text
+      x={viewBox.x + viewBox.width - 4}
+      y={viewBox.y - 5}
+      textAnchor="end"
+      fill="var(--color-muted)"
+      stroke="var(--color-surface)"
+      strokeWidth={3}
+      paintOrder="stroke"
+      fontSize={10}
+    >
+      Período anterior
+    </text>
+  )
+}
+
+/**
+ * Receita acumulada no período — no B2B a receita diária é quase sempre zero; o acumulado mostra a direção.
+ * `previousTotal` desenha a referência do total do período anterior; só vem quando há base de comparação.
+ */
+export function RevenueAreaChart({ data, previousTotal }: { data: RevenueDatum[]; previousTotal: number | null }) {
   const gradientId = useId()
   const glowId = useId()
   const plotted = useMemo(() => {
@@ -107,7 +176,17 @@ export function RevenueAreaChart({ data }: { data: RevenueDatum[] }) {
           tickLine={false}
           width={64}
           tickCount={5}
+          domain={[0, (dataMax: number) => Math.max(dataMax, previousTotal ?? 0)]}
         />
+        {previousTotal !== null && (
+          <ReferenceLine
+            y={previousTotal}
+            stroke="var(--color-line-strong)"
+            strokeDasharray="4 4"
+            strokeWidth={1}
+            label={PreviousPeriodLabel}
+          />
+        )}
         <Tooltip
           content={RevenueTooltip}
           cursor={{ stroke: ACCENT, strokeOpacity: 0.45, strokeWidth: 1 }}
@@ -122,7 +201,7 @@ export function RevenueAreaChart({ data }: { data: RevenueDatum[] }) {
           strokeLinecap="round"
           fill={`url(#${gradientId})`}
           dot={false}
-          activeDot={{ r: 5, fill: ACCENT, stroke: "var(--color-bg)", strokeWidth: 2, filter: `url(#${glowId})` }}
+          activeDot={(props: ActiveDotProps) => <RealValueDot {...props} glowId={glowId} />}
           animationDuration={700}
         />
       </AreaChart>
@@ -132,22 +211,59 @@ export function RevenueAreaChart({ data }: { data: RevenueDatum[] }) {
 
 /* ─── Origem (donut) ────────────────────────────────────────────────────────── */
 
+type OriginKey = DealSource | "other"
+
 type OriginSlice = {
-  key: DealSource
+  key: OriginKey
   label: string
   value: number
   wonDeals: number
   revenue: number
   color: string
+  /** Só na fatia "Outras": os nomes das origens que ela soma. */
+  members?: string[]
 }
 
 const EMPTY_DONUT = [{ key: "empty", label: "", value: 1 }]
 
 /**
+ * Uma fatia por origem, com a cor da própria origem. Acima de {@link MAX_ORIGIN_SLICES} origens,
+ * as maiores ficam e o resto soma numa fatia "Outras", que lista no tooltip o que juntou.
+ */
+function toOriginSlices(sources: SourceBreakdown[]): OriginSlice[] {
+  const sorted = [...sources].sort((a, b) => b.newDeals - a.newDeals)
+  const toSlice = (s: SourceBreakdown): OriginSlice => ({
+    key: s.source,
+    label: sourceLabels[s.source],
+    value: s.newDeals,
+    wonDeals: s.wonDeals,
+    revenue: s.revenue,
+    color: SOURCE_COLORS[s.source],
+  })
+
+  if (sorted.length <= MAX_ORIGIN_SLICES) return sorted.map(toSlice)
+
+  const kept = sorted.slice(0, MAX_ORIGIN_SLICES - 1)
+  const rest = sorted.slice(MAX_ORIGIN_SLICES - 1)
+  return [
+    ...kept.map(toSlice),
+    {
+      key: "other",
+      label: "Outras",
+      value: rest.reduce((sum, s) => sum + s.newDeals, 0),
+      wonDeals: rest.reduce((sum, s) => sum + s.wonDeals, 0),
+      revenue: rest.reduce((sum, s) => sum + s.revenue, 0),
+      color: OTHER_SOURCES_COLOR,
+      members: rest.map((s) => sourceLabels[s.source]),
+    },
+  ]
+}
+
+/**
  * A fatia destacada chega por contexto, não por closure: um `shape` novo a cada render trocaria o
  * tipo do componente, remontaria os paths sob o ponteiro e o Recharts fecharia o tooltip.
  */
-const ActiveSliceContext = createContext<DealSource | null>(null)
+const ActiveSliceContext = createContext<OriginKey | null>(null)
 
 function OriginSector(props: PieSectorShapeProps) {
   const activeKey = useContext(ActiveSliceContext)
@@ -178,6 +294,7 @@ function OriginDetails({ slice, total }: { slice: OriginSlice; total: number }) 
         <dt className="text-muted">Taxa de ganho</dt>
         <dd className="text-right text-fg">{winRate === null ? "—" : formatPercent(winRate)}</dd>
       </dl>
+      {slice.members && <p className="max-w-56 text-muted">Inclui: {slice.members.join(", ")}</p>}
     </div>
   )
 }
@@ -206,22 +323,13 @@ function DonutTooltip({
  * A fatia ativa cresce 4px para fora; o anel reserva essa folga para não cortar.
  */
 export function OriginBreakdown({ sources }: { sources: SourceBreakdown[] }) {
-  const [activeKey, setActiveKey] = useState<DealSource | null>(null)
+  const [activeKey, setActiveKey] = useState<OriginKey | null>(null)
   const total = sources.reduce((sum, s) => sum + s.newDeals, 0)
   // Dados estáveis entre renders: um array novo a cada hover faria o Recharts zerar o tooltip ativo.
-  const slices = useMemo<OriginSlice[]>(
-    () =>
-      sources.map((s, i) => ({
-        key: s.source,
-        label: sourceLabels[s.source],
-        value: s.newDeals,
-        wonDeals: s.wonDeals,
-        revenue: s.revenue,
-        color: DONUT_COLORS[i % DONUT_COLORS.length],
-      })),
-    [sources]
-  )
+  const slices = useMemo(() => toOriginSlices(sources), [sources])
   const isEmpty = slices.length === 0
+  // Com mais de 4 linhas a legenda aperta o espaçamento para caber na altura do painel em 1366–1600px.
+  const dense = slices.length > 4
   const share = (slice: OriginSlice) => formatPercent(total === 0 ? 0 : slice.value / total)
 
   return (
@@ -269,7 +377,7 @@ export function OriginBreakdown({ sources }: { sources: SourceBreakdown[] }) {
         </div>
       </div>
 
-      <ul aria-label="Origens dos negócios" className="flex min-w-0 flex-1 flex-col gap-1">
+      <ul aria-label="Origens dos negócios" className={cn("flex min-w-0 flex-1 flex-col", dense ? "gap-0" : "gap-1")}>
         {isEmpty && <li className="text-sm text-muted">Nenhum negócio novo.</li>}
         {slices.map((slice) => {
           const active = activeKey === slice.key
@@ -291,7 +399,8 @@ export function OriginBreakdown({ sources }: { sources: SourceBreakdown[] }) {
                     sibling?.querySelector("button")?.focus()
                   }}
                   className={cn(
-                    "flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left text-sm transition-colors focus-visible:focus-ring",
+                    "flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-1.5 text-left text-sm transition-colors focus-visible:focus-ring",
+                    dense ? "py-px leading-4" : "py-1",
                     active && "bg-surface-3/60"
                   )}
                 >

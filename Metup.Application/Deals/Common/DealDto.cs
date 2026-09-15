@@ -23,6 +23,7 @@ public record DealDto(
     string OwnerUserName,
     decimal? Ticket,
     decimal? Amount,
+    DateOnly? ExpectedCloseDate,
     DealStatus Status,
     DateTime CreatedAt,
     DateTime? ClosedAt,
@@ -41,6 +42,7 @@ public record DealListItemDto(
     string OwnerUserName,
     decimal? Ticket,
     decimal? Amount,
+    DateOnly? ExpectedCloseDate,
     DealStatus Status,
     DateTime CreatedAt,
     DateTime? ClosedAt);

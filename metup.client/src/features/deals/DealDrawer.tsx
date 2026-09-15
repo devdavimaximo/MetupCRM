@@ -14,6 +14,7 @@ import { ActivityTimeline } from "@/features/activities/ActivityTimeline"
 import { LogActivityForm } from "@/features/activities/LogActivityForm"
 import { listActivitiesByDeal, type Activity, type LogActivityResult } from "@/features/activities/api"
 import { formatDue } from "@/lib/format"
+import { formatLocalDate, todayLocal } from "@/lib/local-date"
 import { formatMoney, parseMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import { DealForm } from "./DealForm"
@@ -160,6 +161,21 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
               <Stat label="Responsável">{deal.ownerUserName}</Stat>
               <Stat label="Contato">{deal.contactName ?? <span className="text-faint">—</span>}</Stat>
               <Stat label="Origem">{sourceLabels[deal.source]}</Stat>
+              {/* Quinto item: linha própria, para não apertar valor e responsável nas colunas de cima. */}
+              <Stat label="Previsão" className="col-span-2 sm:col-span-4">
+                {deal.expectedCloseDate ? (
+                  <span
+                    className={cn(
+                      "tabular",
+                      deal.status === "Aberto" && deal.expectedCloseDate < todayLocal() ? "text-danger" : "text-fg"
+                    )}
+                  >
+                    {formatLocalDate(deal.expectedCloseDate)}
+                  </span>
+                ) : (
+                  <span className="text-faint">—</span>
+                )}
+              </Stat>
             </dl>
           )}
         </SheetHeader>
@@ -222,9 +238,9 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
   )
 }
 
-function Stat({ label, children }: { label: string; children: ReactNode }) {
+function Stat({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 bg-surface px-3 py-2.5">
+    <div className={cn("flex min-w-0 flex-col gap-1 bg-surface px-3 py-2.5", className)}>
       <dt className="label-mono text-faint">{label}</dt>
       <dd className="truncate text-base text-fg">{children}</dd>
     </div>

@@ -24,6 +24,7 @@ public static class DealProjections
             context.Users.Where(u => u.Id == d.OwnerUserId).Select(u => u.Name).First(),
             d.Ticket,
             d.Amount,
+            d.ExpectedCloseDate,
             d.Status,
             d.CreatedAt,
             d.ClosedAt));
@@ -43,6 +44,7 @@ public static class DealProjections
             context.Users.Where(u => u.Id == d.OwnerUserId).Select(u => u.Name).First(),
             d.Ticket,
             d.Amount,
+            d.ExpectedCloseDate,
             d.Status,
             d.CreatedAt,
             d.ClosedAt,

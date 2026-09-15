@@ -18,6 +18,18 @@ public static class CurrentUserServiceExtensions
         currentUserService.UserId ?? throw new MissingUserContextException();
 
     /// <summary>
+    /// Ponto único de checagem de papel nos casos de uso. O controller também restringe o papel; a
+    /// checagem aqui garante a regra mesmo se o caso de uso for chamado por outro caminho.
+    /// </summary>
+    public static void RequireRole(this ICurrentUserService currentUserService, UserRole requiredRole)
+    {
+        if (!Enum.TryParse<UserRole>(currentUserService.Role, out var role) || role != requiredRole)
+        {
+            throw new ForbiddenAccessException("Você não tem permissão para esta ação.");
+        }
+    }
+
+    /// <summary>
     /// Ponto único de decisão de "quais negócios este usuário enxerga" — nenhum handler interpreta
     /// papel por conta própria. Admin e Closer alcançam a organização inteira; o SDR fica restrito
     /// aos negócios sob sua responsabilidade. Um escopo pedido além do permitido (ou um papel

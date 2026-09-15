@@ -15,7 +15,8 @@ public record RevenuePointDto(DateOnly BucketStart, decimal Revenue, int WonDeal
 
 /// <summary>
 /// Pipeline aberto num estágio: volume, dinheiro e quantos negócios estão parados — sem mudança de
-/// estágio há mais de <see cref="DashboardOverviewDto.StalledAfterDays"/> dias (via StageChange).
+/// estágio há mais de <see cref="DashboardOverviewDto.StalledAfterDays"/> dias (via StageChange; o limite
+/// vem de <c>Organization.StalledDealDays</c>).
 /// <c>Amount</c> usa o valor efetivo (valor em negociação ou, na falta dele, o ticket estimado);
 /// <c>EstimatedCount</c> diz quantos desses negócios entraram com o ticket.
 /// </summary>
@@ -46,7 +47,24 @@ public record FeaturedDealDto(
     string OwnerUserName,
     int DaysInStage,
     DateTime? NextTaskDueDate,
-    ActivityType? NextTaskType);
+    ActivityType? NextTaskType,
+    DateOnly? ExpectedCloseDate);
+
+/// <summary>
+/// Previsão de fechamento dos negócios abertos, pela data que o responsável informou.
+/// A janela vai de hoje (<c>WindowStartLocal</c>) até <c>WindowEndLocal</c>, inclusive, com a mesma
+/// duração do período do dashboard, mas para a frente. <c>ExpectedToCloseAmount</c> soma o valor
+/// efetivo. <c>OverdueExpectedCount</c> conta os abertos com previsão antes de hoje.
+/// <c>OpenDealsWithExpectedCloseDate</c> = 0 significa que ninguém preencheu previsão ainda: a UI
+/// convida a preencher em vez de mostrar R$ 0.
+/// </summary>
+public record ExpectedCloseDto(
+    DateOnly WindowStartLocal,
+    DateOnly WindowEndLocal,
+    decimal ExpectedToCloseAmount,
+    int ExpectedToCloseCount,
+    int OverdueExpectedCount,
+    int OpenDealsWithExpectedCloseDate);
 
 public enum RecentEventKind
 {
@@ -119,6 +137,7 @@ public record DashboardOverviewDto(
     IReadOnlyList<PipelineStageDto> Pipeline,
     IReadOnlyList<StageAdvanceRateDto> StageAdvanceRates,
     decimal? WeightedForecast,
+    ExpectedCloseDto ExpectedClose,
     int OpenDealsWithoutAmount,
     int StalledAfterDays,
     IReadOnlyList<FeaturedDealDto> FeaturedDeals,

@@ -60,9 +60,23 @@ public sealed class DashboardOverviewTestContext : IDisposable
         Db.SaveChanges();
     }
 
-    public Deal AddOpenDeal(Guid ownerUserId, decimal? amount, decimal? ticket, DateTime createdAtUtc, DealStage? stage = null)
+    public Deal AddOpenDeal(
+        Guid ownerUserId,
+        decimal? amount,
+        decimal? ticket,
+        DateTime createdAtUtc,
+        DealStage? stage = null,
+        DateOnly? expectedCloseDate = null,
+        DealSource source = DealSource.Sdr)
     {
         var deal = Build(ownerUserId, amount, ticket, createdAtUtc);
+        deal.Source = source;
+
+        if (expectedCloseDate is { } date)
+        {
+            // A regra "não antes da criação" é coberta nos testes de domínio; aqui o cenário só precisa da data.
+            deal.SetExpectedCloseDate(date, DateOnly.MinValue);
+        }
 
         if (stage is { } target && target != DealStage.Prospect)
         {

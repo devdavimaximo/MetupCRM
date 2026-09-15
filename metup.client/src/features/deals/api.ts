@@ -11,7 +11,17 @@ export type DealStage =
   | "Ganho"
   | "Perdido"
 
-export type DealSource = "Sdr" | "WhatsApp" | "MetaAds"
+/** Mesmos nomes do enum do servidor — "MetaAds" é o que o n8n envia; nunca renomear. */
+export type DealSource =
+  | "Sdr"
+  | "WhatsApp"
+  | "MetaAds"
+  | "Indicacao"
+  | "Site"
+  | "LinkedIn"
+  | "Outbound"
+  | "Evento"
+  | "Outro"
 
 export type DealStatus = "Aberto" | "Ganho" | "Perdido"
 
@@ -41,6 +51,8 @@ export type DealListItem = {
   ownerUserName: string
   ticket: number | null
   amount: number | null
+  /** Data local da organização ("2026-10-01"), sem hora — nunca reconverter fuso. */
+  expectedCloseDate: string | null
   status: DealStatus
   createdAt: string
   closedAt: string | null
@@ -64,6 +76,7 @@ export type DealInput = {
   ownerUserId: string
   ticket: number | null
   amount: number | null
+  expectedCloseDate: string | null
 }
 
 export type CreateDealInput = DealInput & {

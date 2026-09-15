@@ -1,3 +1,5 @@
+using Metup.Domain.Common.Exceptions;
+
 namespace Metup.Domain.Organizations;
 
 public class Organization
@@ -17,6 +19,27 @@ public class Organization
     public string TimeZoneId { get; set; } = DefaultTimeZoneId;
 
     public const string DefaultTimeZoneId = "America/Sao_Paulo";
+
+    /// <summary>
+    /// Dias sem mudança de etapa a partir dos quais um negócio aberto conta como "parado". Um limite
+    /// só para todas as etapas; ajustável por Admin.
+    /// </summary>
+    public int StalledDealDays { get; private set; } = DefaultStalledDealDays;
+
+    public const int DefaultStalledDealDays = 14;
+    public const int MinStalledDealDays = 1;
+    public const int MaxStalledDealDays = 180;
+
+    public void ChangeStalledDealDays(int days)
+    {
+        if (days is < MinStalledDealDays or > MaxStalledDealDays)
+        {
+            throw new DomainRuleException(
+                $"O limite de negócio parado deve ficar entre {MinStalledDealDays} e {MaxStalledDealDays} dias.");
+        }
+
+        StalledDealDays = days;
+    }
 
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }

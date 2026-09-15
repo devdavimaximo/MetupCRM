@@ -1,3 +1,4 @@
+using Metup.Application.Deals.Common;
 using FluentValidation;
 
 namespace Metup.Application.Deals.Commands.UpdateDeal;
@@ -19,5 +20,9 @@ public class UpdateDealCommandValidator : AbstractValidator<UpdateDealCommand>
         RuleFor(x => x.Amount)
             .GreaterThanOrEqualTo(0).WithMessage("O valor não pode ser negativo.")
             .When(x => x.Amount.HasValue);
+
+        RuleFor(x => x.ExpectedCloseDate)
+            .Must(DealDateRules.IsPlausible).WithMessage("Informe uma previsão de fechamento válida.")
+            .When(x => x.ExpectedCloseDate.HasValue);
     }
 }

@@ -11,4 +11,5 @@ public record UpdateDealCommand(
     DealSource Source,
     Guid OwnerUserId,
     decimal? Ticket,
-    decimal? Amount) : IRequest<DealDto>;
+    decimal? Amount,
+    DateOnly? ExpectedCloseDate = null) : IRequest<DealDto>;

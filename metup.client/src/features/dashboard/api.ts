@@ -63,6 +63,22 @@ export type FeaturedDeal = {
   daysInStage: number
   nextTaskDueDate: string | null
   nextTaskType: ActivityType | null
+  /** Data local da organização ("2026-10-01"). */
+  expectedCloseDate: string | null
+}
+
+/**
+ * Previsão de fechamento: janela de hoje (`windowStartLocal`, que é o "hoje" da organização) até
+ * `windowEndLocal`, inclusive, com a duração do período, para a frente. `openDealsWithExpectedCloseDate`
+ * = 0 quer dizer que ninguém preencheu previsão.
+ */
+export type ExpectedClose = {
+  windowStartLocal: string
+  windowEndLocal: string
+  expectedToCloseAmount: number
+  expectedToCloseCount: number
+  overdueExpectedCount: number
+  openDealsWithExpectedCloseDate: number
 }
 
 export type RecentEventKind = "DealCreated" | "StageAdvanced" | "DealWon" | "DealLost" | "Activity"
@@ -115,6 +131,7 @@ export type DashboardOverview = {
   pipeline: PipelineStage[]
   stageAdvanceRates: StageAdvanceRate[]
   weightedForecast: number | null
+  expectedClose: ExpectedClose
   openDealsWithoutAmount: number
   stalledAfterDays: number
   featuredDeals: FeaturedDeal[]

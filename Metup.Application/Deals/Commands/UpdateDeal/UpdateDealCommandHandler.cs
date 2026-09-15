@@ -8,7 +8,8 @@ namespace Metup.Application.Deals.Commands.UpdateDeal;
 
 public class UpdateDealCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<UpdateDealCommand, DealDto>
+    ICurrentUserService currentUserService,
+    IOrganizationClock organizationClock) : IRequestHandler<UpdateDealCommand, DealDto>
 {
     public async Task<DealDto> Handle(UpdateDealCommand request, CancellationToken cancellationToken)
     {
@@ -42,6 +43,9 @@ public class UpdateDealCommandHandler(
         deal.OwnerUserId = request.OwnerUserId;
         deal.Ticket = request.Ticket;
         deal.Amount = request.Amount;
+
+        var clock = await organizationClock.SnapshotAsync(cancellationToken);
+        deal.SetExpectedCloseDate(request.ExpectedCloseDate, clock.LocalDateOf(deal.CreatedAt));
 
         await context.SaveChangesAsync(cancellationToken);
 

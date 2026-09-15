@@ -56,6 +56,11 @@ export function daysInclusive(from: LocalDate, to: LocalDate) {
 const dayMonth = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short" })
 const dayMonthYear = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "short", year: "numeric" })
 
+const fullDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+
+/** "01/10/2026" a partir de uma data local ("2026-10-01") — sem reconverter fuso. */
+export const formatLocalDate = (value: LocalDate) => fullDate.format(parseLocalDate(value))
+
 const clean = (text: string) => text.replace(/\./g, "").replace(/ de /g, " ")
 
 /** "16 ago – 15 set 2026": dia e mês nas duas pontas; o ano só se repete quando muda. */

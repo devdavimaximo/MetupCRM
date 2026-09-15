@@ -12,4 +12,5 @@ public record CreateDealCommand(
     Guid OwnerUserId,
     decimal? Ticket,
     decimal? Amount,
-    DealStage InitialStage = DealStage.Prospect) : IRequest<DealDto>;
+    DealStage InitialStage = DealStage.Prospect,
+    DateOnly? ExpectedCloseDate = null) : IRequest<DealDto>;

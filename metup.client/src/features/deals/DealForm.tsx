@@ -25,6 +25,7 @@ type FormState = {
   ownerUserId: string
   ticket: string
   amount: string
+  expectedCloseDate: string
 }
 
 function toFormState(deal: Deal | null): FormState {
@@ -34,6 +35,7 @@ function toFormState(deal: Deal | null): FormState {
     ownerUserId: deal?.ownerUserId ?? "",
     ticket: deal?.ticket != null ? String(deal.ticket) : "",
     amount: deal?.amount != null ? String(deal.amount) : "",
+    expectedCloseDate: deal?.expectedCloseDate ?? "",
   }
 }
 
@@ -44,6 +46,7 @@ function toInput(form: FormState): DealInput {
     ownerUserId: form.ownerUserId,
     ticket: parseMoney(form.ticket),
     amount: parseMoney(form.amount),
+    expectedCloseDate: form.expectedCloseDate || null,
   }
 }
 
@@ -119,7 +122,6 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
           value={form.source}
           onChange={(e) => update("source", e.target.value as DealSource)}
           error={fieldErrors.source}
-          className="sm:col-span-2"
         >
           {Object.entries(sourceLabels).map(([value, label]) => (
             <option key={value} value={value}>
@@ -127,6 +129,16 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
             </option>
           ))}
         </SelectField>
+
+        <Field
+          id="deal-expected-close"
+          label="Previsão de fechamento"
+          type="date"
+          value={form.expectedCloseDate}
+          onChange={(e) => update("expectedCloseDate", e.target.value)}
+          hint="Quando você espera fechar este negócio."
+          error={fieldErrors.expectedCloseDate}
+        />
 
         <Field
           id="deal-ticket"

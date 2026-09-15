@@ -41,7 +41,8 @@ public class DealsController(ISender sender) : ControllerBase
             request.Source,
             request.OwnerUserId,
             request.Ticket,
-            request.Amount);
+            request.Amount,
+            request.ExpectedCloseDate);
 
         return Ok(await sender.Send(command, cancellationToken));
     }
@@ -84,7 +85,8 @@ public record UpdateDealRequest(
     DealSource Source,
     Guid OwnerUserId,
     decimal? Ticket,
-    decimal? Amount);
+    decimal? Amount,
+    DateOnly? ExpectedCloseDate = null);
 
 public record ChangeDealStageRequest(DealStage Stage);
 

@@ -57,6 +57,11 @@ public class DealConfiguration : IEntityTypeConfiguration<Deal>
             .HasColumnName("amount")
             .HasColumnType("numeric(18,2)");
 
+        // Dia de calendário local da organização, sem hora nem fuso.
+        builder.Property(d => d.ExpectedCloseDate)
+            .HasColumnName("expected_close_date")
+            .HasColumnType("date");
+
         builder.Property(d => d.Status)
             .HasColumnName("status")
             .HasConversion<string>()

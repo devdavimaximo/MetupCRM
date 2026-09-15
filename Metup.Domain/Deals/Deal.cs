@@ -32,6 +32,12 @@ public class Deal : BaseEntity
     /// <summary>Valor em negociação; vira o valor fechado quando o negócio é ganho.</summary>
     public decimal? Amount { get; set; }
 
+    /// <summary>
+    /// Data em que o responsável espera fechar o negócio — dia de calendário no fuso da organização,
+    /// sem hora. Alimenta "previsto para fechar" e o destaque de previsões vencidas no dashboard.
+    /// </summary>
+    public DateOnly? ExpectedCloseDate { get; private set; }
+
     public DealStatus Status { get; private set; } = DealStatus.Aberto;
 
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
@@ -127,6 +133,22 @@ public class Deal : BaseEntity
         }
 
         return stageChange;
+    }
+
+    /// <summary>
+    /// Define (ou limpa) a previsão de fechamento. <paramref name="createdOnLocal"/> é o dia local da
+    /// organização em que o negócio foi criado — o domínio não conhece fuso, então quem chama converte
+    /// <see cref="CreatedAt"/> antes; comparar com a data UTC recusaria a previsão "para hoje" de um
+    /// negócio criado depois das 21h em Brasília.
+    /// </summary>
+    public void SetExpectedCloseDate(DateOnly? expectedCloseDate, DateOnly createdOnLocal)
+    {
+        if (expectedCloseDate is { } date && date < createdOnLocal)
+        {
+            throw new DomainRuleException("A previsão de fechamento não pode ser anterior à criação do negócio.");
+        }
+
+        ExpectedCloseDate = expectedCloseDate;
     }
 
     private StageChange RecordStageChange(DealStage newStage, Guid changedByUserId, DateTime nowUtc)

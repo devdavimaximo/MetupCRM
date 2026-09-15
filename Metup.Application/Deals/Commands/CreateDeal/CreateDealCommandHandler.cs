@@ -11,7 +11,8 @@ namespace Metup.Application.Deals.Commands.CreateDeal;
 
 public class CreateDealCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<CreateDealCommand, DealDto>
+    ICurrentUserService currentUserService,
+    IOrganizationClock organizationClock) : IRequestHandler<CreateDealCommand, DealDto>
 {
     public async Task<DealDto> Handle(CreateDealCommand request, CancellationToken cancellationToken)
     {
@@ -57,6 +58,9 @@ public class CreateDealCommandHandler(
             request.Amount,
             userId,
             DateTime.UtcNow);
+
+        var clock = await organizationClock.SnapshotAsync(cancellationToken);
+        deal.SetExpectedCloseDate(request.ExpectedCloseDate, clock.LocalDateOf(deal.CreatedAt));
 
         context.Deals.Add(deal);
 

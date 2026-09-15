@@ -4,6 +4,7 @@ using Metup.Application.Dashboard.Common;
 using Metup.Application.Deals.Analytics;
 using Metup.Domain.Activities;
 using Metup.Domain.Deals;
+using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +25,6 @@ public class GetDashboardOverviewQueryHandler(
     ICurrentUserService currentUserService,
     IOrganizationClock organizationClock) : IRequestHandler<GetDashboardOverviewQuery, DashboardOverviewDto>
 {
-    private const int StalledAfterDays = 14;
     private const int FeaturedDealsLimit = 5;
     private const int RecentEventsLimit = 5;
 
@@ -43,9 +43,16 @@ public class GetDashboardOverviewQueryHandler(
         var previousStart = clock.StartOfDayUtc(window.PreviousStartLocal);
         var periodEnd = clock.EndOfDayUtc(periodEndLocal);
 
+        var stalledAfterDays = await context.Organizations
+            .AsNoTracking()
+            .Where(o => o.Id == scope.OrganizationId)
+            .Select(o => (int?)o.StalledDealDays)
+            .FirstOrDefaultAsync(cancellationToken) ?? Organization.DefaultStalledDealDays;
+
         var deals = await ScopedDeals(scope)
             .Select(d => new DealRow(
-                d.Id, d.CompanyId, d.Stage, d.Source, d.OwnerUserId, d.Amount, d.Ticket, d.Status, d.CreatedAt, d.ClosedAt))
+                d.Id, d.CompanyId, d.Stage, d.Source, d.OwnerUserId, d.Amount, d.Ticket, d.Status, d.CreatedAt, d.ClosedAt,
+                d.ExpectedCloseDate))
             .ToListAsync(cancellationToken);
 
         var dealIds = deals.Select(d => d.Id).ToList();
@@ -91,7 +98,7 @@ public class GetDashboardOverviewQueryHandler(
                 g.Count(),
                 g.Sum(d => d.EffectiveAmount ?? 0m),
                 g.Count(d => d.IsEstimated),
-                g.Count(d => DaysInStage(d) > StalledAfterDays)))
+                g.Count(d => DaysInStage(d) > stalledAfterDays)))
             .OrderBy(p => p.Stage)
             .ToList();
 
@@ -112,6 +119,8 @@ public class GetDashboardOverviewQueryHandler(
         var weightedForecast = weightedByStage.Any(w => w.HasValue)
             ? weightedByStage.Sum(w => w ?? 0m)
             : (decimal?)null;
+
+        var expectedToClose = ExpectedCloseForecast.Calculate(open, clock.Today, window.Days);
 
         var stageAdvanceRates = StageAnalytics
             .CalculateAdvanceStats(stageReaches)
@@ -155,7 +164,7 @@ public class GetDashboardOverviewQueryHandler(
                 var next = nextTasks.GetValueOrDefault(d.Id);
                 return new FeaturedDealDto(
                     d.Id, d.CompanyId, CompanyOf(d.CompanyId), d.Stage, d.EffectiveAmount, d.IsEstimated, UserOf(d.OwnerUserId),
-                    DaysInStage(d), next?.DueDate, next?.Type);
+                    DaysInStage(d), next?.DueDate, next?.Type, d.ExpectedCloseDate);
             })
             .ToList();
 
@@ -211,8 +220,9 @@ public class GetDashboardOverviewQueryHandler(
             pipeline,
             stageAdvanceRates,
             weightedForecast,
+            expectedToClose,
             open.Count(d => !d.EffectiveAmount.HasValue),
-            StalledAfterDays,
+            stalledAfterDays,
             featuredDeals,
             recentEvents,
             sources,
@@ -337,11 +347,36 @@ public class GetDashboardOverviewQueryHandler(
     }
 
     /// <summary>
+    /// "Previsto para fechar" olha para a frente: o período do dashboard só olha para trás (o
+    /// validator proíbe <c>To</c> no futuro), então a janela usa a mesma duração, começando hoje
+    /// (inclusive). Previsões anteriores a hoje em negócios ainda abertos são as vencidas, contadas à
+    /// parte para não inflar o previsto.
+    /// </summary>
+    internal static class ExpectedCloseForecast
+    {
+        public static ExpectedCloseDto Calculate(IReadOnlyList<DealRow> openDeals, DateOnly today, int days)
+        {
+            var windowEnd = today.AddDays(days - 1);
+            var inWindow = openDeals
+                .Where(d => d.ExpectedCloseDate >= today && d.ExpectedCloseDate <= windowEnd)
+                .ToList();
+
+            return new ExpectedCloseDto(
+                today,
+                windowEnd,
+                inWindow.Sum(d => d.EffectiveAmount ?? 0m),
+                inWindow.Count,
+                openDeals.Count(d => d.ExpectedCloseDate < today),
+                openDeals.Count(d => d.ExpectedCloseDate.HasValue));
+        }
+    }
+
+    /// <summary>
     /// Projeção enxuta do negócio. <see cref="EffectiveAmount"/> é o valor efetivo do negócio
     /// <b>aberto</b>: o valor em negociação ou, na falta dele, o ticket estimado — é o que o
     /// pipeline, os destaques e a receita prevista somam. Receita ganha nunca usa o ticket.
     /// </summary>
-    private sealed record DealRow(
+    internal sealed record DealRow(
         Guid Id,
         Guid CompanyId,
         DealStage Stage,
@@ -351,7 +386,8 @@ public class GetDashboardOverviewQueryHandler(
         decimal? Ticket,
         DealStatus Status,
         DateTime CreatedAt,
-        DateTime? ClosedAt)
+        DateTime? ClosedAt,
+        DateOnly? ExpectedCloseDate)
     {
         public decimal? EffectiveAmount => Amount ?? Ticket;
 

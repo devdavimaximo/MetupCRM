@@ -8,8 +8,9 @@ import { stageLabels, ACTIVE_STAGES } from "@/features/deals/stage-labels"
 import type { DealStage } from "@/features/deals/api"
 import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { FeaturedDeal, PipelineStage, StageAdvanceRate } from "./api"
-import { formatInstantDay, formatMoneyCompact, formatMoneyWhole, formatPercent, type Delta } from "./dashboard-format"
+import type { ExpectedClose, FeaturedDeal, PipelineStage, StageAdvanceRate } from "./api"
+import { daysInclusive } from "@/lib/local-date"
+import { formatInstantDay, formatLocalDay, formatMoneyCompact, formatMoneyWhole, formatPercent, type Delta } from "./dashboard-format"
 import { Sparkline } from "./dashboard-charts"
 
 /* ─── Base ──────────────────────────────────────────────────────────────────── */
@@ -185,9 +186,12 @@ function stageHint(node: FunnelNode, stalledAfterDays: number) {
     lines.push(`Tempo médio na etapa: ${numberFormatter.format(Math.round(node.averageDays))} dias.`)
   }
 
-  if (node.stalled > 0) {
-    lines.push(`${numberFormatter.format(node.stalled)} sem mudar de etapa há mais de ${stalledAfterDays} dias.`)
-  }
+  // O limite vale para a organização inteira e é ajustável; o tooltip sempre diz qual está valendo.
+  lines.push(
+    node.stalled > 0
+      ? `${numberFormatter.format(node.stalled)} parados: sem mudar de etapa há mais de ${stalledAfterDays} dias.`
+      : `Nenhum parado (limite: ${stalledAfterDays} dias sem mudar de etapa).`
+  )
 
   lines.push("Clique para abrir no Pipeline.")
   return lines.join("\n")
@@ -374,10 +378,13 @@ const stageTone: Record<DealStage, string> = {
  */
 export function FeaturedDealsCard({
   deals,
+  today,
   onOpenDeal,
   onOpenCompany,
 }: {
   deals: FeaturedDeal[]
+  /** "Hoje" da organização (data local), para marcar previsão vencida sem depender do fuso do navegador. */
+  today: string
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
 }) {
@@ -400,7 +407,11 @@ export function FeaturedDealsCard({
                   <span className="max-[1699px]:sr-only">Responsável</span>
                   <span aria-hidden="true" className="min-[1700px]:hidden">Resp.</span>
                 </th>
-                <th scope="col" className="pb-2 font-normal">Ação</th>
+                <th scope="col" className="pb-2 font-normal">
+                  <Hint content="Previsão de fechamento (vermelho quando já passou) e, embaixo, a próxima ação pendente.">
+                    <span>Previsão</span>
+                  </Hint>
+                </th>
                 <th scope="col" className="sticky right-0 w-8 bg-surface pb-2">
                   <span className="sr-only">Mais ações</span>
                 </th>
@@ -459,13 +470,30 @@ export function FeaturedDealsCard({
                       <span className="max-w-32 truncate text-fg-muted max-[1699px]:hidden">{deal.ownerUserName.split(/\s+/)[0]}</span>
                     </span>
                   </td>
-                  <td
-                    className={cn(
-                      "py-2 pr-2 whitespace-nowrap tabular min-[1700px]:pr-3",
-                      !deal.nextTaskDueDate ? "text-danger" : new Date(deal.nextTaskDueDate) < new Date() ? "text-danger" : "text-fg-muted"
-                    )}
-                  >
-                    {deal.nextTaskDueDate ? formatInstantDay(deal.nextTaskDueDate) : "Sem ação"}
+                  {/* Duas linhas curtas na altura de uma linha de avatar: previsão em cima, próxima ação embaixo. */}
+                  <td className="py-0.5 pr-2 whitespace-nowrap tabular min-[1700px]:pr-3">
+                    {/* relative: o texto sr-only fica preso na área de rolagem da tabela em vez de esticar a página. */}
+                    <span className="relative flex flex-col">
+                      {deal.expectedCloseDate ? (
+                        <span className={cn("text-xs/3.5", deal.expectedCloseDate < today ? "text-danger" : "text-fg")}>
+                          {formatLocalDay(deal.expectedCloseDate)}
+                          {deal.expectedCloseDate < today && <span className="sr-only"> (previsão vencida)</span>}
+                        </span>
+                      ) : (
+                        <span className="text-xs/3.5 text-faint">
+                          <span aria-hidden="true">—</span>
+                          <span className="sr-only">sem previsão</span>
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "text-2xs/3.5",
+                          !deal.nextTaskDueDate || new Date(deal.nextTaskDueDate) < new Date() ? "text-danger" : "text-muted"
+                        )}
+                      >
+                        {deal.nextTaskDueDate ? `Ação ${formatInstantDay(deal.nextTaskDueDate)}` : "Sem ação"}
+                      </span>
+                    </span>
                   </td>
                   {/* Fixa na borda direita: se a tabela ainda rolar na horizontal, o menu continua à vista. */}
                   <td className="sticky right-0 bg-surface py-1 pl-1 text-right" onClick={(event) => event.stopPropagation()}>
@@ -518,6 +546,52 @@ function DealRowMenu({
 
 /* ─── Cartão Metup (potencial) ──────────────────────────────────────────────── */
 
+/**
+ * "Previsto para fechar": para a frente, de hoje até o fim da janela com a duração do período.
+ * Sem nenhuma previsão preenchida, convida a preencher em vez de mostrar R$ 0 sem contexto.
+ */
+function ExpectedCloseLine({ expectedClose }: { expectedClose: ExpectedClose }) {
+  const days = daysInclusive(expectedClose.windowStartLocal, expectedClose.windowEndLocal)
+  const windowName = days === 1 ? "hoje" : `nos próximos ${numberFormatter.format(days)} dias`
+  const range = `${formatLocalDay(expectedClose.windowStartLocal)} – ${formatLocalDay(expectedClose.windowEndLocal)}`
+
+  if (expectedClose.openDealsWithExpectedCloseDate === 0) {
+    return (
+      <p data-testid="expected-close-line" className="line-clamp-2 shrink-0 text-xs text-fg-muted max-[1699px]:line-clamp-1">
+        <span className="max-[1699px]:hidden">Preencha a previsão de fechamento dos negócios para ver o que deve entrar {windowName}.</span>
+        <span className="min-[1700px]:hidden">Preencha a previsão de fechamento dos negócios.</span>
+      </p>
+    )
+  }
+
+  const count = expectedClose.expectedToCloseCount
+  const overdue = expectedClose.overdueExpectedCount
+  return (
+    <Hint
+      content={`Previsto para fechar ${windowName}: ${formatMoneyWhole(expectedClose.expectedToCloseAmount)} (${numberFormatter.format(count)} ${count === 1 ? "negócio" : "negócios"}).\nSoma do valor dos negócios abertos com previsão de fechamento entre ${range}.${overdue > 0 ? `\n${numberFormatter.format(overdue)} negócios abertos estão com a previsão vencida.` : ""}`}
+    >
+      <p data-testid="expected-close-line" tabIndex={0} className="line-clamp-2 w-fit shrink-0 max-[1599px]:line-clamp-1 rounded-xs text-xs text-fg focus-visible:focus-ring">
+        {/* Abaixo de 1700px o cartão é estreito: versão curta; o tooltip mantém a frase inteira. */}
+        <span className="max-[1699px]:hidden">
+          Previsto para fechar {windowName}:{" "}
+          <span className="font-medium tabular">{formatMoneyWhole(expectedClose.expectedToCloseAmount)}</span>{" "}
+          <span className="text-fg-muted">
+            ({numberFormatter.format(count)} {count === 1 ? "negócio" : "negócios"})
+          </span>
+        </span>
+        <span className="min-[1700px]:hidden">
+          Fecha {days === 1 ? "hoje" : `em ${numberFormatter.format(days)}d`}:{" "}
+          <span className="font-medium tabular">{formatMoneyCompact(expectedClose.expectedToCloseAmount)}</span>{" "}
+          <span className="text-fg-muted">({numberFormatter.format(count)})</span>
+        </span>
+        {overdue > 0 && (
+          <span className="text-danger"> · {numberFormatter.format(overdue)} {overdue === 1 ? "vencida" : "vencidas"}</span>
+        )}
+      </p>
+    </Hint>
+  )
+}
+
 const FORECAST_HINT = "Valor aberto ponderado pela taxa histórica de fechamento de cada etapa; não depende do período."
 
 /**
@@ -527,11 +601,13 @@ const FORECAST_HINT = "Valor aberto ponderado pela taxa histórica de fechamento
 export function PotentialCard({
   openAmount,
   forecast,
+  expectedClose,
   closingAmount,
   onOpenPipeline,
 }: {
   openAmount: number
   forecast: number | null
+  expectedClose: ExpectedClose
   closingAmount: number
   onOpenPipeline: () => void
 }) {
@@ -560,15 +636,15 @@ export function PotentialCard({
         <rect x={0} y={0} width={300} height={240} fill="url(#metup-fade)" />
       </svg>
 
-      <div className="relative flex h-full max-w-[68%] flex-col justify-center gap-2.5">
+      <div className="relative flex h-full max-w-[68%] flex-col justify-center gap-2.5 max-[1599px]:gap-1.5">
         <Hint
           content={
             forecast === null ? `${FORECAST_HINT}\nSem previsão: ainda não há histórico de fechamento para calibrar.` : FORECAST_HINT
           }
         >
-          <p tabIndex={0} className="inline-flex w-fit items-center gap-1.5 rounded-xs label-mono text-accent focus-visible:focus-ring">
+          <p tabIndex={0} className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-xs label-mono max-[1599px]:whitespace-nowrap text-accent focus-visible:focus-ring">
             Previsto no pipeline atual
-            <Info className="size-3" aria-hidden="true" />
+            <Info className="size-3 max-[1599px]:hidden" aria-hidden="true" />
           </p>
         </Hint>
         <h2 id="potential-heading" className="text-md leading-snug font-medium text-fg min-[1700px]:text-lg">
@@ -577,7 +653,9 @@ export function PotentialCard({
             {forecast === null ? "sem histórico de fechamento para calibrar." : `${formatMoneyCompact(forecast)} previstos.`}
           </span>
         </h2>
-        <p className="line-clamp-2 text-xs text-fg-muted">
+        <ExpectedCloseLine expectedClose={expectedClose} />
+        {/* Abaixo de 1700px a dica cede o espaço à linha do previsto: o cartão não cresce nem corta o botão. */}
+        <p className="line-clamp-2 text-xs text-fg-muted max-[1699px]:hidden">
           {closingAmount > 0
             ? `${formatMoneyWhole(closingAmount)} já estão em proposta ou negociação. Mantenha a próxima ação de cada um em dia.`
             : "Avance os negócios qualificados para proposta e transforme o pipeline em receita."}

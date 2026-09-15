@@ -1,4 +1,5 @@
 import { numberFormatter } from "@/lib/format"
+import type { DealSource } from "@/features/deals/api"
 import type { PeriodValue } from "./api"
 
 const moneyWhole = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
@@ -112,5 +113,25 @@ export function smoothSeries(values: number[], strength = 0.12): number[] {
   })
 }
 
-/** Tons da mesma família dourada → neutros: identidade por posição fixa, nunca arco-íris. */
-export const DONUT_COLORS = ["#f5a623", "#c98f3a", "#b9b6b1", "#8a857d", "#5c5a57", "#3a3b3e"]
+/**
+ * Cor fixa de cada origem, na família dourado → neutros: a identidade segue a origem, não a posição
+ * na lista, então "WhatsApp" tem a mesma cor em qualquer período. Vizinhos de tom próximo são
+ * separados pelo espaço entre fatias e pela legenda.
+ */
+export const SOURCE_COLORS: Record<DealSource, string> = {
+  Sdr: "#f5a623",
+  WhatsApp: "#c98f3a",
+  MetaAds: "#b9b6b1",
+  Outbound: "#e9c47e",
+  Indicacao: "#9a6a2c",
+  Site: "#8a857d",
+  LinkedIn: "#dcd7cf",
+  Evento: "#6e6a64",
+  Outro: "#4f4d4a",
+}
+
+/** A fatia que junta as menores origens quando há mais origens do que o donut mostra. */
+export const OTHER_SOURCES_COLOR = "#3a3b3e"
+
+/** Máximo de fatias do donut; acima disso as menores somam em "Outras". */
+export const MAX_ORIGIN_SLICES = 6

@@ -28,10 +28,17 @@ export const stageLabels: Record<DealStage, string> = {
   Perdido: "Perdido",
 }
 
+/** A ordem aqui é a ordem das listas de origem (formulário e filtro do Pipeline). */
 export const sourceLabels: Record<DealSource, string> = {
   Sdr: "SDR",
+  Outbound: "Outbound",
   WhatsApp: "WhatsApp",
   MetaAds: "Meta Ads",
+  Indicacao: "Indicação",
+  Site: "Site",
+  LinkedIn: "LinkedIn",
+  Evento: "Evento",
+  Outro: "Outro",
 }
 
 export const statusLabels: Record<DealStatus, string> = {

@@ -28,6 +28,11 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
             .HasDefaultValue(Organization.DefaultTimeZoneId)
             .IsRequired();
 
+        builder.Property(o => o.StalledDealDays)
+            .HasColumnName("stalled_deal_days")
+            .HasDefaultValue(Organization.DefaultStalledDealDays)
+            .IsRequired();
+
         builder.Property(o => o.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

@@ -358,6 +358,7 @@ function MainGrid({
     periodStart: overview.periodStart,
   }
   const comparison = comparisonRange(deltaContext)
+  const revenueDelta = deltaOf(overview.revenue, deltaContext)
 
   return (
     <div
@@ -425,12 +426,12 @@ function MainGrid({
             subtitle={`Receita acumulada · ${periodName}`}
             aside={
               <div className="shrink-0 text-right">
-                <DeltaLine delta={deltaOf(overview.revenue, deltaContext)} comparison={comparison} />
+                <DeltaLine delta={revenueDelta} comparison={comparison} />
               </div>
             }
           />
           <div className="relative h-60 min-h-0 xl:h-auto xl:min-h-24 xl:flex-1">
-            <RevenueAreaChart data={chartData} />
+            <RevenueAreaChart data={chartData} previousTotal={revenueDelta.kind === "change" ? overview.revenue.previous : null} />
             {overview.revenue.current === 0 && (
               <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
                 Nenhum negócio ganho neste período.
@@ -446,10 +447,16 @@ function MainGrid({
       </div>
 
       <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <FeaturedDealsCard deals={overview.featuredDeals} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} />
+        <FeaturedDealsCard
+          deals={overview.featuredDeals}
+          today={overview.expectedClose.windowStartLocal}
+          onOpenDeal={onOpenDeal}
+          onOpenCompany={onOpenCompany}
+        />
         <PotentialCard
           openAmount={openAmount}
           forecast={overview.weightedForecast}
+          expectedClose={overview.expectedClose}
           closingAmount={closingAmount}
           onOpenPipeline={() => onNavigate("pipeline")}
         />
