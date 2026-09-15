@@ -1,6 +1,7 @@
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Tasks.Common;
+using Metup.Application.Common.Realtime;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,8 @@ namespace Metup.Application.Tasks.Commands.CompleteTask;
 
 public class CompleteTaskCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<CompleteTaskCommand, TaskDto>
+    ICurrentUserService currentUserService,
+    IPublisher publisher) : IRequestHandler<CompleteTaskCommand, TaskDto>
 {
     public async Task<TaskDto> Handle(CompleteTaskCommand request, CancellationToken cancellationToken)
     {
@@ -21,6 +23,7 @@ public class CompleteTaskCommandHandler(
         task.Complete(DateTime.UtcNow);
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new TaskCompletedNotification(organizationId, task.DealId, task.OwnerUserId), cancellationToken);
 
         return await context.Tasks
             .AsNoTracking()

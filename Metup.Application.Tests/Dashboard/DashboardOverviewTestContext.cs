@@ -19,6 +19,25 @@ public sealed class FakeCurrentUserService(Guid organizationId, Guid userId, Use
     public string? Role => role.ToString();
 }
 
+/// <summary>Publisher do MediatR que só guarda o que foi publicado, na ordem.</summary>
+public sealed class RecordingPublisher : MediatR.IPublisher
+{
+    public List<object> Published { get; } = [];
+
+    public Task Publish(object notification, CancellationToken cancellationToken = default)
+    {
+        Published.Add(notification);
+        return Task.CompletedTask;
+    }
+
+    public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
+        where TNotification : MediatR.INotification
+    {
+        Published.Add(notification);
+        return Task.CompletedTask;
+    }
+}
+
 /// <summary>Relógio congelado num instante e num fuso conhecidos — o teste escolhe o "agora".</summary>
 public sealed class FakeOrganizationClock(TimeZoneInfo timeZone, DateTime utcNow) : IOrganizationClock
 {

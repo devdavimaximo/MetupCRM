@@ -32,6 +32,7 @@ export function SideColumn({
   onSeeAllActivity,
   seeAllActivityRef,
   onTaskCompleted,
+  highlightedEventIds,
 }: {
   events: RecentEvent[] | null
   tasks: TaskItem[] | null
@@ -44,6 +45,8 @@ export function SideColumn({
   /** O "Ver todas" da atividade: o sheet devolve o foco para ele ao fechar. */
   seeAllActivityRef?: Ref<HTMLButtonElement>
   onTaskCompleted: (task: TaskItem) => void
+  /** Eventos que acabaram de chegar em tempo real: realce breve. */
+  highlightedEventIds?: ReadonlySet<string>
 }) {
   return (
     <Panel className="overflow-hidden">
@@ -62,7 +65,7 @@ export function SideColumn({
           <ol className="flex flex-col divide-y divide-line-soft/70">
             {events.map((event) => (
               <li key={event.id}>
-                <ActivityEventButton event={event} onOpenDeal={onOpenDeal} />
+                <ActivityEventButton event={event} onOpenDeal={onOpenDeal} highlight={highlightedEventIds?.has(event.id)} />
               </li>
             ))}
           </ol>

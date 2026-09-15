@@ -6,6 +6,7 @@ using Metup.Application.Tasks.Common;
 using Metup.Domain.Activities;
 using Metup.Domain.Integrations;
 using Metup.Domain.Tasks;
+using Metup.Application.Common.Realtime;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +14,8 @@ namespace Metup.Application.Activities.Commands.LogActivity;
 
 public class LogActivityCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<LogActivityCommand, LogActivityResultDto>
+    ICurrentUserService currentUserService,
+    IPublisher publisher) : IRequestHandler<LogActivityCommand, LogActivityResultDto>
 {
     public async Task<LogActivityResultDto> Handle(LogActivityCommand request, CancellationToken cancellationToken)
     {
@@ -22,12 +24,11 @@ public class LogActivityCommandHandler(
 
         // Negócio e contato precisam existir DENTRO da organização do usuário — mesmo padrão
         // que CreateDealCommandHandler já usa (404 genérico, sem vazar dado de outra org).
-        var dealExists = await context.Deals
-            .AnyAsync(d => d.Id == request.DealId && d.OrganizationId == organizationId, cancellationToken);
-        if (!dealExists)
-        {
-            throw new NotFoundException("Negócio");
-        }
+        var dealOwnerUserId = await context.Deals
+            .Where(d => d.Id == request.DealId && d.OrganizationId == organizationId)
+            .Select(d => (Guid?)d.OwnerUserId)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Negócio");
 
         if (request.ContactId is { } contactId)
         {
@@ -82,6 +83,7 @@ public class LogActivityCommandHandler(
             IntegrationEvent.Create(organizationId, IntegrationEventTypes.ActivityLogged, payload));
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new ActivityLoggedNotification(organizationId, activity.DealId, dealOwnerUserId), cancellationToken);
 
         var activityDto = await context.Activities
             .AsNoTracking()

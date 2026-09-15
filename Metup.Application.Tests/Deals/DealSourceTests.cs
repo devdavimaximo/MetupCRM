@@ -38,7 +38,7 @@ public class DealSourceTests
     public async Task Ingestao_do_Meta_Ads_continua_gravando_a_origem_MetaAds()
     {
         using var context = new DashboardOverviewTestContext();
-        var handler = new ReceiveMetaAdsLeadCommandHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin));
+        var handler = new ReceiveMetaAdsLeadCommandHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), new RecordingPublisher());
 
         var dto = await handler.Handle(
             new ReceiveMetaAdsLeadCommand("lead-1", "Empresa Beta", "Bia", null, null, context.SdrUserId, 1_000m, null),

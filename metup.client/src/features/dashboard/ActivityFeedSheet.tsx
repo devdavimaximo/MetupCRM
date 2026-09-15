@@ -9,6 +9,7 @@ import { toMessage } from "@/features/companies/form-errors"
 import { listUsers, type UserSummary } from "@/features/deals/api"
 import type { AuthenticatedUser } from "@/lib/auth"
 import { cn } from "@/lib/utils"
+import { useRealtime } from "@/lib/realtime"
 import { listActivityFeed, type ActivityFeedFilter, type RecentEvent } from "./api"
 import { ActivityEventButton } from "./activity-event"
 
@@ -175,6 +176,49 @@ export function ActivityFeedSheet({
 
   useEffect(() => () => moreRequest.current?.abort(), [])
 
+  // Tempo real: com o sheet aberto, o que acabou de acontecer entra no topo (com os filtros atuais)
+  // e fica realçado por um instante. A lista já carregada e a posição do cursor não mudam.
+  const [highlighted, setHighlighted] = useState<ReadonlySet<string>>(() => new Set())
+  const realtimeTimer = useRef<number | undefined>(undefined)
+  const highlightTimer = useRef<number | undefined>(undefined)
+  const latestFeed = useRef({ key: feed.key, loaded: feed.loaded, items: feed.items, kinds, ownerUserId })
+  useEffect(() => {
+    latestFeed.current = { key: feed.key, loaded: feed.loaded, items: feed.items, kinds, ownerUserId }
+  })
+  useEffect(
+    () => () => {
+      window.clearTimeout(realtimeTimer.current)
+      window.clearTimeout(highlightTimer.current)
+    },
+    []
+  )
+
+  useRealtime(() => {
+    if (!open) return
+    window.clearTimeout(realtimeTimer.current)
+    realtimeTimer.current = window.setTimeout(() => {
+      const { key, loaded, kinds: currentKinds, ownerUserId: currentOwner } = latestFeed.current
+      if (!loaded) return
+      listActivityFeed({ kinds: currentKinds, ownerUserId: currentOwner || undefined, pageSize: PAGE_SIZE })
+        .then((page) => {
+          const current = latestFeed.current
+          if (current.key !== key) return
+          const seen = new Set(current.items.map((item) => item.id))
+          const incoming = page.items.filter((item) => !seen.has(item.id))
+          if (incoming.length === 0) return
+          setStored((state) => {
+            if (state.key !== key) return state
+            const present = new Set(state.items.map((item) => item.id))
+            return { ...state, items: [...incoming.filter((item) => !present.has(item.id)), ...state.items] }
+          })
+          setHighlighted(new Set(incoming.map((item) => item.id)))
+          window.clearTimeout(highlightTimer.current)
+          highlightTimer.current = window.setTimeout(() => setHighlighted(new Set()), 2_500)
+        })
+        .catch(() => undefined)
+    }, 2_000)
+  })
+
   // Carregamento ao rolar: o sentinela no fim da lista pede a próxima página ao entrar na área visível.
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -295,7 +339,7 @@ export function ActivityFeedSheet({
               <ol className="flex flex-col divide-y divide-line-soft/70">
                 {group.events.map((event) => (
                   <li key={event.id}>
-                    <ActivityEventButton event={event} onOpenDeal={onOpenDeal} />
+                    <ActivityEventButton event={event} onOpenDeal={onOpenDeal} highlight={highlighted.has(event.id)} />
                   </li>
                 ))}
               </ol>

@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { BrandLockup } from "@/components/BrandLockup"
+import { ShellActions, type ShellNavigation } from "@/components/ShellActions"
 import { Monogram } from "@/components/ui/monogram"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import type { Session } from "@/lib/auth"
@@ -26,6 +27,8 @@ type Props = {
   onLogout: () => void
   view: View
   onNavigate: (view: View) => void
+  /** Destinos da busca global e das notificações. */
+  navigation: ShellNavigation
   children: ReactNode
 }
 
@@ -70,7 +73,7 @@ function readCollapsed(): boolean {
   }
 }
 
-export function AppShell({ session, onLogout, view, onNavigate, children }: Props) {
+export function AppShell({ session, onLogout, view, onNavigate, navigation, children }: Props) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -142,6 +145,8 @@ export function AppShell({ session, onLogout, view, onNavigate, children }: Prop
           />
         </SheetContent>
       </Sheet>
+
+      <ShellActions userId={session.user.userId} navigation={navigation} />
 
       <main id="main" className="min-w-0 transition-[padding] duration-200 ease-out lg:pl-(--sidebar)">
         {children}

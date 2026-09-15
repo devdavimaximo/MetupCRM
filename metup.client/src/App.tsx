@@ -59,6 +59,13 @@ function App() {
     setNavSeed((seed) => seed + 1)
   }
 
+  function openConversation(conversationId: string) {
+    writeUrlState({ view: "inbox", conversationId, dealId: null, companyId: null, search: "", pipelineStage: "", activityFeed: "" })
+    setNewDealIntent(null)
+    setView("inbox")
+    setNavSeed((seed) => seed + 1)
+  }
+
   function openNewDealForCompany(companyId: string, companyName: string) {
     writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: "", activityFeed: "" })
     setNewDealIntent({ companyId, companyName })
@@ -71,6 +78,7 @@ function App() {
       session={session}
       view={view}
       onNavigate={navigate}
+      navigation={{ onNavigate: navigate, onOpenCompany: openCompany, onOpenDeal: openDeal, onOpenConversation: openConversation }}
       onLogout={() => {
         clearSession()
         setSession(null)

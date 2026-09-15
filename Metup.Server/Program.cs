@@ -5,6 +5,7 @@ using Hangfire.PostgreSql;
 using Metup.Application;
 using Metup.Application.Common.Interfaces;
 using Metup.Infrastructure;
+using Metup.Infrastructure.Realtime;
 using Metup.Infrastructure.Security;
 using Metup.Server.Middleware;
 using Metup.Server.Security;
@@ -59,6 +60,22 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret)),
             ClockSkew = TimeSpan.Zero,
         };
+
+        // WebSocket não manda header Authorization: o client do SignalR envia o mesmo JWT como
+        // access_token na query string. Aceito só no caminho do hub, nunca nos endpoints da API.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments(DashboardHub.Path))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
+        };
     })
     .AddScheme<AuthenticationSchemeOptions, ServiceTokenAuthenticationHandler>(
         ServiceTokenAuthenticationHandler.SchemeName, _ => { });
@@ -85,6 +102,7 @@ app.UseCors("Client");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<DashboardHub>(DashboardHub.Path).RequireCors("Client");
 
 if (app.Environment.IsDevelopment())
 {

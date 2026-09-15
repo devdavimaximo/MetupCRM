@@ -90,8 +90,8 @@ public class GetDashboardOverviewQueryHandler(
             .GroupBy(r => r.DealId)
             .ToDictionary(g => g.Key, g => g.Max(r => r.ChangedAt));
 
-        int DaysInStage(DealRow deal) =>
-            (int)(clock.UtcNow - lastStageChangeByDeal.GetValueOrDefault(deal.Id, deal.CreatedAt)).TotalDays;
+        DateTime LastStageChange(DealRow deal) => lastStageChangeByDeal.GetValueOrDefault(deal.Id, deal.CreatedAt);
+        int DaysInStage(DealRow deal) => StalledDealRule.DaysInStage(LastStageChange(deal), clock.UtcNow);
 
         var pipeline = open
             .GroupBy(d => d.Stage)
@@ -100,7 +100,7 @@ public class GetDashboardOverviewQueryHandler(
                 g.Count(),
                 g.Sum(d => d.EffectiveAmount ?? 0m),
                 g.Count(d => d.IsEstimated),
-                g.Count(d => DaysInStage(d) > stalledAfterDays)))
+                g.Count(d => StalledDealRule.IsStalled(LastStageChange(d), clock.UtcNow, stalledAfterDays))))
             .OrderBy(p => p.Stage)
             .ToList();
 

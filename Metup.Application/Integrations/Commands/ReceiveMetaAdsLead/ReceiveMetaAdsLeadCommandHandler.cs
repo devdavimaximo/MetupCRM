@@ -8,6 +8,7 @@ using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
 using Metup.Domain.Deals;
 using Metup.Domain.Integrations;
+using Metup.Application.Common.Realtime;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,7 +24,8 @@ namespace Metup.Application.Integrations.Commands.ReceiveMetaAdsLead;
 /// </summary>
 public class ReceiveMetaAdsLeadCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<ReceiveMetaAdsLeadCommand, DealDto>
+    ICurrentUserService currentUserService,
+    IPublisher publisher) : IRequestHandler<ReceiveMetaAdsLeadCommand, DealDto>
 {
     public async Task<DealDto> Handle(ReceiveMetaAdsLeadCommand request, CancellationToken cancellationToken)
     {
@@ -114,6 +116,7 @@ public class ReceiveMetaAdsLeadCommandHandler(
             IntegrationEvent.Create(organizationId, IntegrationEventTypes.DealCreated, payload));
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new DealCreatedNotification(organizationId, deal.Id, deal.OwnerUserId), cancellationToken);
 
         return await context.Deals
             .AsNoTracking()

@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "@/lib/auth"
 import type { TaskItem } from "@/features/tasks/api"
 import { numberFormatter } from "@/lib/format"
 import { addDays, todayLocal, type LocalDate } from "@/lib/local-date"
+import { useRealtime, useRealtimeStatus } from "@/lib/realtime"
 import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 import {
@@ -69,6 +70,29 @@ function greeting(date = new Date()) {
   return "Boa noite"
 }
 
+/** Espera depois do último evento em tempo real antes de refazer as consultas. */
+const REALTIME_DEBOUNCE_MS = 2_000
+/** Quanto tempo o evento novo fica realçado na Atividade Recente. */
+const HIGHLIGHT_MS = 2_500
+
+/** Ponto discreto do estado do tempo real, com o texto no tooltip e para leitor de tela. */
+function RealtimeIndicator() {
+  const status = useRealtimeStatus()
+  const live = status === "connected"
+  const text = live ? "Atualização em tempo real" : "Reconectando…"
+  return (
+    <Hint content={text}>
+      <span tabIndex={0} data-testid="realtime-indicator" data-status={status} className="ml-1 inline-flex size-4 items-center justify-center rounded-full focus-visible:focus-ring">
+        <span
+          aria-hidden="true"
+          className={cn("size-1.5 rounded-full", live ? "bg-success" : "animate-pulse bg-accent motion-reduce:animate-none")}
+        />
+        <span className="sr-only">{text}</span>
+      </span>
+    </Hint>
+  )
+}
+
 /** Série acumulada a partir de valores por intervalo. */
 function runningSum(values: number[]) {
   return values.reduce<number[]>((acc, v) => [...acc, (acc.at(-1) ?? 0) + v], [])
@@ -111,6 +135,8 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
   // Concluídas que o servidor ainda não confirmou numa resposta nova — nunca "ressuscitam".
   const [hiddenTaskIds, setHiddenTaskIds] = useState<ReadonlySet<string>>(() => new Set())
   const summaryRequest = useRef<AbortController | null>(null)
+  // Ids da Atividade Recente já mostrados: o que chegar fora deles, via tempo real, ganha realce.
+  const knownEventIds = useRef<ReadonlySet<string> | null>(null)
 
   const request = useMemo(() => resolvePeriod(period, orgToday), [period, orgToday])
   const requestKey = "days" in request ? `d:${request.days}` : `r:${request.from}:${request.to}`
@@ -121,6 +147,8 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
     setOverviewError(null)
     getDashboardOverview(request, scope, controller.signal)
       .then((data) => {
+        // Eventos que vieram por troca de período/escopo não são "novos" para o realce do tempo real.
+        knownEventIds.current = new Set(data.recentEvents.map((event) => event.id))
         setOverview(data)
         setLoadedPeriod(period)
         if ("days" in request) setOrgToday(data.periodEndLocal)
@@ -163,6 +191,58 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
     return () => summaryRequest.current?.abort()
   }, [loadSummary])
 
+  // ── Tempo real ────────────────────────────────────────────────────────────────
+  // Evento chegou (ou a conexão voltou / a aba ganhou foco sem conexão): refaz overview e tarefas em
+  // segundo plano, 2s depois do último evento, sem skeleton e com o mesmo período e escopo.
+  const [highlightedEventIds, setHighlightedEventIds] = useState<ReadonlySet<string>>(() => new Set())
+  const latestQuery = useRef({ request, scope, loading: isOverviewLoading })
+  const silentRequest = useRef<AbortController | null>(null)
+  const realtimeTimer = useRef<number | undefined>(undefined)
+  const highlightTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    latestQuery.current = { request, scope, loading: isOverviewLoading }
+  })
+
+  useEffect(
+    () => () => {
+      silentRequest.current?.abort()
+      window.clearTimeout(realtimeTimer.current)
+      window.clearTimeout(highlightTimer.current)
+    },
+    []
+  )
+
+  const refreshSilently = useCallback(() => {
+    const { request: currentRequest, scope: currentScope, loading } = latestQuery.current
+    loadSummary()
+    // Uma troca de período em andamento já vai trazer dados novos.
+    if (loading) return
+    silentRequest.current?.abort()
+    const controller = new AbortController()
+    silentRequest.current = controller
+    getDashboardOverview(currentRequest, currentScope, controller.signal)
+      .then((data) => {
+        const known = knownEventIds.current ?? new Set<string>()
+        const fresh = data.recentEvents.filter((event) => !known.has(event.id)).map((event) => event.id)
+        knownEventIds.current = new Set(data.recentEvents.map((event) => event.id))
+        setOverview(data)
+        setOverviewError(null)
+        if (fresh.length > 0) {
+          setHighlightedEventIds(new Set(fresh))
+          window.clearTimeout(highlightTimer.current)
+          highlightTimer.current = window.setTimeout(() => setHighlightedEventIds(new Set()), HIGHLIGHT_MS)
+        }
+      })
+      // Falha silenciosa: os dados na tela continuam válidos e a próxima revalidação tenta de novo.
+      .catch(() => undefined)
+  }, [loadSummary])
+
+  useRealtime(() => {
+    window.clearTimeout(realtimeTimer.current)
+    realtimeTimer.current = window.setTimeout(refreshSilently, REALTIME_DEBOUNCE_MS)
+  })
+
   function changeScope(next: DealScope) {
     setScope(next)
     writeUrlState({ dashboardScope: next === "Mine" ? "minha" : "" })
@@ -196,6 +276,7 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
       onSeeAllActivity={() => setFeedOpen(true)}
       seeAllActivityRef={feedTriggerRef}
       onTaskCompleted={handleTaskCompleted}
+      highlightedEventIds={highlightedEventIds}
     />
   )
 
@@ -215,6 +296,7 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
               </span>
               <span aria-hidden="true">·</span>
               <ScopeIndicator scope={overview?.scope ?? scope} canSwitch={canSwitchScope(role)} onChange={changeScope} />
+              <RealtimeIndicator />
             </nav>
             <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg min-[1700px]:text-4xl">
               {greeting()}, {firstName}.

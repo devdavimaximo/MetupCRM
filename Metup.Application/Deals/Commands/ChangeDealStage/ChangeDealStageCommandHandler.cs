@@ -3,6 +3,7 @@ using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Deals.Common;
 using Metup.Domain.Integrations;
+using Metup.Application.Common.Realtime;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +11,8 @@ namespace Metup.Application.Deals.Commands.ChangeDealStage;
 
 public class ChangeDealStageCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<ChangeDealStageCommand, DealDto>
+    ICurrentUserService currentUserService,
+    IPublisher publisher) : IRequestHandler<ChangeDealStageCommand, DealDto>
 {
     public async Task<DealDto> Handle(ChangeDealStageCommand request, CancellationToken cancellationToken)
     {
@@ -41,6 +43,7 @@ public class ChangeDealStageCommandHandler(
             IntegrationEvent.Create(organizationId, IntegrationEventTypes.StageChanged, payload));
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new DealStageChangedNotification(organizationId, deal.Id, deal.OwnerUserId), cancellationToken);
 
         return await context.Deals
             .AsNoTracking()

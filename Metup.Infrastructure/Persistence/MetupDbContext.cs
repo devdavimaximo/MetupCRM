@@ -38,6 +38,8 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options) : DbContex
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Busca sem acento (ITextSearch → unaccent + ILIKE).
+        modelBuilder.HasPostgresExtension("unaccent");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MetupDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }

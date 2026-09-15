@@ -135,7 +135,8 @@ export function InboxPage({ onOpenDeal }: Props) {
       >
         {isThreadOpen && selectedConversation ? (
           <>
-            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-soft px-3 sm:px-6">
+            {/* Entre lg e xl este cabeçalho é o canto direito da tela: reserva o espaço da busca e do sino (ShellActions). */}
+            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-soft px-3 sm:px-6 lg:max-xl:pr-56">
               <Button
                 type="button"
                 variant="ghost"
@@ -184,7 +185,8 @@ export function InboxPage({ onOpenDeal }: Props) {
         )}
       </section>
 
-      <aside aria-label="Contexto do contato" className="hidden min-h-0 overflow-y-auto border-l border-line-soft bg-sunken/40 xl:block">
+      {/* A partir de xl o painel de contexto é o canto direito: começa abaixo da busca e do sino. */}
+      <aside aria-label="Contexto do contato" className="hidden min-h-0 overflow-y-auto border-l border-line-soft bg-sunken/40 xl:block xl:pt-14">
         <ContextPanel context={context} isLoading={isContextLoading} error={contextError} onOpenDeal={onOpenDeal} />
       </aside>
     </div>

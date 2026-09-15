@@ -1,6 +1,7 @@
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Deals.Common;
+using Metup.Application.Common.Realtime;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,8 @@ namespace Metup.Application.Deals.Commands.CloseDeal;
 
 public class CloseDealCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<CloseDealCommand, DealDto>
+    ICurrentUserService currentUserService,
+    IPublisher publisher) : IRequestHandler<CloseDealCommand, DealDto>
 {
     public async Task<DealDto> Handle(CloseDealCommand request, CancellationToken cancellationToken)
     {
@@ -26,6 +28,7 @@ public class CloseDealCommandHandler(
         context.StageChanges.Add(stageChange);
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new DealClosedNotification(organizationId, deal.Id, deal.OwnerUserId), cancellationToken);
 
         return await context.Deals
             .AsNoTracking()

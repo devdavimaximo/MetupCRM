@@ -40,13 +40,26 @@ function relativeLabel(iso: string) {
  * Uma linha do feed da operação — a mesma na Atividade Recente e no "Ver todas". O botão inteiro abre
  * o negócio.
  */
-export function ActivityEventButton({ event, onOpenDeal }: { event: RecentEvent; onOpenDeal: (dealId: string) => void }) {
+export function ActivityEventButton({
+  event,
+  onOpenDeal,
+  highlight = false,
+}: {
+  event: RecentEvent
+  onOpenDeal: (dealId: string) => void
+  /** Chegou agora em tempo real: fundo dourado que some sozinho (transição de cor, sem movimento). */
+  highlight?: boolean
+}) {
   const { icon: Icon, title, tone } = describe(event)
   return (
     <button
       type="button"
       onClick={() => onOpenDeal(event.dealId)}
-      className="flex w-full cursor-pointer items-start gap-3 rounded-sm py-2.5 text-left transition-colors hover:bg-surface-3/30 focus-visible:focus-ring"
+      data-highlight={highlight || undefined}
+      className={cn(
+        "flex w-full cursor-pointer items-start gap-3 rounded-sm py-2.5 text-left transition-colors duration-700 hover:bg-surface-3/30 focus-visible:focus-ring",
+        highlight && "bg-accent/12"
+      )}
     >
       <span
         aria-hidden="true"

@@ -4,6 +4,7 @@ using Metup.Application.Common.Interfaces;
 using Metup.Application.Deals.Common;
 using Metup.Domain.Deals;
 using Metup.Domain.Integrations;
+using Metup.Application.Common.Realtime;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +13,8 @@ namespace Metup.Application.Deals.Commands.CreateDeal;
 public class CreateDealCommandHandler(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
-    IOrganizationClock organizationClock) : IRequestHandler<CreateDealCommand, DealDto>
+    IOrganizationClock organizationClock,
+    IPublisher publisher) : IRequestHandler<CreateDealCommand, DealDto>
 {
     public async Task<DealDto> Handle(CreateDealCommand request, CancellationToken cancellationToken)
     {
@@ -78,6 +80,7 @@ public class CreateDealCommandHandler(
             IntegrationEvent.Create(organizationId, IntegrationEventTypes.DealCreated, payload));
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new DealCreatedNotification(organizationId, deal.Id, deal.OwnerUserId), cancellationToken);
 
         return await context.Deals
             .AsNoTracking()
