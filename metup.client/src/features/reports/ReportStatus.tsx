@@ -1,24 +1,28 @@
-import { Loader2 } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Alert, Skeleton } from "@/components/ui/states"
 
 /** Estados de carregamento/erro compartilhados entre as seções de relatório. */
 export function ReportLoading() {
   return (
-    <p className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      Carregando relatório…
-    </p>
+    <div role="status" className="flex flex-col gap-4">
+      <span className="sr-only">Carregando relatório…</span>
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-3 w-80 max-w-full" />
+      </div>
+      <Card className="flex flex-col gap-4 p-5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="flex items-center gap-4">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-2 flex-1" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+        ))}
+      </Card>
+    </div>
   )
 }
 
 export function ReportError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">
-      <p className="text-sm font-medium text-destructive">{message}</p>
-      <Button type="button" size="sm" variant="outline" onClick={onRetry}>
-        Tentar de Novo
-      </Button>
-    </div>
-  )
+  return <Alert onRetry={onRetry}>{message}</Alert>
 }

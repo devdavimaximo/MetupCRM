@@ -1,11 +1,14 @@
 import { type FormEvent, useState } from "react"
+import { ArrowRight, Loader2 } from "lucide-react"
 
+import { BrandLockup } from "@/components/BrandLockup"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Field } from "@/components/ui/field"
+import { Eyebrow } from "@/components/ui/page"
+import { Alert } from "@/components/ui/states"
 import { ApiError, apiFetch } from "@/lib/api"
 import { saveSession, type Session } from "@/lib/auth"
+import { brand } from "@/lib/brand"
 
 type LoginResponse = {
   token: string
@@ -20,6 +23,9 @@ type LoginResponse = {
 type Props = {
   onLoggedIn: (session: Session) => void
 }
+
+/** O caminho que o sistema opera (CLAUDE.md §1) — a mesma frase que define o produto. */
+const FUNNEL_STEPS = ["Prospecção", "Contato", "Follow-up", "Reunião", "Proposta", "Venda"]
 
 export function LoginPage({ onLoggedIn }: Props) {
   const [email, setEmail] = useState("")
@@ -60,52 +66,95 @@ export function LoginPage({ onLoggedIn }: Props) {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/30 px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-xl">Entrar no Metup</CardTitle>
-          <CardDescription>Acesse o sistema operacional comercial da Metup.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                aria-invalid={error ? true : undefined}
-              />
-            </div>
+    <main className="relative grid min-h-svh overflow-hidden bg-bg lg:grid-cols-[minmax(0,1.1fr)_minmax(26rem,1fr)]">
+      {/* Halo quente — o mesmo gesto da primeira dobra da LP, em CSS puro (sem custo de GPU). */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 left-[28%] hidden size-168 -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--color-accent)_10%,transparent),transparent)] lg:block"
+      />
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                aria-invalid={error ? true : undefined}
-              />
-            </div>
+      <section className="relative hidden flex-col justify-between border-r border-line-soft px-12 py-12 lg:flex xl:px-16">
+        <BrandLockup />
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+        <div className="flex max-w-xl flex-col gap-8">
+          <Eyebrow>{brand.tagline}</Eyebrow>
+          <p className="font-display text-[2.75rem] leading-[1.08] font-semibold tracking-[-0.03em] text-balance text-fg">
+            Toda a máquina comercial, <span className="text-accent">do primeiro contato à venda.</span>
+          </p>
+          <ol className="grid grid-cols-3 border-t border-line-soft" aria-label="Etapas do funil">
+            {FUNNEL_STEPS.map((step, index) => (
+              <li
+                key={step}
+                className="label-mono flex flex-col gap-1.5 border-b border-line-soft py-3.5 text-fg-muted nth-[n+4]:border-b-0"
+              >
+                <span className={index === FUNNEL_STEPS.length - 1 ? "text-accent" : "text-faint"}>
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        </div>
 
-            <Button type="submit" disabled={isSubmitting} className="mt-2">
-              {isSubmitting ? "Entrando..." : "Entrar"}
+        <p className="label-mono text-faint">
+          {brand.name} {brand.product}
+        </p>
+      </section>
+
+      <section className="relative flex flex-col items-center justify-center px-6 py-12 sm:px-10">
+        <div className="flex w-full max-w-sm flex-col gap-10">
+          <div className="lg:hidden">
+            <BrandLockup />
+          </div>
+
+          <header className="flex flex-col gap-3">
+            <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-fg">Entrar</h1>
+            <p className="text-base text-fg-muted">Acesse o sistema operacional comercial com o e-mail da sua equipe.</p>
+          </header>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+            <Field
+              id="email"
+              label="E-mail"
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              spellCheck={false}
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={error ? true : undefined}
+            />
+
+            <Field
+              id="password"
+              label="Senha"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              aria-invalid={error ? true : undefined}
+            />
+
+            {error && <Alert>{error}</Alert>}
+
+            <Button type="submit" size="lg" disabled={isSubmitting} className="mt-2 w-full">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                  Entrando…
+                </>
+              ) : (
+                <>
+                  Entrar
+                  <ArrowRight aria-hidden="true" />
+                </>
+              )}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </main>
   )
 }

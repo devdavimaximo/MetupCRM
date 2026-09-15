@@ -2,11 +2,14 @@ import { type FormEvent, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { SelectField } from "@/components/ui/field"
+import { ChoiceChips } from "@/components/ui/choice-chips"
+import { FieldShell, SelectField, fieldDescribedBy } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { InlineError } from "@/components/ui/states"
 import { Textarea } from "@/components/ui/textarea"
 import { toFieldErrors, toMessage } from "@/features/companies/form-errors"
+import { cn } from "@/lib/utils"
+import { activityTypeIcons } from "./activity-icons"
 import { logActivity, type ActivityOutcome, type ActivityType, type LogActivityResult } from "./api"
 import { ALL_OUTCOMES, NEXT_ACTION_TYPES, activityOutcomeLabels, activityTypeLabels } from "./activity-labels"
 
@@ -30,9 +33,17 @@ function defaultNextActionDueDate(): string {
   return toLocalInputValue(date)
 }
 
+const typeChoices = (Object.keys(activityTypeLabels) as ActivityType[]).map((value) => ({
+  value,
+  label: activityTypeLabels[value],
+  icon: activityTypeIcons[value],
+}))
+
+const outcomeChoices = ALL_OUTCOMES.map((value) => ({ value, label: activityOutcomeLabels[value] }))
+
 /**
  * Formulário de "registrar é rápido" (seção 3 do CLAUDE.md): tipo + desfecho estruturado + nota
- * curta, com a próxima ação escondida atrás de um toggle — só aparece quando o SDR pede.
+ * curta, em toques — chips em vez de selects. A próxima ação fica atrás de um toggle.
  */
 export function LogActivityForm({ dealId, contacts, onLogged }: Props) {
   const [type, setType] = useState<ActivityType>("Call")
@@ -87,99 +98,96 @@ export function LogActivityForm({ dealId, contacts, onLogged }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+      <FieldShell id="activity-type" label="Tipo" required error={fieldErrors.type}>
+        <ChoiceChips
           id="activity-type"
-          label="Tipo"
-          required
+          label="Tipo da atividade"
+          options={typeChoices}
           value={type}
-          onChange={(e) => {
-            const next = e.target.value as ActivityType
+          invalid={Boolean(fieldErrors.type)}
+          describedBy={fieldDescribedBy("activity-type", fieldErrors.type)}
+          onChange={(next) => {
             setType(next)
             if (next !== "Call") setOutcome("")
           }}
-          error={fieldErrors.type}
+        />
+      </FieldShell>
+
+      {needsOutcome && (
+        <FieldShell id="activity-outcome" label="Desfecho da ligação" required error={fieldErrors.outcome}>
+          <ChoiceChips
+            id="activity-outcome"
+            label="Desfecho da ligação"
+            options={outcomeChoices}
+            value={outcome}
+            invalid={Boolean(fieldErrors.outcome)}
+            describedBy={fieldDescribedBy("activity-outcome", fieldErrors.outcome)}
+            onChange={setOutcome}
+          />
+        </FieldShell>
+      )}
+
+      {contacts.length > 0 && (
+        <SelectField
+          id="activity-contact"
+          label="Contato"
+          value={contactId}
+          onChange={(e) => setContactId(e.target.value)}
+          error={fieldErrors.contactId}
         >
-          {Object.entries(activityTypeLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
+          <option value="">Sem contato específico</option>
+          {contacts.map((contact) => (
+            <option key={contact.id} value={contact.id}>
+              {contact.name}
             </option>
           ))}
         </SelectField>
+      )}
 
-        {contacts.length > 0 && (
-          <SelectField
-            id="activity-contact"
-            label="Contato"
-            value={contactId}
-            onChange={(e) => setContactId(e.target.value)}
-            error={fieldErrors.contactId}
-          >
-            <option value="">Sem contato específico</option>
-            {contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.name}
-              </option>
-            ))}
-          </SelectField>
-        )}
-
-        {needsOutcome && (
-          <SelectField
-            id="activity-outcome"
-            label="Desfecho"
-            required
-            value={outcome}
-            onChange={(e) => setOutcome(e.target.value as ActivityOutcome)}
-            error={fieldErrors.outcome}
-            className="sm:col-span-2"
-          >
-            <option value="" disabled>
-              Selecione…
-            </option>
-            {ALL_OUTCOMES.map((value) => (
-              <option key={value} value={value}>
-                {activityOutcomeLabels[value]}
-              </option>
-            ))}
-          </SelectField>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="activity-note">Nota</Label>
+      <FieldShell
+        id="activity-note"
+        label="Nota"
+        error={fieldErrors.note}
+        hint={
+          <span className="flex justify-between gap-2">
+            <span>Uma linha curta — o desfecho já diz o principal.</span>
+            <span className="tabular">
+              {note.length}/{MAX_NOTE_LENGTH}
+            </span>
+          </span>
+        }
+      >
         <Textarea
           id="activity-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           maxLength={MAX_NOTE_LENGTH}
           rows={2}
-          placeholder="Uma linha curta — sem textão."
-          aria-describedby="activity-note-hint"
+          aria-invalid={fieldErrors.note ? true : undefined}
+          aria-describedby={fieldDescribedBy("activity-note", fieldErrors.note, true)}
         />
-        <p id="activity-note-hint" className="text-xs text-muted-foreground">
-          {note.length}/{MAX_NOTE_LENGTH}
-        </p>
-        {fieldErrors.note && <p className="text-xs font-medium text-destructive">{fieldErrors.note}</p>}
-      </div>
+      </FieldShell>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3">
-        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+      <div className={cn("flex flex-col rounded-sm border", scheduleNext ? "border-line-strong/60 bg-surface-2/40" : "border-line-soft")}>
+        <label className="flex cursor-pointer items-center gap-3 px-4 py-3 text-base text-fg">
           <input
             type="checkbox"
             checked={scheduleNext}
             onChange={(e) => setScheduleNext(e.target.checked)}
-            className="size-4 rounded border-border"
+            className="size-4 cursor-pointer accent-accent"
           />
-          Já deixar a próxima ação agendada
+          <span className="flex-1">
+            Agendar a próxima ação
+            <span className="block text-xs text-muted">Cai direto na fila de follow-ups do responsável.</span>
+          </span>
         </label>
 
         {scheduleNext && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 border-t border-line-soft px-4 pt-4 pb-4 sm:grid-cols-2">
             <SelectField
               id="next-action-type"
-              label="Tipo da próxima ação"
+              label="Próxima ação"
               required
               value={nextActionType}
               onChange={(e) => setNextActionType(e.target.value as ActivityType)}
@@ -192,10 +200,7 @@ export function LogActivityForm({ dealId, contacts, onLogged }: Props) {
               ))}
             </SelectField>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="next-action-due-date">
-                Quando <span className="text-destructive" aria-hidden="true">*</span>
-              </Label>
+            <FieldShell id="next-action-due-date" label="Quando" required error={fieldErrors.nextActionDueDate}>
               <Input
                 id="next-action-due-date"
                 type="datetime-local"
@@ -203,41 +208,33 @@ export function LogActivityForm({ dealId, contacts, onLogged }: Props) {
                 value={nextActionDueDate}
                 onChange={(e) => setNextActionDueDate(e.target.value)}
                 aria-invalid={fieldErrors.nextActionDueDate ? true : undefined}
+                aria-describedby={fieldDescribedBy("next-action-due-date", fieldErrors.nextActionDueDate)}
               />
-              {fieldErrors.nextActionDueDate && (
-                <p className="text-xs font-medium text-destructive">{fieldErrors.nextActionDueDate}</p>
-              )}
-            </div>
+            </FieldShell>
 
-            <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label htmlFor="next-action-note">Nota da próxima ação</Label>
+            <FieldShell id="next-action-note" label="Nota da próxima ação" error={fieldErrors.nextActionNote} className="sm:col-span-2">
               <Input
                 id="next-action-note"
                 value={nextActionNote}
                 onChange={(e) => setNextActionNote(e.target.value)}
                 maxLength={MAX_NOTE_LENGTH}
                 placeholder="Opcional"
+                aria-invalid={fieldErrors.nextActionNote ? true : undefined}
+                aria-describedby={fieldDescribedBy("next-action-note", fieldErrors.nextActionNote)}
               />
-              {fieldErrors.nextActionNote && (
-                <p className="text-xs font-medium text-destructive">{fieldErrors.nextActionNote}</p>
-              )}
-            </div>
+            </FieldShell>
           </div>
         )}
       </div>
 
-      <div aria-live="polite" className="empty:hidden min-h-5">
-        {error && (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {error}
-          </p>
-        )}
+      <div aria-live="polite" className="empty:hidden">
+        {error && <InlineError>{error}</InlineError>}
       </div>
 
-      <div>
+      <div className="flex justify-end">
         <Button type="submit" disabled={isSaving}>
           {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
-          {isSaving ? "Registrando…" : "Registrar Atividade"}
+          {isSaving ? "Registrando…" : "Registrar atividade"}
         </Button>
       </div>
     </form>

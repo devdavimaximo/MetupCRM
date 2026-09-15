@@ -1,8 +1,9 @@
 import { type FormEvent, useRef, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Check, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Field } from "@/components/ui/field"
+import { InlineError } from "@/components/ui/states"
 import { createCompany, updateCompany, type Company, type CompanyInput } from "./api"
 import { toFieldErrors, toMessage, type FieldErrors } from "./form-errors"
 
@@ -83,8 +84,8 @@ export function CompanyForm({ company, onSaved, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
         <Field
           id="company-name"
           label="Nome da empresa"
@@ -143,25 +144,25 @@ export function CompanyForm({ company, onSaved, onCancel }: Props) {
         />
       </div>
 
-      <div aria-live="polite" className="min-h-5">
-        {error && (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {error}
-          </p>
-        )}
-        {!error && savedAt && <p className="text-sm text-success">Empresa salva.</p>}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={isSaving}>
-          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
-          {isSaving ? "Salvando…" : company ? "Salvar Empresa" : "Cadastrar Empresa"}
-        </Button>
+      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+        <div aria-live="polite" className="mr-auto min-h-5">
+          {error && <InlineError>{error}</InlineError>}
+          {!error && savedAt && (
+            <p className="flex items-center gap-1.5 text-sm text-success">
+              <Check className="size-3.5" aria-hidden="true" />
+              Empresa salva.
+            </p>
+          )}
+        </div>
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={isSaving}>
             Cancelar
           </Button>
         )}
+        <Button type="submit" variant={company ? "outline" : "default"} disabled={isSaving}>
+          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
+          {isSaving ? "Salvando…" : company ? "Salvar alterações" : "Cadastrar empresa"}
+        </Button>
       </div>
     </form>
   )

@@ -1,10 +1,12 @@
-import { Building2, Loader2, Plus, Search, X } from "lucide-react"
+import { Building2, Search, UserRound, X } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Monogram } from "@/components/ui/monogram"
 import { Select } from "@/components/ui/select"
+import { Alert, EmptyState, SkeletonRows } from "@/components/ui/states"
+import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { CompanyFilterOptions, CompanyListItem } from "./api"
 
@@ -52,21 +54,18 @@ export function CompanyList({
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <div className="flex flex-col gap-2">
+    <div className="flex min-h-0 w-full flex-col">
+      <div className="flex flex-col gap-2 border-b border-line-soft p-3">
         <Label htmlFor="company-search" className="sr-only">
           Buscar empresa
         </Label>
         <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
           <Input
             id="company-search"
             type="search"
             name="search"
-            className="pl-9"
+            className="h-9 pl-9"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Buscar por nome, segmento ou cidade…"
@@ -82,10 +81,11 @@ export function CompanyList({
             </Label>
             <Select
               id="company-filter-segment"
+              className="h-9"
               value={segment}
               onChange={(e) => onSegmentChange(e.target.value)}
             >
-              <option value="">Todos os segmentos</option>
+              <option value="">Segmento</option>
               {filterOptions.segments.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -98,8 +98,13 @@ export function CompanyList({
             <Label htmlFor="company-filter-city" className="sr-only">
               Filtrar por cidade
             </Label>
-            <Select id="company-filter-city" value={city} onChange={(e) => onCityChange(e.target.value)}>
-              <option value="">Todas as cidades</option>
+            <Select
+              id="company-filter-city"
+              className="h-9"
+              value={city}
+              onChange={(e) => onCityChange(e.target.value)}
+            >
+              <option value="">Cidade</option>
               {filterOptions.cities.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -108,127 +113,97 @@ export function CompanyList({
             </Select>
           </div>
         </div>
-
-        <Button type="button" onClick={onCreate} className="w-full">
-          <Plus aria-hidden="true" />
-          Nova Empresa
-        </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <p className="tabular text-xs text-muted-foreground" aria-live="polite">
-          {isLoading
-            ? "Carregando…"
-            : `${totalCount} ${totalCount === 1 ? "empresa" : "empresas"}${hasFilters ? " encontradas" : ""}`}
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-line-soft/60 px-4">
+        <p className="label-mono text-muted" aria-live="polite">
+          {isLoading ? "Carregando…" : `${numberFormatter.format(totalCount)} ${totalCount === 1 ? "empresa" : "empresas"}`}
         </p>
         {hasFilters && (
-          <Button type="button" size="sm" variant="ghost" className="h-auto p-0 text-xs" onClick={clearFilters}>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="label-mono inline-flex cursor-pointer items-center gap-1 rounded-xs text-muted hover:text-fg focus-visible:focus-ring"
+          >
             <X className="size-3" aria-hidden="true" />
-            Limpar filtros
-          </Button>
+            Limpar
+          </button>
         )}
       </div>
 
       {error && (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">
-          <p className="text-sm font-medium text-destructive">{error}</p>
-          <Button type="button" size="sm" variant="outline" onClick={onRetry}>
-            Tentar de Novo
-          </Button>
+        <div className="p-3">
+          <Alert onRetry={onRetry}>{error}</Alert>
         </div>
       )}
 
-      {isLoading && companies.length === 0 && (
-        <p className="flex items-center gap-2 px-1 py-6 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          Carregando empresas…
-        </p>
-      )}
+      {isLoading && companies.length === 0 && <SkeletonRows rows={7} label="Carregando empresas…" />}
 
       {!isLoading && !error && companies.length === 0 && (
-        <EmptyState hasFilters={hasFilters} onCreate={onCreate} onClearFilters={clearFilters} />
+        <EmptyState
+          compact
+          icon={Building2}
+          title={hasFilters ? "Nenhuma empresa encontrada" : "Nenhuma empresa cadastrada"}
+          description={
+            hasFilters
+              ? "Nada bate com essa busca e esses filtros."
+              : "Comece pela primeira empresa-alvo da prospecção."
+          }
+          action={
+            hasFilters ? (
+              <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
+                Limpar filtros
+              </Button>
+            ) : (
+              <Button type="button" size="sm" onClick={onCreate}>
+                Nova empresa
+              </Button>
+            )
+          }
+        />
       )}
 
       {companies.length > 0 && (
-        <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1">
+        <ul className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain py-1", isLoading && "opacity-60")}>
           {companies.map((company) => {
             const isSelected = company.id === selectedId
             return (
-              <li key={company.id}>
+              <li key={company.id} className="px-1.5">
                 <button
                   type="button"
                   onClick={() => onSelect(company.id)}
                   aria-current={isSelected ? "true" : undefined}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors outline-none",
-                    "focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                    isSelected
-                      ? "border-primary bg-accent"
-                      : "border-transparent hover:border-border hover:bg-muted"
+                    "relative flex w-full cursor-pointer items-center gap-3 rounded-xs px-2.5 py-2.5 text-left transition-colors focus-visible:focus-ring",
+                    isSelected ? "bg-surface-2" : "hover:bg-surface-2/60"
                   )}
                 >
-                  <Building2
-                    className={cn(
-                      "size-4 shrink-0",
-                      isSelected ? "text-primary" : "text-muted-foreground"
-                    )}
-                    aria-hidden="true"
-                  />
+                  {isSelected && <span aria-hidden="true" className="absolute top-2 bottom-2 -left-1.5 w-0.5 bg-accent" />}
+                  <Monogram name={company.name} size="sm" className={cn(isSelected && "border-accent/40 text-accent")} />
 
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">
-                      {company.name}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block truncate text-base font-medium text-fg">{company.name}</span>
+                    <span className="block truncate text-sm text-muted">
                       {[company.segment, company.city].filter(Boolean).join(" · ") || "Sem segmento"}
                     </span>
                   </span>
 
-                  <Badge variant={company.contactCount > 0 ? "default" : "outline"} className="tabular">
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 font-mono text-2xs tabular",
+                      company.contactCount > 0 ? "text-fg-muted" : "text-faint"
+                    )}
+                  >
+                    <UserRound className="size-3" aria-hidden="true" />
                     {company.contactCount}
-                    <span className="sr-only">
-                      {company.contactCount === 1 ? " contato" : " contatos"}
-                    </span>
-                  </Badge>
+                    <span className="sr-only">{company.contactCount === 1 ? " contato" : " contatos"}</span>
+                  </span>
                 </button>
               </li>
             )
           })}
         </ul>
       )}
-    </div>
-  )
-}
-
-function EmptyState({
-  hasFilters,
-  onCreate,
-  onClearFilters,
-}: {
-  hasFilters: boolean
-  onCreate: () => void
-  onClearFilters: () => void
-}) {
-  if (hasFilters) {
-    return (
-      <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border px-4 py-6">
-        <p className="text-sm text-muted-foreground">Nenhuma empresa encontrada para esses filtros.</p>
-        <Button type="button" size="sm" variant="outline" onClick={onClearFilters}>
-          Limpar Filtros
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed border-border px-4 py-6">
-      <p className="text-sm text-muted-foreground">
-        Nenhuma empresa cadastrada ainda. Comece pela primeira empresa-alvo da prospecção.
-      </p>
-      <Button type="button" size="sm" onClick={onCreate}>
-        <Plus aria-hidden="true" />
-        Nova Empresa
-      </Button>
     </div>
   )
 }

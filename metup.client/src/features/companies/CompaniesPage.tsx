@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
+import { Building2, Plus } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Page, PageHeader } from "@/components/ui/page"
+import { Alert, EmptyState, Skeleton } from "@/components/ui/states"
+import { pluralize } from "@/lib/format"
 import { useDebouncedValue } from "@/lib/hooks"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
+import { cn } from "@/lib/utils"
 import { CompanyList } from "./CompanyList"
 import { CompanySheet } from "./CompanySheet"
 import {
@@ -109,81 +116,117 @@ export function CompaniesPage({ onOpenDeal, onNewDealForCompany }: Props) {
   }
 
   const isSheetOpen = selection.mode !== "none"
+  const hasFilters = Boolean(search || segment || city)
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[22rem_1fr] lg:items-start">
-      <section
-        aria-label="Empresas"
-        className={`flex flex-col lg:sticky lg:top-6 lg:max-h-[calc(100svh-6rem)] ${
-          isSheetOpen ? "hidden lg:flex" : "flex"
-        }`}
-      >
-        <CompanyList
-          companies={companies}
-          totalCount={totalCount}
-          selectedId={selectedId}
-          search={search}
-          segment={segment}
-          city={city}
-          filterOptions={filterOptions}
-          isLoading={isListLoading}
-          error={listError}
-          onSearchChange={setSearch}
-          onSegmentChange={setSegment}
-          onCityChange={setCity}
-          onSelect={(id) => setSelection({ mode: "company", id })}
-          onCreate={() => setSelection({ mode: "new" })}
-          onRetry={reloadList}
-        />
-      </section>
+    <Page width="wide" className="gap-6">
+      <PageHeader
+        eyebrow="Comercial"
+        title="Empresas"
+        description={
+          isListLoading && companies.length === 0
+            ? "Carregando a base de empresas-alvo…"
+            : `${pluralize(totalCount, "empresa", "empresas")}${hasFilters ? " encontradas" : " na base"}. Contatos, negócios e dados de cada uma numa ficha só.`
+        }
+        actions={
+          <Button type="button" onClick={() => setSelection({ mode: "new" })}>
+            <Plus aria-hidden="true" />
+            Nova empresa
+          </Button>
+        }
+      />
 
-      <section
-        aria-label="Ficha da empresa"
-        className={`rounded-xl border border-border bg-card p-4 sm:p-6 ${
-          isSheetOpen ? "block" : "hidden lg:block"
-        }`}
-      >
-        {selection.mode === "none" && (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            Selecione uma empresa na lista ou cadastre uma nova para abrir a ficha.
-          </p>
-        )}
-
-        {sheetError && (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {sheetError}
-          </p>
-        )}
-
-        {selection.mode === "new" && (
-          <CompanySheet
-            company={null}
-            onCompanySaved={handleCompanySaved}
-            onContactsChanged={setCompany}
-            onBack={() => setSelection({ mode: "none" })}
-            onOpenDeal={onOpenDeal}
-            onNewDealForCompany={onNewDealForCompany}
+      <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start xl:grid-cols-[24rem_minmax(0,1fr)]">
+        <Card
+          role="region"
+          aria-label="Lista de empresas"
+          className={cn(
+            "min-h-0 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100svh-3rem)]",
+            isSheetOpen ? "hidden" : "flex"
+          )}
+        >
+          <CompanyList
+            companies={companies}
+            totalCount={totalCount}
+            selectedId={selectedId}
+            search={search}
+            segment={segment}
+            city={city}
+            filterOptions={filterOptions}
+            isLoading={isListLoading}
+            error={listError}
+            onSearchChange={setSearch}
+            onSegmentChange={setSegment}
+            onCityChange={setCity}
+            onSelect={(id) => setSelection({ mode: "company", id })}
+            onCreate={() => setSelection({ mode: "new" })}
+            onRetry={reloadList}
           />
-        )}
+        </Card>
 
-        {selection.mode === "company" && company && (
-          <CompanySheet
-            company={company}
-            onCompanySaved={handleCompanySaved}
-            onContactsChanged={(updated) => {
-              setCompany(updated)
-              reloadList()
-            }}
-            onBack={() => setSelection({ mode: "none" })}
-            onOpenDeal={onOpenDeal}
-            onNewDealForCompany={onNewDealForCompany}
-          />
-        )}
+        <Card role="region" aria-label="Ficha da empresa" className={cn("min-w-0", isSheetOpen ? "flex" : "hidden lg:flex")}>
+          {selection.mode === "none" && (
+            <EmptyState
+              icon={Building2}
+              title="Nenhuma empresa aberta"
+              description="Escolha uma empresa na lista para ver contatos, negócios e dados — ou cadastre uma nova empresa-alvo."
+              action={
+                <Button type="button" variant="outline" onClick={() => setSelection({ mode: "new" })}>
+                  <Plus aria-hidden="true" />
+                  Nova empresa
+                </Button>
+              }
+              className="min-h-112"
+            />
+          )}
 
-        {selection.mode === "company" && !company && !sheetError && (
-          <p className="py-12 text-center text-sm text-muted-foreground">Carregando ficha…</p>
-        )}
-      </section>
-    </div>
+          {sheetError && (
+            <div className="p-6">
+              <Alert>{sheetError}</Alert>
+            </div>
+          )}
+
+          {selection.mode === "new" && (
+            <CompanySheet
+              company={null}
+              onCompanySaved={handleCompanySaved}
+              onContactsChanged={setCompany}
+              onBack={() => setSelection({ mode: "none" })}
+              onOpenDeal={onOpenDeal}
+              onNewDealForCompany={onNewDealForCompany}
+            />
+          )}
+
+          {selection.mode === "company" && company && (
+            <CompanySheet
+              company={company}
+              onCompanySaved={handleCompanySaved}
+              onContactsChanged={(updated) => {
+                setCompany(updated)
+                reloadList()
+              }}
+              onBack={() => setSelection({ mode: "none" })}
+              onOpenDeal={onOpenDeal}
+              onNewDealForCompany={onNewDealForCompany}
+            />
+          )}
+
+          {selection.mode === "company" && !company && !sheetError && (
+            <div role="status" className="flex flex-col gap-4 p-6">
+              <span className="sr-only">Carregando ficha…</span>
+              <div className="flex items-center gap-4">
+                <Skeleton className="size-12" />
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              </div>
+              <Skeleton className="mt-4 h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          )}
+        </Card>
+      </div>
+    </Page>
   )
 }

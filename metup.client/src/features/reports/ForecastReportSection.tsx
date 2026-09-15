@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react"
-import { TrendingUp, Wallet } from "lucide-react"
 
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { toMessage } from "@/features/companies/form-errors"
+import { pluralize } from "@/lib/format"
 import { formatMoney } from "@/lib/money"
+import { cn } from "@/lib/utils"
 import { getForecastReport, type ForecastReport } from "./api"
 import { ForecastTable } from "./ForecastTable"
 import { ReportError, ReportLoading } from "./ReportStatus"
-
-const numberFormatter = new Intl.NumberFormat("pt-BR")
+import { Metric, ReportHeading } from "./report-ui"
 
 type Props = {
   fromIso?: string
@@ -49,53 +49,34 @@ export function ForecastReportSection({ fromIso, toIso }: Props) {
   if (isLoading && !report) return <ReportLoading />
   if (!report) return null
 
+  const weightedShare = report.totalPipelineAmount > 0 ? report.totalWeightedForecast / report.totalPipelineAmount : null
+
   return (
-    <section aria-labelledby="forecast-heading" className="flex flex-col gap-3">
-      <div>
-        <h2 id="forecast-heading" className="text-sm font-semibold text-foreground">
-          Forecast
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Quanto de receita está em andamento no pipeline aberto e quão provável é ela fechar, dado o estágio atual.
-        </p>
-      </div>
+    <section aria-labelledby="forecast-heading" className={cn("flex flex-col gap-5", isLoading && "opacity-60")}>
+      <ReportHeading
+        id="forecast-heading"
+        title="Forecast"
+        description="Quanto de receita está em andamento no pipeline aberto e quão provável é ela fechar, dado o estágio atual."
+      />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Card>
-          <CardContent className="flex items-start gap-3 py-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <Wallet className="size-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Pipeline aberto</p>
-              <p className="text-2xl font-semibold tabular-nums text-foreground">
-                {formatMoney(report.totalPipelineAmount)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {numberFormatter.format(report.totalOpenDeals)}{" "}
-                {report.totalOpenDeals === 1 ? "negócio em aberto" : "negócios em aberto"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="flex items-start gap-3 py-2">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <TrendingUp className="size-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Receita ponderada</p>
-              <p className="text-2xl font-semibold tabular-nums text-foreground">
-                {formatMoney(report.totalWeightedForecast)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                ponderado pela probabilidade histórica de fechar como ganho, por estágio
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="grid sm:grid-cols-2">
+        <Metric
+          className="border-b border-line-soft sm:border-r sm:border-b-0"
+          label="Pipeline aberto"
+          value={formatMoney(report.totalPipelineAmount)}
+          caption={pluralize(report.totalOpenDeals, "negócio em aberto", "negócios em aberto")}
+        />
+        <Metric
+          tone="accent"
+          label="Receita ponderada"
+          value={formatMoney(report.totalWeightedForecast)}
+          caption={
+            weightedShare === null
+              ? "ponderada pela probabilidade histórica de ganho por estágio"
+              : `${Math.round(weightedShare * 100)}% do pipeline, pela probabilidade histórica de ganho por estágio`
+          }
+        />
+      </Card>
 
       <ForecastTable byStage={report.byStage} emptyMessage="Nenhum negócio em aberto no período selecionado." />
     </section>

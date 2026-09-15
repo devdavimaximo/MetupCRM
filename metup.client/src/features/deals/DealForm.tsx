@@ -2,9 +2,8 @@ import { type FormEvent, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { SelectField } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Field, SelectField } from "@/components/ui/field"
+import { InlineError } from "@/components/ui/states"
 import { toFieldErrors, toMessage } from "@/features/companies/form-errors"
 import { formatMoney, parseMoney } from "@/lib/money"
 import { createDeal, updateDeal, type Deal, type DealInput, type DealSource, type UserSummary } from "./api"
@@ -66,9 +65,7 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
 
     try {
       const input = toInput(form)
-      const saved = deal
-        ? await updateDeal(deal.id, input)
-        : await createDeal({ ...input, companyId })
+      const saved = deal ? await updateDeal(deal.id, input) : await createDeal({ ...input, companyId })
       onSaved(saved)
     } catch (err) {
       const errors = toFieldErrors(err)
@@ -80,8 +77,8 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
         <SelectField
           id="deal-contact"
           label="Contato"
@@ -93,21 +90,6 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
           {contacts.map((contact) => (
             <option key={contact.id} value={contact.id}>
               {contact.name}
-            </option>
-          ))}
-        </SelectField>
-
-        <SelectField
-          id="deal-source"
-          label="Origem"
-          required
-          value={form.source}
-          onChange={(e) => update("source", e.target.value as DealSource)}
-          error={fieldErrors.source}
-        >
-          {Object.entries(sourceLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
             </option>
           ))}
         </SelectField>
@@ -130,57 +112,59 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
           ))}
         </SelectField>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="deal-ticket">Ticket estimado</Label>
-          <Input
-            id="deal-ticket"
-            inputMode="decimal"
-            value={form.ticket}
-            onChange={(e) => update("ticket", e.target.value)}
-            placeholder="0,00"
-            aria-describedby="deal-ticket-hint"
-          />
-          <p id="deal-ticket-hint" className="text-xs text-muted-foreground">
-            {form.ticket ? formatMoney(parseMoney(form.ticket)) : "Valor estimado ao entrar no funil."}
-          </p>
-          {fieldErrors.ticket && <p className="text-xs font-medium text-destructive">{fieldErrors.ticket}</p>}
-        </div>
+        <SelectField
+          id="deal-source"
+          label="Origem"
+          required
+          value={form.source}
+          onChange={(e) => update("source", e.target.value as DealSource)}
+          error={fieldErrors.source}
+          className="sm:col-span-2"
+        >
+          {Object.entries(sourceLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </SelectField>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="deal-amount">Valor em negociação</Label>
-          <Input
-            id="deal-amount"
-            inputMode="decimal"
-            value={form.amount}
-            onChange={(e) => update("amount", e.target.value)}
-            placeholder="0,00"
-            aria-describedby="deal-amount-hint"
-          />
-          <p id="deal-amount-hint" className="text-xs text-muted-foreground">
-            {form.amount ? formatMoney(parseMoney(form.amount)) : "Vira o valor fechado quando o negócio for ganho."}
-          </p>
-          {fieldErrors.amount && <p className="text-xs font-medium text-destructive">{fieldErrors.amount}</p>}
-        </div>
+        <Field
+          id="deal-ticket"
+          label="Ticket estimado"
+          inputMode="decimal"
+          value={form.ticket}
+          onChange={(e) => update("ticket", e.target.value)}
+          placeholder="0,00"
+          hint={form.ticket ? formatMoney(parseMoney(form.ticket)) : "Valor estimado ao entrar no funil."}
+          error={fieldErrors.ticket}
+        />
+
+        <Field
+          id="deal-amount"
+          label="Valor em negociação"
+          inputMode="decimal"
+          value={form.amount}
+          onChange={(e) => update("amount", e.target.value)}
+          placeholder="0,00"
+          hint={form.amount ? formatMoney(parseMoney(form.amount)) : "Vira o valor fechado quando o negócio for ganho."}
+          error={fieldErrors.amount}
+        />
       </div>
 
-      <div aria-live="polite" className="empty:hidden min-h-5">
-        {error && (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {error}
-          </p>
-        )}
+      <div aria-live="polite" className="empty:hidden">
+        {error && <InlineError>{error}</InlineError>}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={isSaving}>
-          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
-          {isSaving ? "Salvando…" : deal ? "Salvar Negócio" : "Cadastrar Negócio"}
-        </Button>
+      <div className="flex flex-wrap justify-end gap-2">
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={isSaving}>
             Cancelar
           </Button>
         )}
+        <Button type="submit" variant={deal ? "outline" : "default"} disabled={isSaving}>
+          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
+          {isSaving ? "Salvando…" : deal ? "Salvar alterações" : "Cadastrar negócio"}
+        </Button>
       </div>
     </form>
   )

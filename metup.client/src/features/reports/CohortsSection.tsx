@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react"
 
 import { toMessage } from "@/features/companies/form-errors"
+import { cn } from "@/lib/utils"
 import { getCohortReport, type CohortReport } from "./api"
 import { CohortTable } from "./CohortTable"
 import { ReportError, ReportLoading } from "./ReportStatus"
+import { ReportHeading } from "./report-ui"
 
 type Props = {
   fromIso?: string
@@ -45,16 +47,12 @@ export function CohortsSection({ fromIso, toIso }: Props) {
   if (!report) return null
 
   return (
-    <section aria-labelledby="cohorts-heading" className="flex flex-col gap-3">
-      <div>
-        <h2 id="cohorts-heading" className="text-sm font-semibold text-foreground">
-          Safras
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Negócios agrupados pelo mês em que entraram no funil, comparando conversão e tempo até fechar entre safras.
-        </p>
-      </div>
-
+    <section aria-labelledby="cohorts-heading" className={cn("flex flex-col gap-5", isLoading && "opacity-60")}>
+      <ReportHeading
+        id="cohorts-heading"
+        title="Safras"
+        description="Negócios agrupados pelo mês em que entraram no funil, comparando conversão e tempo até fechar entre safras."
+      />
       <CohortTable cohorts={report.cohorts} emptyMessage="Nenhuma safra no período selecionado." />
     </section>
   )

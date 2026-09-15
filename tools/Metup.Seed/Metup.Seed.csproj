@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ferramenta de desenvolvimento — gera massa de dados fictícia (organização "Metup Demo") para
+    visualizar o sistema com dados mockados. Não faz parte das camadas do produto (Domain/
+    Application/Infrastructure/Server) e não é referenciada por elas.
+
+    Uso: dotnet run, executado dentro de tools/Metup.Seed
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Metup.Infrastructure\Metup.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- Pinadas para a mesma versão do Metup.Infrastructure — evita conflito de assembly em runtime. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+</Project>

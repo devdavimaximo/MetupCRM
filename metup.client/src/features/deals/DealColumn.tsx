@@ -2,7 +2,7 @@ import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import { DealCard } from "./DealCard"
 import type { DealListItem, DealStage } from "./api"
-import { stageLabels } from "./stage-labels"
+import { ALL_STAGES, stageLabels } from "./stage-labels"
 
 type Props = {
   stage: DealStage
@@ -14,32 +14,38 @@ type Props = {
 
 export function DealColumn({ stage, deals, movingDealId, onOpenDeal, onMoveStage }: Props) {
   const total = deals.reduce((sum, deal) => sum + (deal.amount ?? deal.ticket ?? 0), 0)
-  const isTerminal = stage === "Ganho" || stage === "Perdido"
+  const isWon = stage === "Ganho"
+  const isLost = stage === "Perdido"
+  const position = ALL_STAGES.indexOf(stage) + 1
 
   return (
     <section
       aria-label={`Estágio ${stageLabels[stage]}`}
-      className="flex w-72 shrink-0 flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3"
+      className="flex max-h-full w-[18rem] shrink-0 flex-col rounded-sm border border-line-soft bg-sunken/60"
     >
-      <header className="flex flex-col gap-0.5 px-1">
+      <header className="flex shrink-0 flex-col gap-1 border-b border-line-soft px-3 pt-3 pb-2.5">
         <div className="flex items-center justify-between gap-2">
-          <h3
-            className={cn(
-              "text-sm font-semibold",
-              stage === "Ganho" ? "text-success" : stage === "Perdido" ? "text-destructive" : "text-foreground"
+          <h2 className="flex min-w-0 items-center gap-2 text-base font-medium text-fg">
+            {isWon || isLost ? (
+              <span aria-hidden="true" className={cn("size-1.5 rounded-full", isWon ? "bg-success" : "bg-danger")} />
+            ) : (
+              <span aria-hidden="true" className="font-mono text-2xs text-faint tabular">
+                {String(position).padStart(2, "0")}
+              </span>
             )}
-          >
-            {stageLabels[stage]}
-          </h3>
-          <span className="tabular text-xs font-medium text-muted-foreground">{deals.length}</span>
+            <span className="truncate">{stageLabels[stage]}</span>
+          </h2>
+          <span className="rounded-xs bg-surface-3 px-1.5 font-mono text-2xs text-fg-muted tabular">{deals.length}</span>
         </div>
-        {total > 0 && <p className="tabular text-xs text-muted-foreground">{formatMoney(total)}</p>}
+        <p className={cn("text-sm tabular", total > 0 ? "text-fg-muted" : "text-faint")}>
+          {total > 0 ? formatMoney(total) : "—"}
+        </p>
       </header>
 
-      <div className="flex min-h-16 flex-col gap-2">
+      <div className="flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-2">
         {deals.length === 0 && (
-          <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-            {isTerminal ? "Nenhum negócio aqui ainda." : "Sem negócios neste estágio."}
+          <p className="flex flex-1 items-center justify-center rounded-xs border border-dashed border-line-soft px-3 py-8 text-center text-sm text-faint">
+            {isWon ? "Nenhum ganho ainda" : isLost ? "Nenhuma perda registrada" : "Sem negócios aqui"}
           </p>
         )}
 

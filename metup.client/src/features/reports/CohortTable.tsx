@@ -1,31 +1,16 @@
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/states"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableRowHeader } from "@/components/ui/table"
+import { numberFormatter } from "@/lib/format"
 import { formatMoney } from "@/lib/money"
 import type { CohortGroup } from "./api"
+import { closeRateTone, formatDays, formatPercent } from "./report-ui"
 
-const numberFormatter = new Intl.NumberFormat("pt-BR")
-const percentFormatter = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 })
 const monthLabelFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" })
 
-function formatPercent(value: number | null): string {
-  return value === null ? "—" : percentFormatter.format(value)
-}
-
-function formatDays(value: number | null): string {
-  if (value === null) return "—"
-  const rounded = Math.round(value * 10) / 10
-  return `${numberFormatter.format(rounded)} ${rounded === 1 ? "dia" : "dias"}`
-}
-
 function formatCohortLabel(cohortKey: string): string {
-  const label = monthLabelFormatter.format(new Date(`${cohortKey}-01T00:00:00`))
+  const label = monthLabelFormatter.format(new Date(`${cohortKey}-01T00:00:00`)).replace(".", "")
   return label.charAt(0).toUpperCase() + label.slice(1)
-}
-
-function closeRateTone(value: number | null): string {
-  if (value === null) return "text-muted-foreground"
-  if (value >= 0.5) return "text-emerald-700 dark:text-emerald-400"
-  if (value >= 0.25) return "text-amber-700 dark:text-amber-400"
-  return "text-destructive"
 }
 
 type Props = {
@@ -41,81 +26,53 @@ type Props = {
  */
 export function CohortTable({ cohorts, emptyMessage }: Props) {
   if (cohorts.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+    return (
+      <Card>
+        <EmptyState compact title="Nenhuma safra" description={emptyMessage} />
+      </Card>
+    )
   }
 
   const sorted = [...cohorts].sort((a, b) => b.cohortKey.localeCompare(a.cohortKey))
 
   return (
     <Card>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase">
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Safra
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Negócios
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Abertos
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Ganhos
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Perdidos
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Taxa de fechamento
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Ticket médio
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Receita fechada
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Tempo até fechar
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {sorted.map((cohort) => (
-                <tr key={cohort.cohortKey}>
-                  <th scope="row" className="px-4 py-3 text-left font-medium text-foreground">
-                    {formatCohortLabel(cohort.cohortKey)}
-                  </th>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(cohort.totalDeals)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(cohort.openDeals)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(cohort.wonDeals)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(cohort.lostDeals)}
-                  </td>
-                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${closeRateTone(cohort.closeRate)}`}>
-                    {formatPercent(cohort.closeRate)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatMoney(cohort.averageTicket)}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                    {formatMoney(cohort.totalRevenue)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {formatDays(cohort.averageDaysToClose)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
+      <Table minWidth="860px">
+        <TableHeader>
+          <tr>
+            <TableHead>Safra</TableHead>
+            <TableHead numeric>Negócios</TableHead>
+            <TableHead numeric>Abertos</TableHead>
+            <TableHead numeric>Ganhos</TableHead>
+            <TableHead numeric>Perdidos</TableHead>
+            <TableHead numeric>Fechamento</TableHead>
+            <TableHead numeric>Ticket médio</TableHead>
+            <TableHead numeric>Receita</TableHead>
+            <TableHead numeric>Até fechar</TableHead>
+          </tr>
+        </TableHeader>
+        <TableBody>
+          {sorted.map((cohort) => (
+            <TableRow key={cohort.cohortKey}>
+              <TableRowHeader className="tabular">{formatCohortLabel(cohort.cohortKey)}</TableRowHeader>
+              <TableCell numeric className="text-fg">
+                {numberFormatter.format(cohort.totalDeals)}
+              </TableCell>
+              <TableCell numeric>{numberFormatter.format(cohort.openDeals)}</TableCell>
+              <TableCell numeric>{numberFormatter.format(cohort.wonDeals)}</TableCell>
+              <TableCell numeric>{numberFormatter.format(cohort.lostDeals)}</TableCell>
+              <TableCell numeric className={`font-medium ${closeRateTone(cohort.closeRate)}`}>
+                {formatPercent(cohort.closeRate)}
+              </TableCell>
+              <TableCell numeric>{formatMoney(cohort.averageTicket)}</TableCell>
+              <TableCell numeric className="font-medium text-fg">
+                {formatMoney(cohort.totalRevenue)}
+              </TableCell>
+              <TableCell numeric>{formatDays(cohort.averageDaysToClose)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </Card>
   )
 }

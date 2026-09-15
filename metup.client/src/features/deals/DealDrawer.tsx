@@ -1,22 +1,25 @@
-import { useEffect, useState } from "react"
-import { Building2, CalendarClock, Loader2 } from "lucide-react"
+import { useEffect, useState, type ReactNode } from "react"
+import { ArrowUpRight, CalendarCheck, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Field } from "@/components/ui/field"
+import { Eyebrow, SectionTitle } from "@/components/ui/page"
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Alert, InlineError, Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
 import { getCompany } from "@/features/companies/api"
 import { activityTypeLabels } from "@/features/activities/activity-labels"
 import { ActivityTimeline } from "@/features/activities/ActivityTimeline"
 import { LogActivityForm } from "@/features/activities/LogActivityForm"
 import { listActivitiesByDeal, type Activity, type LogActivityResult } from "@/features/activities/api"
+import { formatDue } from "@/lib/format"
 import { formatMoney, parseMoney } from "@/lib/money"
+import { cn } from "@/lib/utils"
 import { DealForm } from "./DealForm"
 import { StageHistory } from "./StageHistory"
 import { closeDeal, getDeal, type Deal, type UserSummary } from "./api"
-import { stageLabels, statusLabels } from "./stage-labels"
+import { sourceLabels, stageLabels, statusLabels } from "./stage-labels"
 
 export type DealDrawerTarget =
   | { mode: "deal"; id: string }
@@ -109,55 +112,89 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
   }
 
   const openCompanyId = target?.mode === "deal" ? (deal?.companyId ?? null) : (target?.companyId ?? null)
+  const isNew = target?.mode === "new"
+  const isReady = !isLoading && !loadError && (isNew || deal)
+  const value = deal ? (deal.amount ?? deal.ticket) : null
 
   return (
     <Sheet open={target !== null} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{target?.mode === "deal" ? companyName || "Negócio" : "Novo negócio"}</SheetTitle>
-          <SheetDescription>
-            {companyName && openCompanyId && (
-              <button
-                type="button"
-                onClick={() => onOpenCompany(openCompanyId)}
-                className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-              >
-                <Building2 className="size-3.5" aria-hidden="true" />
-                Ver ficha da empresa
-              </button>
-            )}
+      <SheetContent size="lg">
+        <SheetHeader className="gap-3">
+          <Eyebrow>{isNew ? "Novo negócio" : "Negócio"}</Eyebrow>
+          <SheetTitle>{isNew ? companyName || "Novo negócio" : companyName || "Negócio"}</SheetTitle>
+          <SheetDescription asChild>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              {deal && (
+                <>
+                  {deal.status === "Aberto" ? (
+                    <Badge variant="accent" dot>
+                      {stageLabels[deal.stage]}
+                    </Badge>
+                  ) : (
+                    <Badge variant={deal.status === "Ganho" ? "success" : "danger"} dot>
+                      {statusLabels[deal.status]}
+                    </Badge>
+                  )}
+                </>
+              )}
+              {companyName && openCompanyId && (
+                <button
+                  type="button"
+                  onClick={() => onOpenCompany(openCompanyId)}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-xs text-sm text-fg-muted underline decoration-line-strong underline-offset-4 hover:text-fg hover:decoration-accent focus-visible:focus-ring"
+                >
+                  Ficha da empresa
+                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </SheetDescription>
+
+          {deal && (
+            <dl className="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-line-soft bg-line-soft sm:grid-cols-4">
+              <Stat label="Valor">
+                <span className={cn("tabular", value === null ? "text-faint" : deal.status === "Ganho" ? "text-success" : "text-fg")}>
+                  {formatMoney(value)}
+                </span>
+              </Stat>
+              <Stat label="Responsável">{deal.ownerUserName}</Stat>
+              <Stat label="Contato">{deal.contactName ?? <span className="text-faint">—</span>}</Stat>
+              <Stat label="Origem">{sourceLabels[deal.source]}</Stat>
+            </dl>
+          )}
         </SheetHeader>
 
         <SheetBody>
-          {isLoading && (
-            <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Carregando…
-            </p>
-          )}
+          {isLoading && <DrawerSkeleton />}
 
           {loadError && (
-            <p role="alert" className="text-sm font-medium text-destructive">
-              {loadError}
-            </p>
+            <div className="p-6">
+              <Alert>{loadError}</Alert>
+            </div>
           )}
 
-          {!isLoading && !loadError && (target?.mode === "new" || deal) && (
+          {isReady && (
             <>
               {deal && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant={deal.status === "Ganho" ? "success" : deal.status === "Perdido" ? "outline" : "outline"}>
-                    {statusLabels[deal.status]}
-                  </Badge>
-                  <Badge variant="outline">{stageLabels[deal.stage]}</Badge>
-                </div>
+                <DrawerSection id="deal-log-heading" title="Registrar atividade">
+                  <LogActivityForm dealId={deal.id} contacts={contacts} onLogged={handleActivityLogged} />
+                  {lastNextAction && (
+                    <Alert tone="success" className="mt-4">
+                      <CalendarCheck className="size-4 shrink-0 text-success" aria-hidden="true" />
+                      Próxima ação agendada: {activityTypeLabels[lastNextAction.type]} · {formatDue(lastNextAction.dueDate)}
+                    </Alert>
+                  )}
+                </DrawerSection>
               )}
 
-              <section aria-labelledby="deal-data-heading" className="flex flex-col gap-3">
-                <h3 id="deal-data-heading" className="text-sm font-semibold text-foreground">
-                  Dados do negócio
-                </h3>
+              {deal && (
+                <DrawerSection id="deal-timeline-heading" title="Timeline" count={activities.length}>
+                  {activitiesError && <Alert className="mb-4">{activitiesError}</Alert>}
+                  <ActivityTimeline activities={activities} />
+                </DrawerSection>
+              )}
+
+              <DrawerSection id="deal-data-heading" title="Dados do negócio">
                 <DealForm
                   key={deal?.id ?? "new"}
                   companyId={target?.mode === "new" ? target.companyId : deal!.companyId}
@@ -166,60 +203,72 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
                   deal={deal}
                   onSaved={handleSaved}
                 />
-              </section>
+              </DrawerSection>
 
               {deal && deal.status === "Aberto" && (
-                <CloseSection
-                  deal={deal}
-                  closingAs={closingAs}
-                  onStartClosing={setClosingAs}
-                  onClosed={handleSaved}
-                />
+                <CloseSection deal={deal} closingAs={closingAs} onStartClosing={setClosingAs} onClosed={handleSaved} />
               )}
 
               {deal && (
-                <section aria-labelledby="deal-log-heading" className="flex flex-col gap-3">
-                  <h3 id="deal-log-heading" className="text-sm font-semibold text-foreground">
-                    Registrar atividade
-                  </h3>
-                  <LogActivityForm dealId={deal.id} contacts={contacts} onLogged={handleActivityLogged} />
-                  {lastNextAction && (
-                    <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <CalendarClock className="size-3.5 shrink-0" aria-hidden="true" />
-                      Próxima ação agendada: {activityTypeLabels[lastNextAction.type]} em{" "}
-                      {new Date(lastNextAction.dueDate).toLocaleString("pt-BR")}.
-                    </p>
-                  )}
-                </section>
-              )}
-
-              {deal && (
-                <section aria-labelledby="deal-timeline-heading" className="flex flex-col gap-3">
-                  <h3 id="deal-timeline-heading" className="text-sm font-semibold text-foreground">
-                    Timeline
-                  </h3>
-                  {activitiesError && (
-                    <p role="alert" className="text-sm font-medium text-destructive">
-                      {activitiesError}
-                    </p>
-                  )}
-                  <ActivityTimeline activities={activities} />
-                </section>
-              )}
-
-              {deal && (
-                <section aria-labelledby="deal-history-heading" className="flex flex-col gap-3">
-                  <h3 id="deal-history-heading" className="text-sm font-semibold text-foreground">
-                    Histórico de estágios
-                  </h3>
+                <DrawerSection id="deal-history-heading" title="Histórico de estágios">
                   <StageHistory history={deal.stageHistory} users={users} />
-                </section>
+                </DrawerSection>
               )}
             </>
           )}
         </SheetBody>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function Stat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 bg-surface px-3 py-2.5">
+      <dt className="label-mono text-faint">{label}</dt>
+      <dd className="truncate text-base text-fg">{children}</dd>
+    </div>
+  )
+}
+
+function DrawerSection({
+  id,
+  title,
+  count,
+  children,
+  className,
+}: {
+  id: string
+  title: string
+  count?: number
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <section aria-labelledby={id} className={cn("flex flex-col gap-4 border-b border-line-soft px-5 py-6 last:border-b-0 sm:px-6", className)}>
+      <SectionTitle id={id} as="h3" count={count}>
+        {title}
+      </SectionTitle>
+      {children}
+    </section>
+  )
+}
+
+function DrawerSkeleton() {
+  return (
+    <div role="status" className="flex flex-col gap-4 px-6 py-6">
+      <span className="sr-only">Carregando…</span>
+      <Skeleton className="h-3 w-32" />
+      <div className="flex gap-2">
+        {Array.from({ length: 5 }, (_, i) => (
+          <Skeleton key={i} className="h-8 w-20" />
+        ))}
+      </div>
+      <Skeleton className="h-16 w-full" />
+      <Skeleton className="mt-4 h-3 w-24" />
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-10 w-full" />
+    </div>
   )
 }
 
@@ -255,46 +304,58 @@ function CloseSection({
   }
 
   return (
-    <section aria-labelledby="deal-close-heading" className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-4">
-      <h3 id="deal-close-heading" className="text-sm font-semibold text-foreground">
-        Fechar negócio
-      </h3>
-
+    <DrawerSection id="deal-close-heading" title="Fechar negócio">
       {closingAs === null && (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" onClick={() => onStartClosing("won")}>
-            Marcar como Ganho
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => onStartClosing("lost")}>
-            Marcar como Perdido
-          </Button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted">Encerrar tira o negócio do funil e registra o desfecho.</p>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="hover:border-success hover:bg-success/10 hover:text-success"
+              onClick={() => onStartClosing("won")}
+            >
+              Marcar ganho
+            </Button>
+            <Button type="button" size="sm" variant="destructive" onClick={() => onStartClosing("lost")}>
+              Marcar perdido
+            </Button>
+          </div>
         </div>
       )}
 
       {closingAs !== null && (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="deal-closed-amount">
-              Valor {closingAs === "won" ? "fechado" : "final"}
-            </Label>
-            <Input
-              id="deal-closed-amount"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0,00"
-            />
-            <p className="text-xs text-muted-foreground">{amount ? formatMoney(parseMoney(amount)) : "Sem valor definido."}</p>
-          </div>
-
-          {error && (
-            <p role="alert" className="text-sm font-medium text-destructive">
-              {error}
-            </p>
+        <div
+          className={cn(
+            "flex flex-col gap-4 border-l-2 py-1 pl-4",
+            closingAs === "won" ? "border-success" : "border-danger"
           )}
+        >
+          <p className="text-base text-fg">
+            {closingAs === "won" ? "Confirmar o negócio como ganho." : "Confirmar o negócio como perdido."}
+          </p>
+          <Field
+            id="deal-closed-amount"
+            label={closingAs === "won" ? "Valor fechado" : "Valor final"}
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0,00"
+            hint={amount ? formatMoney(parseMoney(amount)) : "Sem valor definido."}
+            className="sm:max-w-xs"
+          />
+
+          {error && <InlineError>{error}</InlineError>}
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" disabled={isClosing} onClick={confirmClose}>
+            <Button
+              type="button"
+              size="sm"
+              variant={closingAs === "won" ? "default" : "destructive"}
+              disabled={isClosing}
+              onClick={confirmClose}
+            >
               {isClosing && <Loader2 className="animate-spin" aria-hidden="true" />}
               Confirmar {closingAs === "won" ? "ganho" : "perda"}
             </Button>
@@ -304,6 +365,6 @@ function CloseSection({
           </div>
         </div>
       )}
-    </section>
+    </DrawerSection>
   )
 }

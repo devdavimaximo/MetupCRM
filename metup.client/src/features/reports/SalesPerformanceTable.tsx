@@ -1,20 +1,10 @@
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/states"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableRowHeader } from "@/components/ui/table"
+import { numberFormatter } from "@/lib/format"
 import { formatMoney } from "@/lib/money"
 import type { SalesPerformanceGroup } from "./api"
-
-const numberFormatter = new Intl.NumberFormat("pt-BR")
-const percentFormatter = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 })
-
-function formatPercent(value: number | null): string {
-  return value === null ? "—" : percentFormatter.format(value)
-}
-
-function closeRateTone(value: number | null): string {
-  if (value === null) return "text-muted-foreground"
-  if (value >= 0.5) return "text-emerald-700 dark:text-emerald-400"
-  if (value >= 0.25) return "text-amber-700 dark:text-amber-400"
-  return "text-destructive"
-}
+import { closeRateTone, formatPercent } from "./report-ui"
 
 type Props = {
   groupLabelHeader: string
@@ -29,67 +19,45 @@ type Props = {
  */
 export function SalesPerformanceTable({ groupLabelHeader, groups, emptyMessage }: Props) {
   if (groups.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+    return (
+      <Card>
+        <EmptyState compact title="Sem dados no período" description={emptyMessage} />
+      </Card>
+    )
   }
 
   return (
     <Card>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase">
-                <th scope="col" className="px-4 py-3 font-medium">
-                  {groupLabelHeader}
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Abertos
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Ganhos
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Perdidos
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Taxa de fechamento
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Ticket médio
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Receita fechada
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {groups.map((group) => (
-                <tr key={group.groupKey}>
-                  <th scope="row" className="px-4 py-3 text-left font-medium text-foreground">
-                    {group.groupLabel}
-                  </th>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(group.openDeals)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(group.wonDeals)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(group.lostDeals)}
-                  </td>
-                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${closeRateTone(group.closeRate)}`}>
-                    {formatPercent(group.closeRate)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatMoney(group.averageTicket)}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                    {formatMoney(group.totalRevenue)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
+      <Table minWidth="720px">
+        <TableHeader>
+          <tr>
+            <TableHead>{groupLabelHeader}</TableHead>
+            <TableHead numeric>Abertos</TableHead>
+            <TableHead numeric>Ganhos</TableHead>
+            <TableHead numeric>Perdidos</TableHead>
+            <TableHead numeric>Taxa de fechamento</TableHead>
+            <TableHead numeric>Ticket médio</TableHead>
+            <TableHead numeric>Receita fechada</TableHead>
+          </tr>
+        </TableHeader>
+        <TableBody>
+          {groups.map((group) => (
+            <TableRow key={group.groupKey}>
+              <TableRowHeader>{group.groupLabel}</TableRowHeader>
+              <TableCell numeric>{numberFormatter.format(group.openDeals)}</TableCell>
+              <TableCell numeric>{numberFormatter.format(group.wonDeals)}</TableCell>
+              <TableCell numeric>{numberFormatter.format(group.lostDeals)}</TableCell>
+              <TableCell numeric className={`font-medium ${closeRateTone(group.closeRate)}`}>
+                {formatPercent(group.closeRate)}
+              </TableCell>
+              <TableCell numeric>{formatMoney(group.averageTicket)}</TableCell>
+              <TableCell numeric className="font-medium text-fg">
+                {formatMoney(group.totalRevenue)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </Card>
   )
 }

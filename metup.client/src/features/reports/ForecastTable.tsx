@@ -1,14 +1,11 @@
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/states"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableRowHeader } from "@/components/ui/table"
 import { stageLabels } from "@/features/deals/stage-labels"
+import { numberFormatter } from "@/lib/format"
 import { formatMoney } from "@/lib/money"
 import type { ForecastByStage } from "./api"
-
-const numberFormatter = new Intl.NumberFormat("pt-BR")
-const percentFormatter = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 0 })
-
-function formatPercent(value: number | null): string {
-  return value === null ? "—" : percentFormatter.format(value)
-}
+import { formatPercent } from "./report-ui"
 
 type Props = {
   byStage: ForecastByStage[]
@@ -22,55 +19,50 @@ type Props = {
  */
 export function ForecastTable({ byStage, emptyMessage }: Props) {
   if (byStage.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+    return (
+      <Card>
+        <EmptyState compact title="Nada para projetar" description={emptyMessage} />
+      </Card>
+    )
   }
 
   return (
     <Card>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase">
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Estágio
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Negócios
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Valor em aberto
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Probabilidade histórica
-                </th>
-                <th scope="col" className="px-4 py-3 text-right font-medium">
-                  Valor ponderado
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {byStage.map((row) => (
-                <tr key={row.stage}>
-                  <th scope="row" className="px-4 py-3 text-left font-medium text-foreground">
-                    {stageLabels[row.stage]}
-                  </th>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {numberFormatter.format(row.openDealsCount)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatMoney(row.openAmount)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+      <Table minWidth="640px">
+        <TableHeader>
+          <tr>
+            <TableHead>Estágio</TableHead>
+            <TableHead numeric>Negócios</TableHead>
+            <TableHead numeric>Valor em aberto</TableHead>
+            <TableHead numeric>Prob. histórica</TableHead>
+            <TableHead numeric>Valor ponderado</TableHead>
+          </tr>
+        </TableHeader>
+        <TableBody>
+          {byStage.map((row) => (
+            <TableRow key={row.stage}>
+              <TableRowHeader>{stageLabels[row.stage]}</TableRowHeader>
+              <TableCell numeric>{numberFormatter.format(row.openDealsCount)}</TableCell>
+              <TableCell numeric>{formatMoney(row.openAmount)}</TableCell>
+              <TableCell numeric>
+                {row.winProbability === null ? (
+                  <span className="text-faint">—</span>
+                ) : (
+                  <span className="inline-flex items-center justify-end gap-2.5">
+                    <span className="hidden h-1 w-12 bg-surface-3 md:block" aria-hidden="true">
+                      <span className="block h-full bg-fg-muted" style={{ width: `${row.winProbability * 100}%` }} />
+                    </span>
                     {formatPercent(row.winProbability)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                    {row.weightedAmount === null ? "—" : formatMoney(row.weightedAmount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
+                  </span>
+                )}
+              </TableCell>
+              <TableCell numeric className="font-medium text-fg">
+                {row.weightedAmount === null ? <span className="text-faint">—</span> : formatMoney(row.weightedAmount)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </Card>
   )
 }

@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react"
-import { Handshake, Loader2 } from "lucide-react"
+import { ChevronRight, Handshake, Plus } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { SectionTitle } from "@/components/ui/page"
+import { Alert, EmptyState, Skeleton } from "@/components/ui/states"
 import { listDeals, type DealListItem } from "@/features/deals/api"
 import { stageLabels, statusLabels } from "@/features/deals/stage-labels"
 import { formatMoney } from "@/lib/money"
+import { cn } from "@/lib/utils"
 import { toMessage } from "./form-errors"
 
 type Props = {
@@ -39,58 +42,69 @@ export function CompanyDealList({ companyId, onOpenDeal, onNewDeal }: Props) {
   }, [companyId])
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">
-          Negócios{" "}
-          {!isLoading && <span className="tabular font-normal text-muted-foreground">({deals.length})</span>}
-        </h3>
-        <Button type="button" size="sm" variant="outline" onClick={onNewDeal}>
-          <Handshake aria-hidden="true" />
-          Novo Negócio
-        </Button>
-      </div>
+    <div className="flex flex-col gap-4">
+      <SectionTitle
+        count={isLoading ? undefined : deals.length}
+        action={
+          <Button type="button" size="sm" variant="ghost" onClick={onNewDeal}>
+            <Plus aria-hidden="true" />
+            Novo negócio
+          </Button>
+        }
+      >
+        Negócios
+      </SectionTitle>
 
       {isLoading && (
-        <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          Carregando negócios…
-        </p>
+        <div role="status" className="flex flex-col gap-2">
+          <span className="sr-only">Carregando negócios…</span>
+          <Skeleton className="h-14 w-full" />
+        </div>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Alert>{error}</Alert>}
 
       {!isLoading && !error && deals.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-          Nenhum negócio aberto com esta empresa ainda.
-        </p>
+        <EmptyState
+          compact
+          icon={Handshake}
+          title="Nenhum negócio com esta empresa"
+          description="Abra um negócio para colocá-la no funil e começar a registrar o contato."
+          className="rounded-sm border border-dashed border-line-soft"
+        />
       )}
 
       {!isLoading && deals.length > 0 && (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col divide-y divide-line-soft/60 rounded-sm border border-line-soft">
           {deals.map((deal) => (
             <li key={deal.id}>
               <button
                 type="button"
                 onClick={() => onOpenDeal(deal.id)}
-                className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-left outline-none transition-colors hover:border-primary/40 hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="group flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-2/60 focus-visible:focus-ring"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {deal.contactName ?? "Sem contato definido"}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">{deal.ownerUserName}</p>
+                <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-medium text-fg">{deal.contactName ?? "Sem contato definido"}</p>
+                    <p className="truncate text-sm text-muted">{deal.ownerUserName}</p>
+                  </div>
+                  {deal.status === "Aberto" ? (
+                    <Badge variant="outline">{stageLabels[deal.stage]}</Badge>
+                  ) : (
+                    <Badge variant={deal.status === "Ganho" ? "success" : "danger"} dot>
+                      {statusLabels[deal.status]}
+                    </Badge>
+                  )}
                 </div>
-                <Badge variant={deal.status === "Ganho" ? "success" : "outline"} className="tabular">
+                <span
+                  className={cn(
+                    "shrink-0 text-right text-base tabular sm:w-28",
+                    deal.status === "Ganho" ? "text-success" : "text-fg"
+                  )}
+                >
                   {formatMoney(deal.amount ?? deal.ticket)}
-                </Badge>
-                <Badge variant="outline">
-                  {deal.status === "Aberto" ? stageLabels[deal.stage] : statusLabels[deal.status]}
-                </Badge>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-faint transition-colors group-hover:text-fg-muted" aria-hidden="true" />
               </button>
             </li>
           ))}
