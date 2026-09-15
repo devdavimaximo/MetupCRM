@@ -6,8 +6,8 @@ import { stageLabels, ACTIVE_STAGES } from "@/features/deals/stage-labels"
 import type { DealStage } from "@/features/deals/api"
 import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { FeaturedDeal, PipelineStage } from "./api"
-import { formatBucket, formatMoneyCompact, formatMoneyWhole, formatPercent, type Delta } from "./dashboard-format"
+import type { FeaturedDeal, PipelineStage, StageAdvanceRate } from "./api"
+import { formatInstantDay, formatMoneyCompact, formatMoneyWhole, formatPercent, type Delta } from "./dashboard-format"
 import { Sparkline } from "./dashboard-charts"
 
 /* ─── Base ──────────────────────────────────────────────────────────────────── */
@@ -64,11 +64,29 @@ export function SeeAll({ onClick, children = "Ver todas" }: { onClick: () => voi
   )
 }
 
-export function DeltaLine({ delta }: { delta: Delta }) {
-  if (!delta) return <p className="text-xs text-muted">sem base anterior</p>
+/** Texto e tooltip de cada caso sem percentual — o cartão explica a ausência em vez de calá-la. */
+const deltaFallback = {
+  new: { text: "novo", hint: "Nada no período anterior — não há percentual a calcular." },
+  idle: { text: "sem movimento", hint: "Nenhum registro neste período nem no anterior." },
+  "no-history": {
+    text: "primeiro período com dados",
+    hint: "O período anterior é anterior ao primeiro negócio — ainda não há base de comparação.",
+  },
+} as const
+
+export function DeltaLine({ delta, comparison }: { delta: Delta; comparison: string }) {
+  if (delta.kind !== "change") {
+    const { text, hint } = deltaFallback[delta.kind]
+    return (
+      <p className="text-xs text-muted" title={delta.kind === "no-history" ? hint : `${hint} Comparado com ${comparison}.`}>
+        {text}
+      </p>
+    )
+  }
+
   const Icon = delta.direction === "up" ? ArrowUp : delta.direction === "down" ? ArrowDown : Minus
   return (
-    <div className="flex flex-col whitespace-nowrap">
+    <div className="flex flex-col whitespace-nowrap" title={`vs. ${comparison}`}>
       <span
         className={cn(
           "inline-flex items-center gap-1 text-sm font-medium tabular",
@@ -90,14 +108,19 @@ export function DeltaLine({ delta }: { delta: Delta }) {
 export function KpiCard({
   icon: Icon,
   label,
+  hint,
   value,
   delta,
+  comparison,
   trend,
 }: {
   icon: LucideIcon
   label: string
+  /** A fórmula do número, para o tooltip — todo percentual da tela tem nome e conta. */
+  hint?: string
   value: string
   delta: Delta
+  comparison: string
   trend: number[]
 }) {
   return (
@@ -106,11 +129,11 @@ export function KpiCard({
         <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line-soft bg-surface-3/80 text-accent">
           <Icon className="size-4" aria-hidden="true" />
         </span>
-        <p className="truncate text-sm text-fg" title={label}>{label}</p>
+        <p className="truncate text-sm text-fg" title={hint ? `${label} — ${hint}` : label}>{label}</p>
       </div>
-      <p className="text-2xl font-semibold tracking-[-0.01em] whitespace-nowrap text-fg tabular">{value}</p>
+      <p className="text-2xl font-semibold tracking-[-0.01em] whitespace-nowrap text-fg tabular" title={hint}>{value}</p>
       <div className="flex items-end justify-between gap-2">
-        <DeltaLine delta={delta} />
+        <DeltaLine delta={delta} comparison={comparison} />
         <div className="h-9 min-w-0 flex-1 max-w-28" aria-hidden="true">
           {trend.length > 1 && <Sparkline values={trend} />}
         </div>
@@ -121,42 +144,102 @@ export function KpiCard({
 
 /* ─── Pipeline ──────────────────────────────────────────────────────────────── */
 
-type FunnelNode = { key: string; label: string; count: number; amount: number; percent: number | null; stalled: number }
+type FunnelNode = {
+  key: string
+  label: string
+  count: number
+  amount: number
+  estimated: number
+  /** % de quem entrou na etapa e seguiu adiante (histórico); no nó de ganhos, a taxa de fechamento. */
+  percent: number | null
+  percentLabel: string
+  averageDays: number | null
+  stalled: number
+}
+
+const CLOSE_RATE_HINT = "ganhos ÷ (ganhos + perdidos) no período"
+
+/** Monta o tooltip do nó: tudo que o número esconde, em uma frase por linha. */
+function nodeHint(node: FunnelNode, stalledAfterDays: number, isWon: boolean) {
+  const lines = [
+    `${numberFormatter.format(node.count)} ${isWon ? "negócios ganhos no período" : "negócios abertos nesta etapa"}`,
+    `${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor informado"}${node.estimated > 0 ? ` · ${numberFormatter.format(node.estimated)} com valor estimado pelo ticket` : ""}`,
+  ]
+
+  if (isWon) {
+    lines.push(node.percent === null ? "Sem fechamentos no período." : `Taxa de fechamento: ${formatPercent(node.percent)} (${CLOSE_RATE_HINT}).`)
+    return lines.join("\n")
+  }
+
+  lines.push(
+    node.percent === null
+      ? "Ainda sem histórico para calcular quantos avançam."
+      : `${formatPercent(node.percent)} dos negócios que entraram nesta etapa avançaram para uma etapa posterior ou para Ganho.`
+  )
+
+  if (node.averageDays !== null) {
+    lines.push(`Tempo médio na etapa: ${numberFormatter.format(Math.round(node.averageDays))} dias.`)
+  }
+
+  if (node.stalled > 0) {
+    lines.push(`${numberFormatter.format(node.stalled)} sem mudar de etapa há mais de ${stalledAfterDays} dias.`)
+  }
+
+  return lines.join("\n")
+}
 
 /**
- * O funil como linha do tempo horizontal: nó, filete vertical, volume e o quanto do pipeline
- * já chegou até a etapa (negócios nesta etapa ou adiante). O último nó são os ganhos do período.
+ * O funil como linha do tempo horizontal: nó, filete vertical, volume e a conversão histórica
+ * da etapa ("x% avançam"), calculada de StageChange — não a participação da fotografia atual.
+ * O último nó são os ganhos do período, com a taxa de fechamento.
  */
 export function PipelineCard({
   pipeline,
+  advanceRates,
   wonInPeriod,
   wonAmount,
-  conversion,
+  closeRateValue,
   stalledAfterDays,
 }: {
   pipeline: PipelineStage[]
+  advanceRates: StageAdvanceRate[]
   wonInPeriod: number
   wonAmount: number
-  conversion: number | null
+  closeRateValue: number | null
   stalledAfterDays: number
 }) {
   const byStage = new Map(pipeline.map((s) => [s.stage, s]))
+  const advanceByStage = new Map(advanceRates.map((s) => [s.stage, s]))
   const totalOpen = pipeline.reduce((sum, s) => sum + s.count, 0)
 
-  const countOf = (stage: DealStage) => byStage.get(stage)?.count ?? 0
-  const nodes: FunnelNode[] = ACTIVE_STAGES.map((stage, index) => {
+  const nodes: FunnelNode[] = ACTIVE_STAGES.map((stage: DealStage) => {
     const data = byStage.get(stage)
-    const reached = ACTIVE_STAGES.slice(index).reduce((sum, s) => sum + countOf(s), 0)
+    const advance = advanceByStage.get(stage)
     return {
       key: stage,
       label: stageLabels[stage],
       count: data?.count ?? 0,
       amount: data?.amount ?? 0,
-      percent: totalOpen > 0 ? reached / totalOpen : null,
+      estimated: data?.estimatedCount ?? 0,
+      percent: advance?.advanceRate ?? null,
+      percentLabel: advance?.advanceRate == null ? "—" : `${formatPercent(advance.advanceRate)} avançam`,
+      averageDays: advance?.averageDaysInStage ?? null,
       stalled: data?.stalledCount ?? 0,
     }
   })
-  nodes.push({ key: "won", label: "Ganhos", count: wonInPeriod, amount: wonAmount, percent: conversion, stalled: 0 })
+
+  nodes.push({
+    key: "won",
+    label: "Ganhos",
+    count: wonInPeriod,
+    amount: wonAmount,
+    estimated: 0,
+    percent: closeRateValue,
+    // O cabeçalho do card já nomeia a taxa; aqui só o número, para não truncar na coluna estreita.
+    percentLabel: closeRateValue === null ? "—" : formatPercent(closeRateValue),
+    averageDays: null,
+    stalled: 0,
+  })
 
   return (
     <Panel aria-labelledby="pipeline-heading" className="min-h-fit gap-3 px-4 py-3.5">
@@ -170,9 +253,11 @@ export function PipelineCard({
               <dt className="text-xs text-muted">Negócios abertos</dt>
               <dd className="text-md font-medium text-fg tabular">{numberFormatter.format(totalOpen)}</dd>
             </div>
-            <div className="pl-5">
-              <dt className="text-xs text-muted">Taxa de conversão</dt>
-              <dd className="text-md font-medium text-fg tabular">{conversion === null ? "—" : formatPercent(conversion)}</dd>
+            <div className="pl-5" title={`Taxa de fechamento — ${CLOSE_RATE_HINT}`}>
+              <dt className="text-xs text-muted">Taxa de fechamento</dt>
+              <dd className="text-md font-medium text-fg tabular">
+                {closeRateValue === null ? "—" : formatPercent(closeRateValue)}
+              </dd>
             </div>
           </dl>
         }
@@ -182,11 +267,7 @@ export function PipelineCard({
         {nodes.map((node) => {
           const isWon = node.key === "won"
           return (
-            <li
-              key={node.key}
-              className="relative flex min-w-0 gap-2.5 pr-2"
-              title={node.stalled > 0 ? `${node.stalled} sem mudar de etapa há mais de ${stalledAfterDays} dias` : undefined}
-            >
+            <li key={node.key} className="relative flex min-w-0 gap-2.5 pr-2" title={nodeHint(node, stalledAfterDays, isWon)}>
               <div className="flex flex-col items-center pt-0.5" aria-hidden="true">
                 <span
                   className={cn(
@@ -214,10 +295,11 @@ export function PipelineCard({
                     </span>
                   )}
                 </div>
-                <p className="truncate text-2xs text-muted tabular">
-                  {node.percent === null ? "—" : formatPercent(node.percent)}
+                <p className="truncate text-2xs text-muted tabular">{node.percentLabel}</p>
+                {/* "~" marca a etapa cujo dinheiro vem (em parte) do ticket — o tooltip diz quantos. */}
+                <p className="truncate text-2xs text-fg-muted tabular">
+                  {node.amount > 0 ? `${node.estimated > 0 ? "~" : ""}${formatMoneyCompact(node.amount)}` : "R$ —"}
                 </p>
-                <p className="truncate text-2xs text-fg-muted tabular">{node.amount > 0 ? formatMoneyCompact(node.amount) : "R$ —"}</p>
               </div>
             </li>
           )
@@ -247,7 +329,7 @@ export function FeaturedDealsCard({ deals, onOpenDeal }: { deals: FeaturedDeal[]
       <PanelHeading id="featured-heading" title="Negócios em Destaque" />
       {deals.length === 0 ? (
         <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted">
-          Nenhum negócio aberto com valor informado.
+          Nenhum negócio aberto com valor ou ticket informado.
         </p>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
@@ -277,7 +359,21 @@ export function FeaturedDealsCard({ deals, onOpenDeal }: { deals: FeaturedDeal[]
                     </span>
                   </td>
                   <td className="py-1 pr-3 whitespace-nowrap text-fg tabular">
-                    {deal.amount !== null ? formatMoneyWhole(deal.amount) : "—"}
+                    {deal.amount === null ? (
+                      "—"
+                    ) : (
+                      <>
+                        {formatMoneyWhole(deal.amount)}
+                        {deal.isEstimated && (
+                          <span
+                            className="ml-1 text-2xs text-muted"
+                            title="Valor estimado pelo ticket — o negócio ainda não tem valor em negociação."
+                          >
+                            est.
+                          </span>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td className="py-1 pr-3">
                     <span className={cn("inline-flex rounded-sm px-2 py-0.5 text-2xs whitespace-nowrap", stageTone[deal.stage])}>
@@ -303,7 +399,7 @@ export function FeaturedDealsCard({ deals, onOpenDeal }: { deals: FeaturedDeal[]
                       !deal.nextTaskDueDate ? "text-danger" : new Date(deal.nextTaskDueDate) < new Date() ? "text-danger" : "text-fg-muted"
                     )}
                   >
-                    {deal.nextTaskDueDate ? formatBucket(deal.nextTaskDueDate) : "Sem ação"}
+                    {deal.nextTaskDueDate ? formatInstantDay(deal.nextTaskDueDate) : "Sem ação"}
                   </td>
                   <td className="py-1 text-right max-[1699px]:hidden">
                     <button

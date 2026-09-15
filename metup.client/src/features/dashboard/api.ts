@@ -31,15 +31,33 @@ export type DashboardSummary = {
 
 export type PeriodValue = { current: number; previous: number }
 
+/** `bucketStart` é uma data local da organização ("2026-09-15") — nunca reconverter fuso ao formatar. */
 export type RevenuePoint = { bucketStart: string; revenue: number; wonDeals: number; lostDeals: number }
 
-export type PipelineStage = { stage: DealStage; count: number; amount: number; stalledCount: number }
+/** `amount` é o valor efetivo (valor em negociação ou ticket); `estimatedCount` quantos vieram do ticket. */
+export type PipelineStage = {
+  stage: DealStage
+  count: number
+  amount: number
+  estimatedCount: number
+  stalledCount: number
+}
+
+/** Conversão histórica da etapa: dos que entraram nela, quantos seguiram adiante. */
+export type StageAdvanceRate = {
+  stage: DealStage
+  enteredCount: number
+  advancedCount: number
+  advanceRate: number | null
+  averageDaysInStage: number | null
+}
 
 export type FeaturedDeal = {
   id: string
   companyName: string
   stage: DealStage
   amount: number | null
+  isEstimated: boolean
   ownerUserName: string
   daysInStage: number
   nextTaskDueDate: string | null
@@ -71,10 +89,16 @@ export type OwnerPerformance = {
   openAmount: number
 }
 
+/** O recorte de negócios do panorama. O servidor rebaixa o pedido que o papel não alcança. */
+export type DealScope = "Organization" | "Mine"
+
 export type DashboardOverview = {
   periodDays: number
+  scope: DealScope
   periodStart: string
   periodEnd: string
+  previousStart: string
+  historyStart: string | null
   revenue: PeriodValue
   wonDeals: PeriodValue
   lostDeals: PeriodValue
@@ -85,6 +109,8 @@ export type DashboardOverview = {
   revenueSeries: RevenuePoint[]
   seriesGranularity: "day" | "week"
   pipeline: PipelineStage[]
+  stageAdvanceRates: StageAdvanceRate[]
+  weightedForecast: number | null
   openDealsWithoutAmount: number
   stalledAfterDays: number
   featuredDeals: FeaturedDeal[]
@@ -93,9 +119,12 @@ export type DashboardOverview = {
   owners: OwnerPerformance[]
 }
 
-/** A central de comando: organização inteira, janela de `days` dias comparada à anterior. */
-export function getDashboardOverview(days: number, signal?: AbortSignal) {
-  return apiFetch<DashboardOverview>(`/api/dashboard/overview?days=${days}`, { signal })
+/**
+ * A central de comando: janela de `days` dias comparada à anterior, no escopo pedido — o servidor
+ * decide o que este papel alcança e devolve em `scope` o recorte que de fato valeu.
+ */
+export function getDashboardOverview(days: number, scope: DealScope, signal?: AbortSignal) {
+  return apiFetch<DashboardOverview>(`/api/dashboard/overview?days=${days}&scope=${scope}`, { signal })
 }
 
 /** A fotografia de hoje: sempre "minha", o servidor resolve organização e usuário pelo token. */

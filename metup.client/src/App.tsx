@@ -22,6 +22,7 @@ function App() {
     const initial = readUrlState()
     return { from: initial.reportFrom, to: initial.reportTo, tab: initial.reportTab }
   })
+  const [initialDashboardScope] = useState(() => readUrlState().dashboardScope)
 
   if (!session) {
     return <LoginPage onLoggedIn={setSession} />
@@ -69,6 +70,8 @@ function App() {
         <DashboardPage
           key={`dashboard-${navSeed}`}
           userName={session.user.name}
+          role={session.user.role}
+          initialScope={initialDashboardScope}
           onOpenDeal={openDeal}
           onNavigate={navigate}
         />

@@ -1,4 +1,5 @@
 using Metup.Application.Common.Interfaces;
+using Metup.Application.Deals.Analytics;
 using Metup.Application.Reports.Common;
 using Metup.Domain.Activities;
 using Metup.Domain.Deals;
@@ -72,27 +73,9 @@ public class GetFunnelReportQueryHandler(
             .ThenBy(c => c.ToStage)
             .ToList();
 
-        var daysInStage = new Dictionary<DealStage, List<double>>();
-        foreach (var dealStageChanges in stageChanges.GroupBy(sc => sc.DealId))
-        {
-            var ordered = dealStageChanges.OrderBy(sc => sc.ChangedAt).ToList();
-            for (var i = 0; i < ordered.Count - 1; i++)
-            {
-                var stage = ordered[i].ToStage;
-                var days = (ordered[i + 1].ChangedAt - ordered[i].ChangedAt).TotalDays;
-
-                if (!daysInStage.TryGetValue(stage, out var list))
-                {
-                    list = [];
-                    daysInStage[stage] = list;
-                }
-
-                list.Add(days);
-            }
-        }
-
-        var averageDaysInStage = daysInStage
-            .Select(kv => new StageDurationDto(kv.Key, kv.Value.Average()))
+        var averageDaysInStage = StageAnalytics
+            .CalculateAverageDaysInStage(stageChanges.Select(sc => new StageReach(sc.DealId, sc.ToStage, sc.ChangedAt)))
+            .Select(kv => new StageDurationDto(kv.Key, kv.Value))
             .OrderBy(d => d.Stage)
             .ToList();
 

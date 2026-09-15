@@ -3,17 +3,24 @@ import { CalendarDays, ChevronDown, CircleDollarSign, Clock3, Filter, House, Use
 
 import { Alert, Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
-import { getForecastReport, type ForecastReport } from "@/features/reports/api"
+import type { AuthenticatedUser } from "@/lib/auth"
 import type { TaskItem } from "@/features/tasks/api"
 import { numberFormatter } from "@/lib/format"
-import type { View } from "@/lib/url-state"
+import { writeUrlState, type View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 import { sourceLabels } from "@/features/deals/stage-labels"
-import { getDashboardOverview, getDashboardSummary, type DashboardOverview, type DashboardSummary } from "./api"
+import {
+  getDashboardOverview,
+  getDashboardSummary,
+  type DashboardOverview,
+  type DashboardSummary,
+  type DealScope,
+} from "./api"
 import { OriginDonut, RevenueAreaChart } from "./dashboard-charts"
 import { FeaturedDealsCard, KpiCard, Panel, PanelHeading, PipelineCard, PotentialCard, DeltaLine } from "./dashboard-cards"
 import {
   closeRate,
+  comparisonRange,
   deltaOf,
   deltaPoints,
   DONUT_COLORS,
@@ -21,17 +28,27 @@ import {
   formatMoneyWhole,
   formatPercent,
   periodOptions,
+  type DeltaContext,
   type PeriodValueKey,
 } from "./dashboard-format"
 import { SideColumn } from "./dashboard-side"
 
 type Props = {
   userName: string
+  role: AuthenticatedUser["role"]
+  initialScope: string
   onOpenDeal: (dealId: string) => void
   onNavigate: (view: View) => void
 }
 
 const PERIOD_STORAGE_KEY = "metup.dashboard.period"
+
+/** Só Admin e Closer alcançam a organização inteira — o servidor decide de novo, isto é só a UI. */
+function canSwitchScope(role: AuthenticatedUser["role"]) {
+  return role === "Admin" || role === "Closer"
+}
+
+const scopeLabels: Record<DealScope, string> = { Organization: "Organização", Mine: "Sua carteira" }
 
 function greeting(date = new Date()) {
   const hour = date.getHours()
@@ -58,11 +75,13 @@ function runningSum(values: number[]) {
  * Visão geral — a central de comando comercial em uma tela. No desktop o conteúdo cabe na
  * altura da janela (grade com linhas fracionárias); abaixo de xl os blocos empilham.
  */
-export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
+export function DashboardPage({ userName, role, initialScope, onOpenDeal, onNavigate }: Props) {
   const [period, setPeriod] = useState<PeriodValueKey>(readStoredPeriod)
+  const [scope, setScope] = useState<DealScope>(() =>
+    !canSwitchScope(role) || initialScope === "minha" ? "Mine" : "Organization"
+  )
   const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [forecast, setForecast] = useState<ForecastReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadVersion, setReloadVersion] = useState(0)
@@ -73,7 +92,7 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
     const controller = new AbortController()
     setIsLoading(true)
     setError(null)
-    getDashboardOverview(Number(period), controller.signal)
+    getDashboardOverview(Number(period), scope, controller.signal)
       .then(setOverview)
       .catch((err: unknown) => {
         if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar o dashboard."))
@@ -82,7 +101,7 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
         if (!controller.signal.aborted) setIsLoading(false)
       })
     return () => controller.abort()
-  }, [period, reloadVersion])
+  }, [period, scope, reloadVersion])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -91,10 +110,13 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
       .catch((err: unknown) => {
         if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar suas tarefas."))
       })
-    // O forecast só enriquece o cartão de potencial; se falhar, o cartão fala só do pipeline aberto.
-    getForecastReport({}, controller.signal).then(setForecast).catch(() => {})
     return () => controller.abort()
   }, [reloadVersion])
+
+  function changeScope(next: DealScope) {
+    setScope(next)
+    writeUrlState({ dashboardScope: next === "Mine" ? "minha" : "" })
+  }
 
   function changePeriod(next: PeriodValueKey) {
     setPeriod(next)
@@ -134,6 +156,12 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
             <span aria-current="page" className="text-accent">
               Visão geral
             </span>
+            <span aria-hidden="true">·</span>
+            <ScopeIndicator
+              scope={overview?.scope ?? scope}
+              canSwitch={canSwitchScope(role)}
+              onChange={changeScope}
+            />
           </nav>
           <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg min-[1700px]:text-4xl">
             {greeting()}, {firstName}.
@@ -176,7 +204,7 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
             isLoading && "opacity-60"
           )}
         >
-          <MainGrid overview={overview} forecast={forecast} onOpenDeal={onOpenDeal} onNavigate={onNavigate} />
+          <MainGrid overview={overview} onOpenDeal={onOpenDeal} onNavigate={onNavigate} />
           <SideColumn
             events={overview.recentEvents}
             tasks={summary?.nextTasks ?? null}
@@ -191,14 +219,53 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
   )
 }
 
+/**
+ * De quem são os números desta tela. O SDR só lê o rótulo (o servidor nunca lhe dá mais que a
+ * própria carteira); Admin e Closer alternam, e a escolha fica na URL para o link ser compartilhável.
+ */
+function ScopeIndicator({
+  scope,
+  canSwitch,
+  onChange,
+}: {
+  scope: DealScope
+  canSwitch: boolean
+  onChange: (scope: DealScope) => void
+}) {
+  if (!canSwitch) {
+    return (
+      <span className="text-fg-muted" title="Você vê os números dos negócios sob sua responsabilidade.">
+        {scopeLabels.Mine}
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1" role="group" aria-label="Escopo dos números">
+      {(["Organization", "Mine"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={scope === option}
+          onClick={() => onChange(option)}
+          className={cn(
+            "cursor-pointer rounded-xs px-1.5 py-0.5 transition-colors hover:text-fg focus-visible:focus-ring",
+            scope === option ? "bg-surface-3 text-fg" : "text-muted"
+          )}
+        >
+          {scopeLabels[option]}
+        </button>
+      ))}
+    </span>
+  )
+}
+
 function MainGrid({
   overview,
-  forecast,
   onOpenDeal,
   onNavigate,
 }: {
   overview: DashboardOverview
-  forecast: ForecastReport | null
   onOpenDeal: (dealId: string) => void
   onNavigate: (view: View) => void
 }) {
@@ -230,7 +297,13 @@ function MainGrid({
   const closingAmount = overview.pipeline
     .filter((s) => s.stage === "Proposta" || s.stage === "Negociacao")
     .reduce((sum, s) => sum + s.amount, 0)
-  const hasProbability = forecast?.byStage.some((s) => s.winProbability !== null) ?? false
+
+  const deltaContext: DeltaContext = {
+    historyStart: overview.historyStart,
+    previousStart: overview.previousStart,
+    periodStart: overview.periodStart,
+  }
+  const comparison = comparisonRange(deltaContext)
 
   const totalNew = overview.sources.reduce((sum, s) => sum + s.newDeals, 0)
   const slices = overview.sources.map((s) => ({ key: s.source, label: sourceLabels[s.source], value: s.newDeals }))
@@ -238,23 +311,50 @@ function MainGrid({
   return (
     <div className="grid min-h-0 min-w-0 gap-4 xl:grid-rows-[auto_auto_minmax(10rem,0.92fr)_minmax(12rem,1.08fr)]">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4 xl:grid-cols-4">
-        <KpiCard icon={CircleDollarSign} label="Receita Gerada" value={formatMoneyWhole(overview.revenue.current)} delta={deltaOf(overview.revenue)} trend={trends.revenue} />
-        <KpiCard icon={Users} label="Negócios Fechados" value={numberFormatter.format(won.current)} delta={deltaOf(won)} trend={trends.won} />
-        <KpiCard icon={Filter} label="Taxa de Conversão" value={rate === null ? "—" : formatPercent(rate)} delta={deltaPoints(rate, prevRate)} trend={trends.rate} />
+        <KpiCard
+          icon={CircleDollarSign}
+          label="Receita Gerada"
+          hint="soma do valor dos negócios ganhos no período"
+          value={formatMoneyWhole(overview.revenue.current)}
+          delta={deltaOf(overview.revenue, deltaContext)}
+          comparison={comparison}
+          trend={trends.revenue}
+        />
+        <KpiCard
+          icon={Users}
+          label="Negócios Fechados"
+          hint="negócios ganhos no período"
+          value={numberFormatter.format(won.current)}
+          delta={deltaOf(won, deltaContext)}
+          comparison={comparison}
+          trend={trends.won}
+        />
+        <KpiCard
+          icon={Filter}
+          label="Taxa de fechamento"
+          hint="ganhos ÷ (ganhos + perdidos) no período"
+          value={rate === null ? "—" : formatPercent(rate)}
+          delta={deltaPoints(rate, prevRate, deltaContext)}
+          comparison={comparison}
+          trend={trends.rate}
+        />
         <KpiCard
           icon={Clock3}
           label="Ticket Médio"
+          hint="receita ganha ÷ negócios ganhos no período"
           value={avgTicket === null ? "—" : formatMoneyWhole(avgTicket)}
-          delta={avgTicket !== null && prevTicket !== null ? deltaOf({ current: avgTicket, previous: prevTicket }) : null}
+          delta={deltaOf({ current: avgTicket ?? 0, previous: prevTicket ?? 0 }, deltaContext)}
+          comparison={comparison}
           trend={trends.ticket}
         />
       </div>
 
       <PipelineCard
         pipeline={overview.pipeline}
+        advanceRates={overview.stageAdvanceRates}
         wonInPeriod={won.current}
         wonAmount={overview.revenue.current}
-        conversion={rate}
+        closeRateValue={rate}
         stalledAfterDays={overview.stalledAfterDays}
       />
 
@@ -264,7 +364,11 @@ function MainGrid({
             id="revenue-heading"
             title="Evolução da Receita"
             subtitle="Receita acumulada da sua operação ao longo do período."
-            aside={<div className="shrink-0 text-right"><DeltaLine delta={deltaOf(overview.revenue)} /></div>}
+            aside={
+              <div className="shrink-0 text-right">
+                <DeltaLine delta={deltaOf(overview.revenue, deltaContext)} comparison={comparison} />
+              </div>
+            }
           />
           <div className="relative h-60 min-h-0 xl:h-auto xl:min-h-24 xl:flex-1">
             <RevenueAreaChart data={chartData} />
@@ -304,7 +408,7 @@ function MainGrid({
         <FeaturedDealsCard deals={overview.featuredDeals} onOpenDeal={onOpenDeal} />
         <PotentialCard
           openAmount={openAmount}
-          forecast={hasProbability && forecast ? forecast.totalWeightedForecast : null}
+          forecast={overview.weightedForecast}
           closingAmount={closingAmount}
           onOpenPipeline={() => onNavigate("pipeline")}
         />

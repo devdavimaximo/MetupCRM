@@ -1,6 +1,7 @@
 using Metup.Application.Common.Interfaces;
 using Metup.Infrastructure.Persistence;
 using Metup.Infrastructure.Security;
+using Metup.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<ITokenService, JwtTokenService>();
+        services.AddScoped<IOrganizationClock, OrganizationClock>();
 
         return services;
     }

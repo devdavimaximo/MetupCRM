@@ -1,3 +1,4 @@
+using Metup.Application.Common.Models;
 using Metup.Domain.Activities;
 using Metup.Domain.Deals;
 
@@ -6,21 +7,41 @@ namespace Metup.Application.Dashboard.Common;
 /// <summary>Um número do período e o mesmo número na janela imediatamente anterior, de mesmo tamanho.</summary>
 public record PeriodValueDto(decimal Current, decimal Previous);
 
-/// <summary>Receita ganha e fechamentos (ganhos/perdidos) num intervalo da série (dia ou semana, conforme o período).</summary>
-public record RevenuePointDto(DateTime BucketStart, decimal Revenue, int WonDeals, int LostDeals);
+/// <summary>
+/// Receita ganha e fechamentos (ganhos/perdidos) num intervalo da série. <c>BucketStart</c> é a
+/// data <b>local</b> da organização — o front desenha o rótulo como veio, sem reconverter fuso.
+/// </summary>
+public record RevenuePointDto(DateOnly BucketStart, decimal Revenue, int WonDeals, int LostDeals);
 
 /// <summary>
 /// Pipeline aberto num estágio: volume, dinheiro e quantos negócios estão parados — sem mudança de
 /// estágio há mais de <see cref="DashboardOverviewDto.StalledAfterDays"/> dias (via StageChange).
+/// <c>Amount</c> usa o valor efetivo (valor em negociação ou, na falta dele, o ticket estimado);
+/// <c>EstimatedCount</c> diz quantos desses negócios entraram com o ticket.
 /// </summary>
-public record PipelineStageDto(DealStage Stage, int Count, decimal Amount, int StalledCount);
+public record PipelineStageDto(DealStage Stage, int Count, decimal Amount, int EstimatedCount, int StalledCount);
 
-/// <summary>Negócio aberto de maior valor, com a próxima ação pendente (quando houver).</summary>
+/// <summary>
+/// Conversão histórica de uma etapa: dos negócios que entraram nela, quantos seguiram para uma
+/// etapa posterior ou para Ganho, e quanto tempo ficaram ali. <c>null</c> quando não há amostra.
+/// </summary>
+public record StageAdvanceRateDto(
+    DealStage Stage,
+    int EnteredCount,
+    int AdvancedCount,
+    decimal? AdvanceRate,
+    double? AverageDaysInStage);
+
+/// <summary>
+/// Negócio aberto de maior valor, com a próxima ação pendente (quando houver).
+/// <c>IsEstimated</c> marca o valor que veio do ticket, não do valor em negociação.
+/// </summary>
 public record FeaturedDealDto(
     Guid Id,
     string CompanyName,
     DealStage Stage,
     decimal? Amount,
+    bool IsEstimated,
     string OwnerUserName,
     int DaysInStage,
     DateTime? NextTaskDueDate,
@@ -63,11 +84,23 @@ public record OwnerPerformanceDto(
 /// A central de comando comercial: dinheiro → performance → pipeline → ação, sempre com a mesma
 /// janela anterior para comparação. Receita e fechamentos contam por <c>Deal.ClosedAt</c>; entrada
 /// no funil por <c>Deal.CreatedAt</c>; o pipeline é a fotografia atual (não depende do período).
+///
+/// As janelas são recortadas em dias inteiros no fuso da organização, e <see cref="Scope"/> devolve
+/// o recorte que de fato valeu — o pedido do client é resolvido no servidor, nunca aceito de olhos
+/// fechados.
+///
+/// <c>HistoryStart</c> é o primeiro <c>Deal.CreatedAt</c> do escopo: antes dele não existe base de
+/// comparação, e o front diz isso em vez de inventar percentual. <c>WeightedForecast</c> é a receita
+/// prevista do pipeline aberto, ponderada pela probabilidade histórica de cada etapa — <c>null</c>
+/// quando não há histórico que a sustente.
 /// </summary>
 public record DashboardOverviewDto(
     int PeriodDays,
+    DealScope Scope,
     DateTime PeriodStart,
     DateTime PeriodEnd,
+    DateTime PreviousStart,
+    DateTime? HistoryStart,
     PeriodValueDto Revenue,
     PeriodValueDto WonDeals,
     PeriodValueDto LostDeals,
@@ -78,6 +111,8 @@ public record DashboardOverviewDto(
     IReadOnlyList<RevenuePointDto> RevenueSeries,
     string SeriesGranularity,
     IReadOnlyList<PipelineStageDto> Pipeline,
+    IReadOnlyList<StageAdvanceRateDto> StageAdvanceRates,
+    decimal? WeightedForecast,
     int OpenDealsWithoutAmount,
     int StalledAfterDays,
     IReadOnlyList<FeaturedDealDto> FeaturedDeals,

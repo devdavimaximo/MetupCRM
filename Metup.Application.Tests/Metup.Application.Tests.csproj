@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Metup.Domain\Metup.Domain.csproj" />
+    <ProjectReference Include="..\Metup.Application\Metup.Application.csproj" />
+    <ProjectReference Include="..\Metup.Infrastructure\Metup.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- O provedor em memória vem de uma trilha de versão própria; Relational é fixado para casar
+         com o que a Infrastructure usa, senão as configurações de mapeamento não carregam. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.2.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

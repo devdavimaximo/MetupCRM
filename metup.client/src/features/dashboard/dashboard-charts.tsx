@@ -2,7 +2,7 @@ import { useId, useMemo } from "react"
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { numberFormatter } from "@/lib/format"
-import { DONUT_COLORS, formatBucket, formatMoneyCompact, formatMoneyWhole, smoothSeries } from "./dashboard-format"
+import { DONUT_COLORS, formatLocalDay, formatMoneyCompact, formatMoneyWhole, smoothSeries } from "./dashboard-format"
 
 const ACCENT = "var(--color-accent)"
 
@@ -52,7 +52,7 @@ function RevenueTooltip({ active, payload }: { active?: boolean; payload?: Reado
         {formatMoneyWhole(datum.cumulative)}
       </p>
       <p className="text-xs text-muted tabular">
-        {formatBucket(datum.bucketStart)}
+        {formatLocalDay(datum.bucketStart)}
         {datum.wonDeals > 0 && ` · +${formatMoneyCompact(datum.revenue)} em ${numberFormatter.format(datum.wonDeals)} ${datum.wonDeals === 1 ? "ganho" : "ganhos"}`}
       </p>
     </div>
@@ -87,7 +87,7 @@ export function RevenueAreaChart({ data }: { data: RevenueDatum[] }) {
         <CartesianGrid vertical={false} stroke="var(--color-line-soft)" strokeDasharray="0" />
         <XAxis
           dataKey="bucketStart"
-          tickFormatter={formatBucket}
+          tickFormatter={formatLocalDay}
           tick={{ fill: "var(--color-muted)", fontSize: 11 }}
           axisLine={false}
           tickLine={false}

@@ -22,6 +22,12 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
             .HasColumnName("integration_token_hash")
             .HasMaxLength(500);
 
+        builder.Property(o => o.TimeZoneId)
+            .HasColumnName("time_zone_id")
+            .HasMaxLength(100)
+            .HasDefaultValue(Organization.DefaultTimeZoneId)
+            .IsRequired();
+
         builder.Property(o => o.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

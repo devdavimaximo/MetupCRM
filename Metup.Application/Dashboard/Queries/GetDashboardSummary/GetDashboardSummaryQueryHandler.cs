@@ -10,17 +10,20 @@ namespace Metup.Application.Dashboard.Queries.GetDashboardSummary;
 
 public class GetDashboardSummaryQueryHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<GetDashboardSummaryQuery, DashboardSummaryDto>
+    ICurrentUserService currentUserService,
+    IOrganizationClock organizationClock) : IRequestHandler<GetDashboardSummaryQuery, DashboardSummaryDto>
 {
     public async Task<DashboardSummaryDto> Handle(GetDashboardSummaryQuery request, CancellationToken cancellationToken)
     {
         var organizationId = currentUserService.RequireOrganizationId();
         var userId = currentUserService.RequireUserId();
 
-        // Mesmos recortes de prazo do bucketOf() do front (overdue/today/upcoming), mas em UTC —
-        // suficiente para a fotografia de hoje da V1, sem timezone por usuário/organização ainda.
-        var now = DateTime.UtcNow;
-        var endOfToday = now.Date.AddDays(1).AddTicks(-1);
+        // Mesmos recortes de prazo do bucketOf() do front (overdue/today/upcoming), com o dia
+        // recortado no fuso da organização: a tarefa das 22h de hoje em Brasília é "hoje".
+        var clock = await organizationClock.SnapshotAsync(cancellationToken);
+        var now = clock.UtcNow;
+        var startOfToday = clock.StartOfDayUtc(clock.Today);
+        var endOfToday = clock.EndOfDayUtc(clock.Today);
 
         var pendingTasks = context.Tasks
             .AsNoTracking()
@@ -59,7 +62,7 @@ public class GetDashboardSummaryQueryHandler(
             .AsNoTracking()
             .Where(a => a.OrganizationId == organizationId
                 && a.AuthorUserId == userId
-                && a.OccurredAt >= now.Date
+                && a.OccurredAt >= startOfToday
                 && a.OccurredAt <= endOfToday)
             .GroupBy(a => a.Type)
             .Select(g => new ActivitiesByTypeDto(g.Key, g.Count()))

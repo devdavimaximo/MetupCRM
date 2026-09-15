@@ -20,31 +20,70 @@ export const formatMoneyCompact = (value: number) => moneyCompact.format(value)
 
 export const formatPercent = (value: number) => percent.format(value)
 
-/** "14/09" — rótulo de eixo. */
-export const formatBucket = (iso: string) => bucketDay.format(new Date(iso))
+/** "14/09" a partir de uma data local da organização ("2026-09-14") — sem reconverter fuso. */
+export function formatLocalDay(localDate: string) {
+  const [year, month, day] = localDate.split("-").map(Number)
+  return bucketDay.format(new Date(year, month - 1, day))
+}
+
+/** "14/09" a partir de um instante ISO (prazo de tarefa, evento) — esse sim é convertido. */
+export const formatInstantDay = (iso: string) => bucketDay.format(new Date(iso))
 
 /** "15 de setembro de 2026". */
 export const formatLongDate = (date = new Date()) => longDate.format(date)
 
-export type Delta = { direction: "up" | "down" | "flat"; label: string } | null
+/**
+ * O que dá para dizer da variação contra a janela anterior. Percentual só quando existe base real;
+ * nos demais casos o cartão diz por que não há comparação, em vez de um "sem base anterior" mudo.
+ */
+export type Delta =
+  | { kind: "change"; direction: "up" | "down" | "flat"; label: string }
+  | { kind: "new" }
+  | { kind: "idle" }
+  | { kind: "no-history" }
 
-/** Variação contra a janela anterior. Sem base anterior não há percentual honesto — devolve null. */
-export function deltaOf({ current, previous }: PeriodValue): Delta {
-  if (previous === 0) return null
+/** Recorte das duas janelas e o início do histórico do escopo — vindos do overview. */
+export type DeltaContext = { historyStart: string | null; previousStart: string; periodStart: string }
+
+/** A janela anterior inteira acontece antes do primeiro negócio: não existe o que comparar. */
+function hasNoBaseline({ historyStart, periodStart }: DeltaContext) {
+  return historyStart === null || new Date(historyStart) >= new Date(periodStart)
+}
+
+export function deltaOf({ current, previous }: PeriodValue, context: DeltaContext): Delta {
+  if (hasNoBaseline(context)) return { kind: "no-history" }
+  if (previous === 0) return current > 0 ? { kind: "new" } : { kind: "idle" }
+
   const change = (current - previous) / previous
-  if (Math.abs(change) < 0.0005) return { direction: "flat", label: "0%" }
-  return { direction: change > 0 ? "up" : "down", label: `${change > 0 ? "+" : "−"}${percent.format(Math.abs(change))}` }
+  if (Math.abs(change) < 0.0005) return { kind: "change", direction: "flat", label: "0%" }
+  return {
+    kind: "change",
+    direction: change > 0 ? "up" : "down",
+    label: `${change > 0 ? "+" : "−"}${percent.format(Math.abs(change))}`,
+  }
 }
 
 /** Variação em pontos percentuais — para taxas, onde "% de %" confunde. */
-export function deltaPoints(current: number | null, previous: number | null): Delta {
-  if (current === null || previous === null) return null
+export function deltaPoints(current: number | null, previous: number | null, context: DeltaContext): Delta {
+  if (hasNoBaseline(context)) return { kind: "no-history" }
+  if (previous === null) return current === null ? { kind: "idle" } : { kind: "new" }
+  if (current === null) return { kind: "idle" }
+
   const diff = (current - previous) * 100
-  if (Math.abs(diff) < 0.05) return { direction: "flat", label: "0 p.p." }
+  if (Math.abs(diff) < 0.05) return { kind: "change", direction: "flat", label: "0 p.p." }
   return {
+    kind: "change",
     direction: diff > 0 ? "up" : "down",
     label: `${diff > 0 ? "+" : "−"}${numberFormatter.format(Math.round(Math.abs(diff) * 10) / 10)} p.p.`,
   }
+}
+
+/** "18/03 – 16/06": o intervalo que a comparação usa, para o tooltip do delta. */
+export function comparisonRange({ previousStart, periodStart }: DeltaContext) {
+  const start = new Date(previousStart)
+  const end = new Date(periodStart)
+  end.setDate(end.getDate() - 1)
+  return `${bucketDay.format(start)} – ${bucketDay.format(end)}`
 }
 
 export function closeRate(won: number, lost: number): number | null {

@@ -1,3 +1,4 @@
+using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
 using Metup.Application.Dashboard.Queries.GetDashboardSummary;
@@ -16,9 +17,14 @@ public class DashboardController(ISender sender) : ControllerBase
     public async Task<ActionResult<DashboardSummaryDto>> Get(CancellationToken cancellationToken) =>
         Ok(await sender.Send(new GetDashboardSummaryQuery(), cancellationToken));
 
+    /// <summary>
+    /// O escopo é um pedido: quem decide o que este usuário enxerga é o caso de uso
+    /// (<c>ResolveDealScope</c>). O escopo aplicado volta no próprio DTO.
+    /// </summary>
     [HttpGet("overview")]
     public async Task<ActionResult<DashboardOverviewDto>> GetOverview(
         [FromQuery] int days = 30,
+        [FromQuery] DealScope scope = DealScope.Organization,
         CancellationToken cancellationToken = default) =>
-        Ok(await sender.Send(new GetDashboardOverviewQuery(days), cancellationToken));
+        Ok(await sender.Send(new GetDashboardOverviewQuery(days, scope), cancellationToken));
 }

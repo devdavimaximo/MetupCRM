@@ -1,4 +1,5 @@
 using Metup.Application.Common.Interfaces;
+using Metup.Application.Deals.Analytics;
 using Metup.Application.Reports.Common;
 using Metup.Domain.Deals;
 using MediatR;
@@ -57,27 +58,10 @@ public class GetForecastReportQueryHandler(
         var stageReaches = await context.StageChanges
             .AsNoTracking()
             .Where(sc => sc.OrganizationId == organizationId)
-            .Select(sc => new { sc.DealId, sc.ToStage })
+            .Select(sc => new StageReach(sc.DealId, sc.ToStage, sc.ChangedAt))
             .ToListAsync(cancellationToken);
 
-        var winProbabilityByStage = stageReaches
-            .GroupBy(sc => sc.ToStage)
-            .ToDictionary(
-                g => g.Key,
-                g =>
-                {
-                    var closedDealIds = g.Select(sc => sc.DealId).Distinct()
-                        .Where(closedDealStatusById.ContainsKey)
-                        .ToList();
-
-                    if (closedDealIds.Count == 0)
-                    {
-                        return (decimal?)null;
-                    }
-
-                    var wonCount = closedDealIds.Count(id => closedDealStatusById[id] == DealStatus.Ganho);
-                    return (decimal?)wonCount / closedDealIds.Count;
-                });
+        var winProbabilityByStage = StageAnalytics.CalculateWinProbabilities(stageReaches, closedDealStatusById);
 
         var byStage = pipelineByStage
             .Select(p =>
