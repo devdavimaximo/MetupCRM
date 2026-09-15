@@ -40,6 +40,14 @@ public class GetDashboardSummaryQueryHandler(
             .ToTaskDto(context)
             .ToListAsync(cancellationToken);
 
+        // Fila curta em ordem de prazo, incluindo o que vem depois de hoje — o painel lateral do dashboard.
+        var nextTasks = await pendingTasks
+            .OrderBy(t => t.DueDate)
+            .ThenBy(t => t.Id)
+            .Take(5)
+            .ToTaskDto(context)
+            .ToListAsync(cancellationToken);
+
         var openDealsByStage = await context.Deals
             .AsNoTracking()
             .Where(d => d.OrganizationId == organizationId && d.Status == DealStatus.Aberto)
@@ -60,6 +68,7 @@ public class GetDashboardSummaryQueryHandler(
         return new DashboardSummaryDto(
             taskCounts,
             todayTasks,
+            nextTasks,
             openDealsByStage,
             openDealsByStage.Sum(d => d.Count),
             activitiesToday,

@@ -20,6 +20,7 @@ public record ActivitiesByTypeDto(ActivityType Type, int Count);
 public record DashboardSummaryDto(
     TaskCountsDto TaskCounts,
     IReadOnlyList<TaskDto> TodayTasks,
+    IReadOnlyList<TaskDto> NextTasks,
     IReadOnlyList<DealsByStageDto> OpenDealsByStage,
     int OpenDealsTotal,
     IReadOnlyList<ActivitiesByTypeDto> ActivitiesToday,

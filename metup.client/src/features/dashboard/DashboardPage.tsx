@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react"
-import { ArrowRight, CheckCheck } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { CalendarDays, ChevronDown, CircleDollarSign, Clock3, Filter, House, Users } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Page, PageHeader } from "@/components/ui/page"
-import { Alert, EmptyState, Skeleton, SkeletonRows } from "@/components/ui/states"
-import { activityTypeIcons } from "@/features/activities/activity-icons"
-import { activityTypeLabels } from "@/features/activities/activity-labels"
+import { Alert, Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
-import { ACTIVE_STAGES, stageLabels } from "@/features/deals/stage-labels"
-import { TaskListItem } from "@/features/tasks/TaskListItem"
+import { getForecastReport, type ForecastReport } from "@/features/reports/api"
 import type { TaskItem } from "@/features/tasks/api"
-import { formatLongToday, numberFormatter, pluralize } from "@/lib/format"
+import { numberFormatter } from "@/lib/format"
 import type { View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
-import { getDashboardSummary, type DashboardSummary } from "./api"
+import { sourceLabels } from "@/features/deals/stage-labels"
+import { getDashboardOverview, getDashboardSummary, type DashboardOverview, type DashboardSummary } from "./api"
+import { OriginDonut, RevenueAreaChart } from "./dashboard-charts"
+import { FeaturedDealsCard, KpiCard, Panel, PanelHeading, PipelineCard, PotentialCard, DeltaLine } from "./dashboard-cards"
+import {
+  closeRate,
+  deltaOf,
+  deltaPoints,
+  DONUT_COLORS,
+  formatLongDate,
+  formatMoneyWhole,
+  formatPercent,
+  periodOptions,
+  type PeriodValueKey,
+} from "./dashboard-format"
+import { SideColumn } from "./dashboard-side"
 
 type Props = {
   userName: string
@@ -22,19 +31,7 @@ type Props = {
   onNavigate: (view: View) => void
 }
 
-type Bucket = "overdue" | "today"
-
-function bucketOf(task: TaskItem): Bucket {
-  return new Date(task.dueDate) < new Date() ? "overdue" : "today"
-}
-
-const bucketLabels: Record<Bucket, string> = {
-  overdue: "Atrasadas",
-  today: "Para hoje",
-}
-
-/** Quantas linhas de cada grupo cabem na fila do dashboard; o resto está a um clique, em Tarefas. */
-const QUEUE_PREVIEW = 6
+const PERIOD_STORAGE_KEY = "metup.dashboard.period"
 
 function greeting(date = new Date()) {
   const hour = date.getHours()
@@ -43,9 +40,29 @@ function greeting(date = new Date()) {
   return "Boa noite"
 }
 
-/** A tela-mãe (seção 3.1 do CLAUDE.md): quanto trabalho comercial tem hoje e onde estão as oportunidades. */
+function readStoredPeriod(): PeriodValueKey {
+  try {
+    const stored = localStorage.getItem(PERIOD_STORAGE_KEY)
+    return periodOptions.some((o) => o.value === stored) ? (stored as PeriodValueKey) : "30"
+  } catch {
+    return "30"
+  }
+}
+
+/** Série acumulada a partir de valores por intervalo. */
+function runningSum(values: number[]) {
+  return values.reduce<number[]>((acc, v) => [...acc, (acc.at(-1) ?? 0) + v], [])
+}
+
+/**
+ * Visão geral — a central de comando comercial em uma tela. No desktop o conteúdo cabe na
+ * altura da janela (grade com linhas fracionárias); abaixo de xl os blocos empilham.
+ */
 export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
+  const [period, setPeriod] = useState<PeriodValueKey>(readStoredPeriod)
+  const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [forecast, setForecast] = useState<ForecastReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadVersion, setReloadVersion] = useState(0)
@@ -56,32 +73,47 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
     const controller = new AbortController()
     setIsLoading(true)
     setError(null)
-
-    getDashboardSummary(controller.signal)
-      .then(setSummary)
+    getDashboardOverview(Number(period), controller.signal)
+      .then(setOverview)
       .catch((err: unknown) => {
-        if (controller.signal.aborted) return
-        setError(toMessage(err, "Não foi possível carregar o dashboard."))
+        if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar o dashboard."))
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false)
       })
+    return () => controller.abort()
+  }, [period, reloadVersion])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    getDashboardSummary(controller.signal)
+      .then(setSummary)
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar suas tarefas."))
+      })
+    // O forecast só enriquece o cartão de potencial; se falhar, o cartão fala só do pipeline aberto.
+    getForecastReport({}, controller.signal).then(setForecast).catch(() => {})
     return () => controller.abort()
   }, [reloadVersion])
 
-  function handleTaskCompleted(_updated: TaskItem, task: TaskItem) {
-    const bucket = bucketOf(task)
+  function changePeriod(next: PeriodValueKey) {
+    setPeriod(next)
+    try {
+      localStorage.setItem(PERIOD_STORAGE_KEY, next)
+    } catch {
+      /* conveniência — sem storage, só não lembra */
+    }
+  }
+
+  function handleTaskCompleted(task: TaskItem) {
+    const overdue = new Date(task.dueDate) < new Date()
     setSummary((current) =>
       current
         ? {
             ...current,
+            nextTasks: current.nextTasks.filter((t) => t.id !== task.id),
             todayTasks: current.todayTasks.filter((t) => t.id !== task.id),
-            taskCounts: {
-              ...current.taskCounts,
-              overdue: bucket === "overdue" ? current.taskCounts.overdue - 1 : current.taskCounts.overdue,
-              today: bucket === "today" ? current.taskCounts.today - 1 : current.taskCounts.today,
-            },
+            taskCounts: { ...current.taskCounts, overdue: current.taskCounts.overdue - (overdue ? 1 : 0) },
           }
         : current
     )
@@ -90,308 +122,227 @@ export function DashboardPage({ userName, onOpenDeal, onNavigate }: Props) {
   const firstName = userName.trim().split(/\s+/)[0] ?? userName
 
   return (
-    <Page>
-      <PageHeader
-        eyebrow={formatLongToday()}
-        title={`${greeting()}, ${firstName}`}
-        description={summary ? <SummarySentence summary={summary} /> : "Quanto trabalho comercial você tem hoje e onde estão as oportunidades."}
-      />
+    <div className="relative mx-auto flex w-full max-w-[112rem] flex-col gap-5 overflow-x-clip px-4 pt-5 pb-8 sm:px-6 xl:h-svh xl:min-h-[56rem] xl:gap-4 xl:px-8 xl:pt-4 xl:pb-4">
+      <HeaderGlow />
+
+      <header className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <nav aria-label="Trilha" className="flex items-center gap-2 text-xs text-muted">
+            <House className="size-3.5 text-accent" aria-hidden="true" />
+            <span>CRM</span>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page" className="text-accent">
+              Visão geral
+            </span>
+          </nav>
+          <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg min-[1700px]:text-4xl">
+            {greeting()}, {firstName}.
+          </h1>
+          <p className="text-base text-fg-muted">Aqui está o resumo da sua operação comercial de hoje.</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 max-sm:w-full">
+          <span className="inline-flex h-10 items-center gap-3 rounded-md border border-line-soft bg-surface px-4 text-sm text-fg max-sm:flex-1">
+            <CalendarDays className="size-4 text-fg-muted" aria-hidden="true" />
+            {formatLongDate()}
+          </span>
+          <label className="relative inline-flex h-10 items-center rounded-md border border-line-soft bg-surface text-sm text-fg focus-within:focus-ring max-sm:flex-1">
+            <span className="sr-only">Período de análise</span>
+            <select
+              value={period}
+              onChange={(e) => changePeriod(e.target.value as PeriodValueKey)}
+              className="h-full w-full min-w-44 cursor-pointer appearance-none bg-transparent pr-10 pl-4 outline-none"
+            >
+              {periodOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3.5 size-4 text-fg-muted" aria-hidden="true" />
+          </label>
+        </div>
+      </header>
 
       {error && <Alert onRetry={reload}>{error}</Alert>}
 
-      {isLoading && !summary && !error && <DashboardSkeleton />}
-
-      {summary && (
-        <>
-          <section aria-label="Resumo de hoje">
-            <Card className="grid grid-cols-2 lg:grid-cols-4">
-              <Kpi
-                label="Atrasados"
-                value={summary.taskCounts.overdue}
-                tone={summary.taskCounts.overdue > 0 ? "danger" : "default"}
-                caption={summary.taskCounts.overdue > 0 ? "follow-ups vencidos" : "nenhum vencido"}
-              />
-              <Kpi label="Para hoje" value={summary.taskCounts.today} caption="follow-ups na fila" />
-              <Kpi label="Próximos" value={summary.taskCounts.upcoming} caption="agendados à frente" />
-              <Kpi
-                label="Atividades hoje"
-                value={summary.activitiesTodayTotal}
-                caption={summary.activitiesTodayTotal > 0 ? "registradas hoje" : "nenhum registro ainda"}
-              />
-            </Card>
-          </section>
-
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
-            <FollowUpQueue
-              summary={summary}
-              onOpenDeal={onOpenDeal}
-              onTaskCompleted={handleTaskCompleted}
-              onNavigate={onNavigate}
-            />
-
-            <div className="flex flex-col gap-6">
-              <OpenPipeline summary={summary} onNavigate={onNavigate} />
-              <TodayActivities summary={summary} />
-            </div>
-          </div>
-        </>
+      {!overview ? (
+        !error && <DashboardSkeleton />
+      ) : (
+        <div
+          aria-busy={isLoading}
+          className={cn(
+            "relative grid min-h-0 flex-1 gap-4 transition-opacity xl:grid-cols-[minmax(0,1fr)_19rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]",
+            isLoading && "opacity-60"
+          )}
+        >
+          <MainGrid overview={overview} forecast={forecast} onOpenDeal={onOpenDeal} onNavigate={onNavigate} />
+          <SideColumn
+            events={overview.recentEvents}
+            tasks={summary?.nextTasks ?? null}
+            overdueCount={summary?.taskCounts.overdue ?? 0}
+            onOpenDeal={onOpenDeal}
+            onSeeTasks={() => onNavigate("tarefas")}
+            onTaskCompleted={handleTaskCompleted}
+          />
+        </div>
       )}
-    </Page>
-  )
-}
-
-function SummarySentence({ summary }: { summary: DashboardSummary }) {
-  const { overdue, today } = summary.taskCounts
-
-  if (overdue > 0) {
-    return (
-      <>
-        Você tem <strong className="font-semibold text-danger">{pluralize(overdue, "follow-up atrasado", "follow-ups atrasados")}</strong>{" "}
-        e {pluralize(today, "para hoje", "para hoje")}. Comece pelos atrasados.
-      </>
-    )
-  }
-
-  if (today > 0) {
-    return (
-      <>
-        Hoje você tem <strong className="font-semibold text-fg">{pluralize(today, "follow-up", "follow-ups")}</strong> na fila.
-      </>
-    )
-  }
-
-  return <>Nenhum follow-up pendente para hoje — bom momento para prospectar.</>
-}
-
-function Kpi({
-  label,
-  value,
-  caption,
-  tone = "default",
-}: {
-  label: string
-  value: number
-  caption: string
-  tone?: "default" | "danger"
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 border-line-soft px-5 py-5 sm:px-6",
-        "odd:border-r nth-[-n+2]:border-b lg:border-b-0 lg:not-last:border-r"
-      )}
-    >
-      <p className="label-mono flex items-center gap-2 text-muted">
-        {tone === "danger" && <span aria-hidden="true" className="size-1.5 rounded-full bg-danger" />}
-        {label}
-      </p>
-      <p
-        className={cn(
-          "font-display text-3xl font-semibold tracking-[-0.02em] tabular",
-          tone === "danger" ? "text-danger" : "text-fg"
-        )}
-      >
-        {numberFormatter.format(value)}
-      </p>
-      <p className="text-sm text-muted">{caption}</p>
     </div>
   )
 }
 
-function FollowUpQueue({
-  summary,
+function MainGrid({
+  overview,
+  forecast,
   onOpenDeal,
-  onTaskCompleted,
   onNavigate,
 }: {
-  summary: DashboardSummary
+  overview: DashboardOverview
+  forecast: ForecastReport | null
   onOpenDeal: (dealId: string) => void
-  onTaskCompleted: (updated: TaskItem, original: TaskItem) => void
   onNavigate: (view: View) => void
 }) {
-  const buckets: Bucket[] = ["overdue", "today"]
-  const grouped = buckets.map((bucket) => ({
-    bucket,
-    items: summary.todayTasks.filter((t) => bucketOf(t) === bucket),
-  }))
+  const series = overview.revenueSeries
+  const trends = useMemo(() => {
+    const revenue = runningSum(series.map((p) => p.revenue))
+    const won = runningSum(series.map((p) => p.wonDeals))
+    const lost = runningSum(series.map((p) => p.lostDeals))
+    return {
+      revenue,
+      won,
+      rate: won.map((w, i) => closeRate(w, lost[i]) ?? 0),
+      ticket: won.map((w, i) => (w === 0 ? 0 : revenue[i] / w)),
+    }
+  }, [series])
+
+  const chartData = useMemo(
+    () => series.map((p, i) => ({ bucketStart: p.bucketStart, cumulative: trends.revenue[i], revenue: p.revenue, wonDeals: p.wonDeals })),
+    [series, trends]
+  )
+
+  const won = overview.wonDeals
+  const avgTicket = won.current > 0 ? overview.revenue.current / won.current : null
+  const prevTicket = won.previous > 0 ? overview.revenue.previous / won.previous : null
+  const rate = closeRate(won.current, overview.lostDeals.current)
+  const prevRate = closeRate(won.previous, overview.lostDeals.previous)
+
+  const openAmount = overview.pipeline.reduce((sum, s) => sum + s.amount, 0)
+  const closingAmount = overview.pipeline
+    .filter((s) => s.stage === "Proposta" || s.stage === "Negociacao")
+    .reduce((sum, s) => sum + s.amount, 0)
+  const hasProbability = forecast?.byStage.some((s) => s.winProbability !== null) ?? false
+
+  const totalNew = overview.sources.reduce((sum, s) => sum + s.newDeals, 0)
+  const slices = overview.sources.map((s) => ({ key: s.source, label: sourceLabels[s.source], value: s.newDeals }))
 
   return (
-    <Card role="region" aria-labelledby="queue-heading">
-      <CardHeader>
-        <CardTitle id="queue-heading">Fila de follow-ups</CardTitle>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate("tarefas")}>
-          Ver todas
-          <ArrowRight aria-hidden="true" />
-        </Button>
-      </CardHeader>
-
-      {summary.todayTasks.length === 0 ? (
-        <EmptyState
-          icon={CheckCheck}
-          title="Fila zerada"
-          description="Nenhum follow-up vencido ou para hoje. Aproveite para abrir novas conversas."
-          action={
-            <Button type="button" variant="outline" size="sm" onClick={() => onNavigate("empresas")}>
-              Ver empresas
-            </Button>
-          }
+    <div className="grid min-h-0 min-w-0 gap-4 xl:grid-rows-[auto_auto_minmax(10rem,0.92fr)_minmax(12rem,1.08fr)]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4 xl:grid-cols-4">
+        <KpiCard icon={CircleDollarSign} label="Receita Gerada" value={formatMoneyWhole(overview.revenue.current)} delta={deltaOf(overview.revenue)} trend={trends.revenue} />
+        <KpiCard icon={Users} label="Negócios Fechados" value={numberFormatter.format(won.current)} delta={deltaOf(won)} trend={trends.won} />
+        <KpiCard icon={Filter} label="Taxa de Conversão" value={rate === null ? "—" : formatPercent(rate)} delta={deltaPoints(rate, prevRate)} trend={trends.rate} />
+        <KpiCard
+          icon={Clock3}
+          label="Ticket Médio"
+          value={avgTicket === null ? "—" : formatMoneyWhole(avgTicket)}
+          delta={avgTicket !== null && prevTicket !== null ? deltaOf({ current: avgTicket, previous: prevTicket }) : null}
+          trend={trends.ticket}
         />
-      ) : (
-        <div aria-live="polite">
-          {grouped.map(({ bucket, items }) =>
-            items.length === 0 ? null : (
-              <section key={bucket} aria-labelledby={`queue-${bucket}`}>
-                <h3
-                  id={`queue-${bucket}`}
-                  className={cn(
-                    "label-mono flex items-center justify-between border-b border-line-soft/60 bg-sunken/40 px-4 py-2 sm:px-5",
-                    bucket === "overdue" ? "text-danger" : "text-fg-muted"
-                  )}
-                >
-                  {bucketLabels[bucket]}
-                  <span className="tabular text-muted">
-                    {bucket === "overdue" ? summary.taskCounts.overdue : summary.taskCounts.today}
+      </div>
+
+      <PipelineCard
+        pipeline={overview.pipeline}
+        wonInPeriod={won.current}
+        wonAmount={overview.revenue.current}
+        conversion={rate}
+        stalledAfterDays={overview.stalledAfterDays}
+      />
+
+      <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+        <Panel aria-labelledby="revenue-heading" className="gap-2 px-4 pt-3.5 pb-2">
+          <PanelHeading
+            id="revenue-heading"
+            title="Evolução da Receita"
+            subtitle="Receita acumulada da sua operação ao longo do período."
+            aside={<div className="shrink-0 text-right"><DeltaLine delta={deltaOf(overview.revenue)} /></div>}
+          />
+          <div className="relative h-60 min-h-0 xl:h-auto xl:min-h-24 xl:flex-1">
+            <RevenueAreaChart data={chartData} />
+            {overview.revenue.current === 0 && (
+              <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
+                Nenhum negócio ganho neste período.
+              </p>
+            )}
+          </div>
+        </Panel>
+
+        <Panel aria-labelledby="origin-heading" className="gap-3 px-4 py-3.5">
+          <PanelHeading id="origin-heading" title="Origem dos Negócios" subtitle="De onde vêm os negócios que entraram no período." />
+          <div className="flex min-h-0 flex-1 items-center gap-5">
+            <div className="my-2 size-28 shrink-0 min-[1700px]:size-34">
+              <OriginDonut slices={slices} total={totalNew} caption="no período" />
+            </div>
+            <ul className="flex min-w-0 flex-1 flex-col gap-3">
+              {overview.sources.length === 0 && <li className="text-sm text-muted">Nenhum negócio novo.</li>}
+              {overview.sources.map((s, i) => (
+                <li key={s.source} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
+                    <span className="truncate text-fg-muted">{sourceLabels[s.source]}</span>
                   </span>
-                </h3>
-                <ul className="divide-y divide-line-soft/60">
-                  {items.slice(0, QUEUE_PREVIEW).map((task) => (
-                    <TaskListItem
-                      key={task.id}
-                      task={task}
-                      overdue={bucket === "overdue"}
-                      actions="quick"
-                      showOwner={false}
-                      onOpenDeal={onOpenDeal}
-                      onChanged={onTaskCompleted}
-                    />
-                  ))}
-                </ul>
-                {items.length > QUEUE_PREVIEW && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigate("tarefas")}
-                    className="label-mono flex w-full cursor-pointer items-center justify-center gap-2 border-t border-line-soft/60 py-3 text-muted transition-colors hover:bg-surface-2/50 hover:text-fg focus-visible:focus-ring"
-                  >
-                    + {items.length - QUEUE_PREVIEW} {bucket === "overdue" ? "atrasadas" : "para hoje"} em Tarefas
-                  </button>
-                )}
-              </section>
-            )
-          )}
-        </div>
-      )}
-    </Card>
-  )
-}
-
-function OpenPipeline({ summary, onNavigate }: { summary: DashboardSummary; onNavigate: (view: View) => void }) {
-  const counts = new Map(summary.openDealsByStage.map((d) => [d.stage, d.count]))
-  const max = Math.max(1, ...summary.openDealsByStage.map((d) => d.count))
-
-  return (
-    <Card role="region" aria-labelledby="pipeline-heading">
-      <CardHeader>
-        <CardTitle id="pipeline-heading">Pipeline aberto</CardTitle>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate("pipeline")}>
-          Abrir
-          <ArrowRight aria-hidden="true" />
-        </Button>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <p className="flex items-baseline gap-2">
-          <span className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg tabular">
-            {numberFormatter.format(summary.openDealsTotal)}
-          </span>
-          <span className="text-sm text-muted">{summary.openDealsTotal === 1 ? "negócio em aberto" : "negócios em aberto"}</span>
-        </p>
-
-        {summary.openDealsTotal === 0 ? (
-          <p className="text-sm text-muted">Nenhum negócio em andamento. Crie o primeiro a partir da ficha de uma empresa.</p>
-        ) : (
-          <ol className="flex flex-col gap-3">
-            {ACTIVE_STAGES.map((stage, index) => {
-              const count = counts.get(stage) ?? 0
-              return (
-                <li key={stage} className="flex flex-col gap-1.5">
-                  <div className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className={cn("flex items-baseline gap-2", count === 0 ? "text-faint" : "text-fg-muted")}>
-                      <span className="font-mono text-2xs text-faint tabular">{String(index + 1).padStart(2, "0")}</span>
-                      {stageLabels[stage]}
-                    </span>
-                    <span className={cn("tabular", count === 0 ? "text-faint" : "font-medium text-fg")}>{count}</span>
-                  </div>
-                  <div className="h-1 w-full bg-surface-3" aria-hidden="true">
-                    <div
-                      className="h-full bg-accent transition-[width] duration-500 ease-out"
-                      style={{ width: `${count === 0 ? 0 : Math.max(2, (count / max) * 100)}%` }}
-                    />
-                  </div>
+                  <span className="text-fg tabular" title={`${s.newDeals} negócios · ${s.wonDeals} ganhos`}>
+                    {formatPercent(totalNew === 0 ? 0 : s.newDeals / totalNew)}
+                  </span>
                 </li>
-              )
-            })}
-          </ol>
-        )}
-      </CardContent>
-    </Card>
+              ))}
+            </ul>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <FeaturedDealsCard deals={overview.featuredDeals} onOpenDeal={onOpenDeal} />
+        <PotentialCard
+          openAmount={openAmount}
+          forecast={hasProbability && forecast ? forecast.totalWeightedForecast : null}
+          closingAmount={closingAmount}
+          onOpenPipeline={() => onNavigate("pipeline")}
+        />
+      </div>
+    </div>
   )
 }
 
-function TodayActivities({ summary }: { summary: DashboardSummary }) {
+/** O arco dourado do topo — a luz que atravessa o cabeçalho na referência, em traço fino. */
+function HeaderGlow() {
   return (
-    <Card role="region" aria-labelledby="activities-heading">
-      <CardHeader>
-        <CardTitle id="activities-heading">Registrado hoje</CardTitle>
-        <span className="font-mono text-2xs text-muted tabular">{summary.activitiesTodayTotal}</span>
-      </CardHeader>
-      {summary.activitiesToday.length === 0 ? (
-        <CardContent>
-          <p className="text-sm text-muted">Nenhuma atividade registrada hoje. Ligações e mensagens aparecem aqui assim que registradas.</p>
-        </CardContent>
-      ) : (
-        <ul className="divide-y divide-line-soft/60">
-          {summary.activitiesToday.map((a) => {
-            const Icon = activityTypeIcons[a.type]
-            return (
-              <ActivityRow key={a.type} icon={<Icon className="size-3.5" aria-hidden="true" />} label={activityTypeLabels[a.type]} count={a.count} />
-            )
-          })}
-        </ul>
-      )}
-    </Card>
-  )
-}
-
-function ActivityRow({ icon, label, count }: { icon: ReactNode; label: string; count: number }) {
-  return (
-    <li className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
-      <span className="text-muted">{icon}</span>
-      <span className="flex-1 text-base text-fg-muted">{label}</span>
-      <span className="font-medium text-fg tabular">{numberFormatter.format(count)}</span>
-    </li>
+    <svg aria-hidden="true" className="pointer-events-none absolute -top-8 left-1/4 hidden h-48 w-[55%] xl:block" viewBox="0 0 800 200" fill="none">
+      <defs>
+        <linearGradient id="dash-arc" x1="0" x2="1" y1="1" y2="0">
+          <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0" />
+          <stop offset="70%" stopColor="var(--color-accent)" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d="M0 200 C 280 150, 520 90, 780 0" stroke="url(#dash-arc)" strokeWidth="1.5" />
+    </svg>
   )
 }
 
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6" role="status">
+    <div role="status" className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_19rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
       <span className="sr-only">Carregando dashboard…</span>
-      <Card className="grid grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <div key={i} className="flex flex-col gap-3 px-6 py-5">
-            <Skeleton className="h-2.5 w-20" />
-            <Skeleton className="h-8 w-14" />
-            <Skeleton className="h-2.5 w-28" />
-          </div>
-        ))}
-      </Card>
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
-        <Card>
-          <SkeletonRows rows={6} />
-        </Card>
-        <Card className="h-80">
-          <SkeletonRows rows={4} />
-        </Card>
+      <div className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-32 rounded-lg" />
+          ))}
+        </div>
+        <Skeleton className="h-44 rounded-lg" />
+        <Skeleton className="h-64 flex-1 rounded-lg" />
       </div>
+      <Skeleton className="h-96 rounded-lg xl:h-full" />
     </div>
   )
 }
