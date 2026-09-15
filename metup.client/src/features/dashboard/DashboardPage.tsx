@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { CalendarDays, ChevronDown, CircleDollarSign, Clock3, Filter, House, Users } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { CircleDollarSign, Clock3, Filter, House, Users } from "lucide-react"
 
+import { DateRangePicker } from "@/components/ui/date-range-picker"
 import { Alert, Skeleton } from "@/components/ui/states"
+import { Hint, TooltipProvider } from "@/components/ui/tooltip"
 import { toMessage } from "@/features/companies/form-errors"
+import type { DealStage } from "@/features/deals/api"
 import type { AuthenticatedUser } from "@/lib/auth"
 import type { TaskItem } from "@/features/tasks/api"
 import { numberFormatter } from "@/lib/format"
-import { writeUrlState, type View } from "@/lib/url-state"
+import { addDays, todayLocal, type LocalDate } from "@/lib/local-date"
+import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
-import { sourceLabels } from "@/features/deals/stage-labels"
 import {
   getDashboardOverview,
   getDashboardSummary,
@@ -16,21 +19,29 @@ import {
   type DashboardSummary,
   type DealScope,
 } from "./api"
-import { OriginDonut, RevenueAreaChart } from "./dashboard-charts"
+import { OriginBreakdown, RevenueAreaChart } from "./dashboard-charts"
 import { FeaturedDealsCard, KpiCard, Panel, PanelHeading, PipelineCard, PotentialCard, DeltaLine } from "./dashboard-cards"
 import {
   closeRate,
   comparisonRange,
   deltaOf,
   deltaPoints,
-  DONUT_COLORS,
-  formatLongDate,
   formatMoneyWhole,
   formatPercent,
-  periodOptions,
   type DeltaContext,
-  type PeriodValueKey,
 } from "./dashboard-format"
+import {
+  isPresetId,
+  MAX_PERIOD_DAYS,
+  periodLabel,
+  periodPresets,
+  periodShortLabel,
+  periodUrlPatch,
+  readInitialPeriod,
+  resolvePeriod,
+  storePeriod,
+  type DashboardPeriod,
+} from "./dashboard-period"
 import { SideColumn } from "./dashboard-side"
 
 type Props = {
@@ -38,10 +49,10 @@ type Props = {
   role: AuthenticatedUser["role"]
   initialScope: string
   onOpenDeal: (dealId: string) => void
+  onOpenCompany: (companyId: string) => void
+  onOpenPipelineAtStage: (stage: DealStage) => void
   onNavigate: (view: View) => void
 }
-
-const PERIOD_STORAGE_KEY = "metup.dashboard.period"
 
 /** Só Admin e Closer alcançam a organização inteira — o servidor decide de novo, isto é só a UI. */
 function canSwitchScope(role: AuthenticatedUser["role"]) {
@@ -57,15 +68,6 @@ function greeting(date = new Date()) {
   return "Boa noite"
 }
 
-function readStoredPeriod(): PeriodValueKey {
-  try {
-    const stored = localStorage.getItem(PERIOD_STORAGE_KEY)
-    return periodOptions.some((o) => o.value === stored) ? (stored as PeriodValueKey) : "30"
-  } catch {
-    return "30"
-  }
-}
-
 /** Série acumulada a partir de valores por intervalo. */
 function runningSum(values: number[]) {
   return values.reduce<number[]>((acc, v) => [...acc, (acc.at(-1) ?? 0) + v], [])
@@ -74,148 +76,189 @@ function runningSum(values: number[]) {
 /**
  * Visão geral — a central de comando comercial em uma tela. No desktop o conteúdo cabe na
  * altura da janela (grade com linhas fracionárias); abaixo de xl os blocos empilham.
+ *
+ * Cada fonte carrega, falha e se recupera sozinha: o panorama (overview) e a fila de tarefas
+ * (summary) têm estado, erro e retry próprios.
  */
-export function DashboardPage({ userName, role, initialScope, onOpenDeal, onNavigate }: Props) {
-  const [period, setPeriod] = useState<PeriodValueKey>(readStoredPeriod)
+export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpenCompany, onOpenPipelineAtStage, onNavigate }: Props) {
+  const [period, setPeriod] = useState<DashboardPeriod>(() => readInitialPeriod(readUrlState()))
+  // "Hoje" da organização: começa no do navegador e é corrigido pelo servidor na primeira resposta.
+  const [orgToday, setOrgToday] = useState<LocalDate>(todayLocal)
   const [scope, setScope] = useState<DealScope>(() =>
     !canSwitchScope(role) || initialScope === "minha" ? "Mine" : "Organization"
   )
-  const [overview, setOverview] = useState<DashboardOverview | null>(null)
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadVersion, setReloadVersion] = useState(0)
 
-  const reload = useCallback(() => setReloadVersion((v) => v + 1), [])
+  const [overview, setOverview] = useState<DashboardOverview | null>(null)
+  const [loadedPeriod, setLoadedPeriod] = useState<DashboardPeriod>(period)
+  const [isOverviewLoading, setIsOverviewLoading] = useState(true)
+  const [overviewError, setOverviewError] = useState<string | null>(null)
+  const [overviewVersion, setOverviewVersion] = useState(0)
+
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  // Concluídas que o servidor ainda não confirmou numa resposta nova — nunca "ressuscitam".
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<ReadonlySet<string>>(() => new Set())
+  const summaryRequest = useRef<AbortController | null>(null)
+
+  const request = useMemo(() => resolvePeriod(period, orgToday), [period, orgToday])
+  const requestKey = "days" in request ? `d:${request.days}` : `r:${request.from}:${request.to}`
 
   useEffect(() => {
     const controller = new AbortController()
-    setIsLoading(true)
-    setError(null)
-    getDashboardOverview(Number(period), scope, controller.signal)
-      .then(setOverview)
+    setIsOverviewLoading(true)
+    setOverviewError(null)
+    getDashboardOverview(request, scope, controller.signal)
+      .then((data) => {
+        setOverview(data)
+        setLoadedPeriod(period)
+        if ("days" in request) setOrgToday(data.periodEndLocal)
+      })
       .catch((err: unknown) => {
-        if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar o dashboard."))
+        if (!controller.signal.aborted) setOverviewError(toMessage(err, "Não foi possível carregar o panorama."))
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
+        if (!controller.signal.aborted) setIsOverviewLoading(false)
       })
     return () => controller.abort()
-  }, [period, scope, reloadVersion])
+    // `request` e `period` mudam junto com `requestKey`; a chave evita refazer por identidade de objeto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey, scope, overviewVersion])
+
+  /**
+   * Busca a fila no servidor. Uma nova busca aborta a anterior, então conclusões em sequência
+   * rápida nunca aplicam uma resposta velha por cima de uma nova.
+   */
+  const loadSummary = useCallback(() => {
+    summaryRequest.current?.abort()
+    const controller = new AbortController()
+    summaryRequest.current = controller
+    getDashboardSummary(controller.signal)
+      .then((data) => {
+        setSummary(data)
+        setSummaryError(null)
+        setHiddenTaskIds((hidden) => {
+          const stillListed = new Set([...hidden].filter((id) => data.nextTasks.some((t) => t.id === id)))
+          return stillListed.size === hidden.size ? hidden : stillListed
+        })
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) setSummaryError(toMessage(err, "Não foi possível carregar suas tarefas."))
+      })
+  }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
-    getDashboardSummary(controller.signal)
-      .then(setSummary)
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar suas tarefas."))
-      })
-    return () => controller.abort()
-  }, [reloadVersion])
+    loadSummary()
+    return () => summaryRequest.current?.abort()
+  }, [loadSummary])
 
   function changeScope(next: DealScope) {
     setScope(next)
     writeUrlState({ dashboardScope: next === "Mine" ? "minha" : "" })
   }
 
-  function changePeriod(next: PeriodValueKey) {
+  function changePeriod(next: DashboardPeriod) {
     setPeriod(next)
-    try {
-      localStorage.setItem(PERIOD_STORAGE_KEY, next)
-    } catch {
-      /* conveniência — sem storage, só não lembra */
-    }
+    storePeriod(next)
+    writeUrlState(periodUrlPatch(next))
   }
 
+  /** A linha já saiu na animação; os números e a reposição vêm do servidor, nunca de conta local. */
   function handleTaskCompleted(task: TaskItem) {
-    const overdue = new Date(task.dueDate) < new Date()
-    setSummary((current) =>
-      current
-        ? {
-            ...current,
-            nextTasks: current.nextTasks.filter((t) => t.id !== task.id),
-            todayTasks: current.todayTasks.filter((t) => t.id !== task.id),
-            taskCounts: { ...current.taskCounts, overdue: current.taskCounts.overdue - (overdue ? 1 : 0) },
-          }
-        : current
-    )
+    setHiddenTaskIds((hidden) => new Set(hidden).add(task.id))
+    loadSummary()
   }
 
   const firstName = userName.trim().split(/\s+/)[0] ?? userName
+  const visibleTasks = summary ? summary.nextTasks.filter((t) => !hiddenTaskIds.has(t.id)) : null
+  const pickerRange = "days" in request ? { from: addDays(orgToday, -(request.days - 1)), to: orgToday } : request
+
+  const side = (
+    <SideColumn
+      events={overview?.recentEvents ?? null}
+      tasks={visibleTasks}
+      overdueCount={summary?.taskCounts.overdue ?? 0}
+      tasksError={summaryError}
+      onRetryTasks={loadSummary}
+      onOpenDeal={onOpenDeal}
+      onSeeTasks={() => onNavigate("tarefas")}
+      onTaskCompleted={handleTaskCompleted}
+    />
+  )
 
   return (
-    <div className="relative mx-auto flex w-full max-w-[112rem] flex-col gap-5 overflow-x-clip px-4 pt-5 pb-8 sm:px-6 xl:h-svh xl:min-h-[56rem] xl:gap-4 xl:px-8 xl:pt-4 xl:pb-4">
-      <HeaderGlow />
+    <TooltipProvider>
+      <div className="relative mx-auto flex w-full max-w-[112rem] flex-col gap-5 overflow-x-clip px-4 pt-5 pb-8 sm:px-6 xl:h-svh xl:min-h-[56rem] xl:gap-4 xl:px-8 xl:pt-4 xl:pb-4">
+        <HeaderGlow />
 
-      <header className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <nav aria-label="Trilha" className="flex items-center gap-2 text-xs text-muted">
-            <House className="size-3.5 text-accent" aria-hidden="true" />
-            <span>CRM</span>
-            <span aria-hidden="true">/</span>
-            <span aria-current="page" className="text-accent">
-              Visão geral
-            </span>
-            <span aria-hidden="true">·</span>
-            <ScopeIndicator
-              scope={overview?.scope ?? scope}
-              canSwitch={canSwitchScope(role)}
-              onChange={changeScope}
+        <header className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-col gap-1">
+            <nav aria-label="Trilha" className="flex items-center gap-2 text-xs text-muted">
+              <House className="size-3.5 text-accent" aria-hidden="true" />
+              <span>CRM</span>
+              <span aria-hidden="true">/</span>
+              <span aria-current="page" className="text-accent">
+                Visão geral
+              </span>
+              <span aria-hidden="true">·</span>
+              <ScopeIndicator scope={overview?.scope ?? scope} canSwitch={canSwitchScope(role)} onChange={changeScope} />
+            </nav>
+            <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg min-[1700px]:text-4xl">
+              {greeting()}, {firstName}.
+            </h1>
+            <p className="text-base text-fg-muted">Aqui está o resumo da sua operação comercial de hoje.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 max-sm:w-full">
+            <DateRangePicker
+              label={periodLabel(period)}
+              presets={periodPresets}
+              activePresetId={period.kind === "preset" ? period.preset : null}
+              range={pickerRange}
+              maxDate={orgToday}
+              maxDays={MAX_PERIOD_DAYS}
+              onPresetSelect={(id) => {
+                if (isPresetId(id)) changePeriod({ kind: "preset", preset: id })
+              }}
+              onRangeSelect={({ from, to }) => changePeriod({ kind: "custom", from, to })}
+              className="min-w-56 max-sm:flex-1"
             />
-          </nav>
-          <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg min-[1700px]:text-4xl">
-            {greeting()}, {firstName}.
-          </h1>
-          <p className="text-base text-fg-muted">Aqui está o resumo da sua operação comercial de hoje.</p>
-        </div>
+          </div>
+        </header>
 
-        <div className="flex flex-wrap items-center gap-3 max-sm:w-full">
-          <span className="inline-flex h-10 items-center gap-3 rounded-md border border-line-soft bg-surface px-4 text-sm text-fg max-sm:flex-1">
-            <CalendarDays className="size-4 text-fg-muted" aria-hidden="true" />
-            {formatLongDate()}
-          </span>
-          <label className="relative inline-flex h-10 items-center rounded-md border border-line-soft bg-surface text-sm text-fg focus-within:focus-ring max-sm:flex-1">
-            <span className="sr-only">Período de análise</span>
-            <select
-              value={period}
-              onChange={(e) => changePeriod(e.target.value as PeriodValueKey)}
-              className="h-full w-full min-w-44 cursor-pointer appearance-none bg-transparent pr-10 pl-4 outline-none"
-            >
-              {periodOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3.5 size-4 text-fg-muted" aria-hidden="true" />
-          </label>
-        </div>
-      </header>
+        {overviewError && (
+          <Alert onRetry={() => setOverviewVersion((v) => v + 1)}>
+            {overview ? `${overviewError} Mostrando os dados de ${periodLabel(loadedPeriod)}.` : overviewError}
+          </Alert>
+        )}
 
-      {error && <Alert onRetry={reload}>{error}</Alert>}
-
-      {!overview ? (
-        !error && <DashboardSkeleton />
-      ) : (
-        <div
-          aria-busy={isLoading}
-          className={cn(
-            "relative grid min-h-0 flex-1 gap-4 transition-opacity xl:grid-cols-[minmax(0,1fr)_19rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]",
-            isLoading && "opacity-60"
-          )}
-        >
-          <MainGrid overview={overview} onOpenDeal={onOpenDeal} onNavigate={onNavigate} />
-          <SideColumn
-            events={overview.recentEvents}
-            tasks={summary?.nextTasks ?? null}
-            overdueCount={summary?.taskCounts.overdue ?? 0}
-            onOpenDeal={onOpenDeal}
-            onSeeTasks={() => onNavigate("tarefas")}
-            onTaskCompleted={handleTaskCompleted}
-          />
-        </div>
-      )}
-    </div>
+        {!overview && !overviewError ? (
+          <DashboardSkeleton />
+        ) : (
+          <div
+            aria-busy={isOverviewLoading}
+            className="relative grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_19rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]"
+          >
+            {overview ? (
+              <MainGrid
+                overview={overview}
+                period={loadedPeriod}
+                // Dados de outro período (carregando ou com erro) ficam esmaecidos até a resposta nova.
+                stale={isOverviewLoading || overviewError !== null}
+                onOpenDeal={onOpenDeal}
+                onOpenCompany={onOpenCompany}
+                onOpenStage={onOpenPipelineAtStage}
+                onNavigate={onNavigate}
+              />
+            ) : (
+              <Panel className="items-center justify-center p-8 text-center text-sm text-muted">
+                O panorama não carregou. Suas tarefas continuam disponíveis ao lado.
+              </Panel>
+            )}
+            {side}
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }
 
@@ -234,9 +277,11 @@ function ScopeIndicator({
 }) {
   if (!canSwitch) {
     return (
-      <span className="text-fg-muted" title="Você vê os números dos negócios sob sua responsabilidade.">
-        {scopeLabels.Mine}
-      </span>
+      <Hint content="Você vê os números dos negócios sob sua responsabilidade.">
+        <span tabIndex={0} className="rounded-xs text-fg-muted focus-visible:focus-ring">
+          {scopeLabels.Mine}
+        </span>
+      </Hint>
     )
   }
 
@@ -262,11 +307,19 @@ function ScopeIndicator({
 
 function MainGrid({
   overview,
+  period,
+  stale,
   onOpenDeal,
+  onOpenCompany,
+  onOpenStage,
   onNavigate,
 }: {
   overview: DashboardOverview
+  period: DashboardPeriod
+  stale: boolean
   onOpenDeal: (dealId: string) => void
+  onOpenCompany: (companyId: string) => void
+  onOpenStage: (stage: DealStage) => void
   onNavigate: (view: View) => void
 }) {
   const series = overview.revenueSeries
@@ -287,6 +340,7 @@ function MainGrid({
     [series, trends]
   )
 
+  const periodName = periodLabel(period)
   const won = overview.wonDeals
   const avgTicket = won.current > 0 ? overview.revenue.current / won.current : null
   const prevTicket = won.previous > 0 ? overview.revenue.previous / won.previous : null
@@ -305,16 +359,18 @@ function MainGrid({
   }
   const comparison = comparisonRange(deltaContext)
 
-  const totalNew = overview.sources.reduce((sum, s) => sum + s.newDeals, 0)
-  const slices = overview.sources.map((s) => ({ key: s.source, label: sourceLabels[s.source], value: s.newDeals }))
-
   return (
-    <div className="grid min-h-0 min-w-0 gap-4 xl:grid-rows-[auto_auto_minmax(10rem,0.92fr)_minmax(12rem,1.08fr)]">
+    <div
+      className={cn(
+        "grid min-h-0 min-w-0 gap-4 transition-opacity xl:grid-rows-[auto_auto_minmax(10rem,0.92fr)_minmax(12rem,1.08fr)]",
+        stale && "opacity-60"
+      )}
+    >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4 xl:grid-cols-4">
         <KpiCard
           icon={CircleDollarSign}
           label="Receita Gerada"
-          hint="soma do valor dos negócios ganhos no período"
+          hint={`soma do valor dos negócios ganhos · ${periodName}`}
           value={formatMoneyWhole(overview.revenue.current)}
           delta={deltaOf(overview.revenue, deltaContext)}
           comparison={comparison}
@@ -323,7 +379,7 @@ function MainGrid({
         <KpiCard
           icon={Users}
           label="Negócios Fechados"
-          hint="negócios ganhos no período"
+          hint={`negócios ganhos · ${periodName}`}
           value={numberFormatter.format(won.current)}
           delta={deltaOf(won, deltaContext)}
           comparison={comparison}
@@ -332,7 +388,7 @@ function MainGrid({
         <KpiCard
           icon={Filter}
           label="Taxa de fechamento"
-          hint="ganhos ÷ (ganhos + perdidos) no período"
+          hint={`ganhos ÷ (ganhos + perdidos) · ${periodName}`}
           value={rate === null ? "—" : formatPercent(rate)}
           delta={deltaPoints(rate, prevRate, deltaContext)}
           comparison={comparison}
@@ -341,7 +397,7 @@ function MainGrid({
         <KpiCard
           icon={Clock3}
           label="Ticket Médio"
-          hint="receita ganha ÷ negócios ganhos no período"
+          hint={`receita ganha ÷ negócios ganhos · ${periodName}`}
           value={avgTicket === null ? "—" : formatMoneyWhole(avgTicket)}
           delta={deltaOf({ current: avgTicket ?? 0, previous: prevTicket ?? 0 }, deltaContext)}
           comparison={comparison}
@@ -356,6 +412,9 @@ function MainGrid({
         wonAmount={overview.revenue.current}
         closeRateValue={rate}
         stalledAfterDays={overview.stalledAfterDays}
+        periodShort={periodShortLabel(period)}
+        periodName={periodName}
+        onOpenStage={onOpenStage}
       />
 
       <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
@@ -363,7 +422,7 @@ function MainGrid({
           <PanelHeading
             id="revenue-heading"
             title="Evolução da Receita"
-            subtitle="Receita acumulada da sua operação ao longo do período."
+            subtitle={`Receita acumulada · ${periodName}`}
             aside={
               <div className="shrink-0 text-right">
                 <DeltaLine delta={deltaOf(overview.revenue, deltaContext)} comparison={comparison} />
@@ -381,31 +440,13 @@ function MainGrid({
         </Panel>
 
         <Panel aria-labelledby="origin-heading" className="gap-3 px-4 py-3.5">
-          <PanelHeading id="origin-heading" title="Origem dos Negócios" subtitle="De onde vêm os negócios que entraram no período." />
-          <div className="flex min-h-0 flex-1 items-center gap-5">
-            <div className="my-2 size-28 shrink-0 min-[1700px]:size-34">
-              <OriginDonut slices={slices} total={totalNew} caption="no período" />
-            </div>
-            <ul className="flex min-w-0 flex-1 flex-col gap-3">
-              {overview.sources.length === 0 && <li className="text-sm text-muted">Nenhum negócio novo.</li>}
-              {overview.sources.map((s, i) => (
-                <li key={s.source} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
-                    <span className="truncate text-fg-muted">{sourceLabels[s.source]}</span>
-                  </span>
-                  <span className="text-fg tabular" title={`${s.newDeals} negócios · ${s.wonDeals} ganhos`}>
-                    {formatPercent(totalNew === 0 ? 0 : s.newDeals / totalNew)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <PanelHeading id="origin-heading" title="Origem dos Negócios" subtitle={`Negócios que entraram · ${periodName}`} />
+          <OriginBreakdown sources={overview.sources} />
         </Panel>
       </div>
 
       <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <FeaturedDealsCard deals={overview.featuredDeals} onOpenDeal={onOpenDeal} />
+        <FeaturedDealsCard deals={overview.featuredDeals} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} />
         <PotentialCard
           openAmount={openAmount}
           forecast={overview.weightedForecast}

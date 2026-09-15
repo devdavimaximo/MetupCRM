@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { BadgeCheck, Check, CircleX, Loader2, TrendingUp, UserPlus, type LucideIcon } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { BadgeCheck, Check, CircleAlert, CircleX, Loader2, RotateCw, TrendingUp, UserPlus, type LucideIcon } from "lucide-react"
 
 import { activityTypeIcons } from "@/features/activities/activity-icons"
 import { activityOutcomeLabels, activityTypeLabels } from "@/features/activities/activity-labels"
@@ -40,18 +40,32 @@ function relativeLabel(iso: string) {
   return /^\d/.test(short) ? `há ${short.replace("min", "minutos")}` : short
 }
 
-/** Coluna de ação: o que aconteceu na operação e o que o usuário precisa fazer a seguir. */
+/** Saída da linha concluída; com movimento reduzido, a linha só some. */
+const TASK_EXIT_MS = 200
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+/**
+ * Coluna de ação: o que aconteceu na operação e o que o usuário precisa fazer a seguir.
+ * `events` é `null` quando o panorama não carregou; `tasksError` só afeta o bloco de tarefas.
+ */
 export function SideColumn({
   events,
   tasks,
   overdueCount,
+  tasksError,
+  onRetryTasks,
   onOpenDeal,
   onSeeTasks,
   onTaskCompleted,
 }: {
-  events: RecentEvent[]
+  events: RecentEvent[] | null
   tasks: TaskItem[] | null
   overdueCount: number
+  tasksError: string | null
+  onRetryTasks: () => void
   onOpenDeal: (dealId: string) => void
   onSeeTasks: () => void
   onTaskCompleted: (task: TaskItem) => void
@@ -64,7 +78,9 @@ export function SideColumn({
             Atividade Recente
           </h2>
         </header>
-        {events.length === 0 ? (
+        {events === null ? (
+          <p className="py-6 text-sm text-muted">Indisponível enquanto o panorama não carrega.</p>
+        ) : events.length === 0 ? (
           <p className="py-6 text-sm text-muted">Ligações, mudanças de etapa e fechamentos aparecem aqui.</p>
         ) : (
           <ol className="flex flex-col divide-y divide-line-soft/70">
@@ -125,8 +141,25 @@ export function SideColumn({
           </button>
         )}
 
+        {tasksError && (
+          <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-fg">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <CircleAlert className="size-3.5 shrink-0 text-danger" aria-hidden="true" />
+              <span className="truncate">{tasksError}</span>
+            </span>
+            <button
+              type="button"
+              onClick={onRetryTasks}
+              className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-xs text-danger hover:text-fg focus-visible:focus-ring"
+            >
+              <RotateCw className="size-3" aria-hidden="true" />
+              Tentar de novo
+            </button>
+          </div>
+        )}
+
         {tasks === null ? (
-          <p className="py-4 text-sm text-muted">Carregando…</p>
+          !tasksError && <p className="py-4 text-sm text-muted">Carregando…</p>
         ) : tasks.length === 0 ? (
           <p className="py-4 text-sm text-muted">Nenhuma tarefa pendente. Bom momento para prospectar.</p>
         ) : (
@@ -151,23 +184,36 @@ function TaskRow({
   onCompleted: (task: TaskItem) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const exitTimer = useRef<number | undefined>(undefined)
   const overdue = new Date(task.dueDate) < new Date()
+
+  useEffect(() => () => window.clearTimeout(exitTimer.current), [])
 
   async function complete() {
     setBusy(true)
     setError(null)
     try {
       await completeTask(task.id)
-      onCompleted(task)
     } catch (err) {
       setError(toMessage(err, "Não foi possível concluir."))
       setBusy(false)
+      return
     }
+    // A linha sai primeiro; só depois o painel pede a fila nova ao servidor.
+    setLeaving(true)
+    exitTimer.current = window.setTimeout(() => onCompleted(task), prefersReducedMotion() ? 0 : TASK_EXIT_MS)
   }
 
   return (
-    <li className="flex items-start gap-3 py-2.5">
+    <li
+      aria-hidden={leaving || undefined}
+      className={cn(
+        "flex items-start gap-3 py-2.5 transition-[opacity,translate] duration-200 ease-out",
+        leaving && "pointer-events-none translate-x-2 opacity-0 motion-reduce:translate-x-0"
+      )}
+    >
       <button
         type="button"
         role="checkbox"

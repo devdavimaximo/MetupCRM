@@ -41,6 +41,10 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
   const [source, setSource] = useState<DealSource | "">(initialUrlState.source as DealSource | "")
 
   const [users, setUsers] = useState<UserSummary[]>([])
+  // Chegada vinda do dashboard (?etapa=Proposta): a coluna é rolada e destacada, sem filtrar as outras.
+  const [highlightStage] = useState<DealStage | null>(() =>
+    ALL_STAGES.includes(initialUrlState.pipelineStage as DealStage) ? (initialUrlState.pipelineStage as DealStage) : null
+  )
 
   const [target, setTarget] = useState<DealDrawerTarget>(() => {
     if (newDealIntent) return { mode: "new", ...newDealIntent }
@@ -204,7 +208,13 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
       {isLoading && deals.length === 0 && !error && <BoardSkeleton />}
 
       {!error && (isLoading === false || deals.length > 0) && (
-        <DealBoard deals={deals} movingDealId={movingDealId} onOpenDeal={openDeal} onMoveStage={handleMoveStage} />
+        <DealBoard
+          deals={deals}
+          movingDealId={movingDealId}
+          highlightStage={highlightStage}
+          onOpenDeal={openDeal}
+          onMoveStage={handleMoveStage}
+        />
       )}
 
       <DealDrawer

@@ -1,7 +1,9 @@
 import type { ComponentProps, ReactNode } from "react"
-import { ArrowDown, ArrowRight, ArrowUp, Ellipsis, Minus, type LucideIcon } from "lucide-react"
+import { ArrowDown, ArrowRight, ArrowUp, Building2, Ellipsis, Info, Minus, SquareArrowOutUpRight, type LucideIcon } from "lucide-react"
 
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { initialsOf } from "@/components/ui/monogram"
+import { Hint } from "@/components/ui/tooltip"
 import { stageLabels, ACTIVE_STAGES } from "@/features/deals/stage-labels"
 import type { DealStage } from "@/features/deals/api"
 import { numberFormatter } from "@/lib/format"
@@ -78,28 +80,32 @@ export function DeltaLine({ delta, comparison }: { delta: Delta; comparison: str
   if (delta.kind !== "change") {
     const { text, hint } = deltaFallback[delta.kind]
     return (
-      <p className="text-xs text-muted" title={delta.kind === "no-history" ? hint : `${hint} Comparado com ${comparison}.`}>
-        {text}
-      </p>
+      <Hint content={delta.kind === "no-history" ? hint : `${hint} Comparado com ${comparison}.`}>
+        <p className="text-xs text-muted">{text}</p>
+      </Hint>
     )
   }
 
   const Icon = delta.direction === "up" ? ArrowUp : delta.direction === "down" ? ArrowDown : Minus
   return (
-    <div className="flex flex-col whitespace-nowrap" title={`vs. ${comparison}`}>
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 text-sm font-medium tabular",
-          delta.direction === "up" && "text-success",
-          delta.direction === "down" && "text-danger",
-          delta.direction === "flat" && "text-fg-muted"
-        )}
-      >
-        <Icon className="size-3.5" aria-hidden="true" />
-        {delta.label}
-      </span>
-      <span className="text-xs text-muted">vs. <span className="max-2xl:hidden">período </span>anterior</span>
-    </div>
+    <Hint content={`vs. ${comparison}`}>
+      <div className="flex flex-col whitespace-nowrap">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-sm font-medium tabular",
+            delta.direction === "up" && "text-success",
+            delta.direction === "down" && "text-danger",
+            delta.direction === "flat" && "text-fg-muted"
+          )}
+        >
+          <Icon className="size-3.5" aria-hidden="true" />
+          {delta.label}
+        </span>
+        <span className="text-xs text-muted">
+          vs. <span className="max-2xl:hidden">período </span>anterior
+        </span>
+      </div>
+    </Hint>
   )
 }
 
@@ -129,9 +135,17 @@ export function KpiCard({
         <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line-soft bg-surface-3/80 text-accent">
           <Icon className="size-4" aria-hidden="true" />
         </span>
-        <p className="truncate text-sm text-fg" title={hint ? `${label} — ${hint}` : label}>{label}</p>
+        {hint ? (
+          <Hint content={`${label} — ${hint}`}>
+            <p tabIndex={0} className="truncate rounded-xs text-sm text-fg focus-visible:focus-ring">
+              {label}
+            </p>
+          </Hint>
+        ) : (
+          <p className="truncate text-sm text-fg">{label}</p>
+        )}
       </div>
-      <p className="text-2xl font-semibold tracking-[-0.01em] whitespace-nowrap text-fg tabular" title={hint}>{value}</p>
+      <p className="text-2xl font-semibold tracking-[-0.01em] whitespace-nowrap text-fg tabular">{value}</p>
       <div className="flex items-end justify-between gap-2">
         <DeltaLine delta={delta} comparison={comparison} />
         <div className="h-9 min-w-0 flex-1 max-w-28" aria-hidden="true">
@@ -145,7 +159,6 @@ export function KpiCard({
 /* ─── Pipeline ──────────────────────────────────────────────────────────────── */
 
 type FunnelNode = {
-  key: string
   label: string
   count: number
   amount: number
@@ -159,23 +172,14 @@ type FunnelNode = {
 
 const CLOSE_RATE_HINT = "ganhos ÷ (ganhos + perdidos) no período"
 
-/** Monta o tooltip do nó: tudo que o número esconde, em uma frase por linha. */
-function nodeHint(node: FunnelNode, stalledAfterDays: number, isWon: boolean) {
+function stageHint(node: FunnelNode, stalledAfterDays: number) {
   const lines = [
-    `${numberFormatter.format(node.count)} ${isWon ? "negócios ganhos no período" : "negócios abertos nesta etapa"}`,
+    `${numberFormatter.format(node.count)} negócios abertos nesta etapa (pipeline atual)`,
     `${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor informado"}${node.estimated > 0 ? ` · ${numberFormatter.format(node.estimated)} com valor estimado pelo ticket` : ""}`,
-  ]
-
-  if (isWon) {
-    lines.push(node.percent === null ? "Sem fechamentos no período." : `Taxa de fechamento: ${formatPercent(node.percent)} (${CLOSE_RATE_HINT}).`)
-    return lines.join("\n")
-  }
-
-  lines.push(
     node.percent === null
       ? "Ainda sem histórico para calcular quantos avançam."
-      : `${formatPercent(node.percent)} dos negócios que entraram nesta etapa avançaram para uma etapa posterior ou para Ganho.`
-  )
+      : `${formatPercent(node.percent)} dos negócios que entraram nesta etapa avançaram para uma etapa posterior ou para Ganho.`,
+  ]
 
   if (node.averageDays !== null) {
     lines.push(`Tempo médio na etapa: ${numberFormatter.format(Math.round(node.averageDays))} dias.`)
@@ -185,13 +189,64 @@ function nodeHint(node: FunnelNode, stalledAfterDays: number, isWon: boolean) {
     lines.push(`${numberFormatter.format(node.stalled)} sem mudar de etapa há mais de ${stalledAfterDays} dias.`)
   }
 
+  lines.push("Clique para abrir no Pipeline.")
   return lines.join("\n")
+}
+
+function wonHint(node: FunnelNode, periodName: string) {
+  return [
+    "Ganhos fechados no período (não fazem parte do pipeline aberto)",
+    `${periodName} · ${numberFormatter.format(node.count)} negócios · ${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor informado"}`,
+    node.percent === null ? "Sem fechamentos no período." : `Taxa de fechamento: ${formatPercent(node.percent)} (${CLOSE_RATE_HINT}).`,
+  ].join("\n")
+}
+
+/** O miolo visual do nó — o mesmo para etapa (botão) e para ganhos (só leitura). */
+function FunnelNodeBody({ node, isWon }: { node: FunnelNode; isWon: boolean }) {
+  return (
+    <>
+      <div className="flex flex-col items-center pt-0.5" aria-hidden="true">
+        <span
+          className={cn(
+            "size-3 shrink-0 rounded-full border-2",
+            node.count > 0 ? "border-accent" : "border-line-strong",
+            isWon && node.count > 0 && "bg-accent"
+          )}
+        />
+        <span className="mt-1 w-px flex-1 bg-line-strong/60" />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate text-xs text-fg-muted transition-colors group-hover:text-fg">{node.label}</p>
+        <div className="flex items-center gap-2">
+          <p className={cn("text-xl font-semibold text-fg tabular", node.count === 0 && "text-faint")}>
+            {numberFormatter.format(node.count)}
+          </p>
+          {!isWon && (
+            <span aria-hidden="true" className="relative hidden h-px flex-1 bg-accent/70 min-[1700px]:block">
+              <span className="absolute -top-0.5 right-0 size-1.5 rounded-full bg-accent" />
+            </span>
+          )}
+          {node.stalled > 0 && (
+            <span className="text-2xs text-danger tabular">
+              <span className="sr-only">parados: </span>●{node.stalled}
+            </span>
+          )}
+        </div>
+        <p className="truncate text-2xs text-muted tabular">{node.percentLabel}</p>
+        {/* "~" marca a etapa cujo dinheiro vem (em parte) do ticket — o tooltip diz quantos. */}
+        <p className="truncate text-2xs text-fg-muted tabular">
+          {node.amount > 0 ? `${node.estimated > 0 ? "~" : ""}${formatMoneyCompact(node.amount)}` : "R$ —"}
+        </p>
+      </div>
+    </>
+  )
 }
 
 /**
  * O funil como linha do tempo horizontal: nó, filete vertical, volume e a conversão histórica
  * da etapa ("x% avançam"), calculada de StageChange — não a participação da fotografia atual.
- * O último nó são os ganhos do período, com a taxa de fechamento.
+ * Cada etapa abre o Pipeline naquela coluna. O último nó são os ganhos **do período**, depois de
+ * um filete tracejado: não é etapa do pipeline aberto e não navega.
  */
 export function PipelineCard({
   pipeline,
@@ -200,6 +255,9 @@ export function PipelineCard({
   wonAmount,
   closeRateValue,
   stalledAfterDays,
+  periodShort,
+  periodName,
+  onOpenStage,
 }: {
   pipeline: PipelineStage[]
   advanceRates: StageAdvanceRate[]
@@ -207,16 +265,19 @@ export function PipelineCard({
   wonAmount: number
   closeRateValue: number | null
   stalledAfterDays: number
+  /** Rótulo curto do período: "30 dias", "mês anterior", "período". */
+  periodShort: string
+  periodName: string
+  onOpenStage: (stage: DealStage) => void
 }) {
   const byStage = new Map(pipeline.map((s) => [s.stage, s]))
   const advanceByStage = new Map(advanceRates.map((s) => [s.stage, s]))
   const totalOpen = pipeline.reduce((sum, s) => sum + s.count, 0)
 
-  const nodes: FunnelNode[] = ACTIVE_STAGES.map((stage: DealStage) => {
+  const stages = ACTIVE_STAGES.map((stage: DealStage) => {
     const data = byStage.get(stage)
     const advance = advanceByStage.get(stage)
-    return {
-      key: stage,
+    const node: FunnelNode = {
       label: stageLabels[stage],
       count: data?.count ?? 0,
       amount: data?.amount ?? 0,
@@ -226,11 +287,11 @@ export function PipelineCard({
       averageDays: advance?.averageDaysInStage ?? null,
       stalled: data?.stalledCount ?? 0,
     }
+    return { stage, node }
   })
 
-  nodes.push({
-    key: "won",
-    label: "Ganhos",
+  const wonNode: FunnelNode = {
+    label: `Ganhos · ${periodShort}`,
     count: wonInPeriod,
     amount: wonAmount,
     estimated: 0,
@@ -239,7 +300,7 @@ export function PipelineCard({
     percentLabel: closeRateValue === null ? "—" : formatPercent(closeRateValue),
     averageDays: null,
     stalled: 0,
-  })
+  }
 
   return (
     <Panel aria-labelledby="pipeline-heading" className="min-h-fit gap-3 px-4 py-3.5">
@@ -253,57 +314,41 @@ export function PipelineCard({
               <dt className="text-xs text-muted">Negócios abertos</dt>
               <dd className="text-md font-medium text-fg tabular">{numberFormatter.format(totalOpen)}</dd>
             </div>
-            <div className="pl-5" title={`Taxa de fechamento — ${CLOSE_RATE_HINT}`}>
-              <dt className="text-xs text-muted">Taxa de fechamento</dt>
-              <dd className="text-md font-medium text-fg tabular">
-                {closeRateValue === null ? "—" : formatPercent(closeRateValue)}
-              </dd>
-            </div>
+            <Hint content={`Taxa de fechamento — ${CLOSE_RATE_HINT} · ${periodName}`}>
+              <div tabIndex={0} className="rounded-xs pl-5 focus-visible:focus-ring">
+                <dt className="text-xs text-muted">Taxa de fechamento</dt>
+                <dd className="text-md font-medium text-fg tabular">
+                  {closeRateValue === null ? "—" : formatPercent(closeRateValue)}
+                </dd>
+              </div>
+            </Hint>
           </dl>
         }
       />
 
       <ol className="grid grid-cols-2 gap-y-5 border-t border-line-soft pt-3 sm:grid-cols-4 xl:grid-cols-8">
-        {nodes.map((node) => {
-          const isWon = node.key === "won"
-          return (
-            <li key={node.key} className="relative flex min-w-0 gap-2.5 pr-2" title={nodeHint(node, stalledAfterDays, isWon)}>
-              <div className="flex flex-col items-center pt-0.5" aria-hidden="true">
-                <span
-                  className={cn(
-                    "size-3 shrink-0 rounded-full border-2",
-                    node.count > 0 ? "border-accent" : "border-line-strong",
-                    isWon && node.count > 0 && "bg-accent"
-                  )}
-                />
-                <span className="mt-1 w-px flex-1 bg-line-strong/60" />
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <p className="truncate text-xs text-fg-muted">{node.label}</p>
-                <div className="flex items-center gap-2">
-                  <p className={cn("text-xl font-semibold text-fg tabular", node.count === 0 && "text-faint")}>
-                    {numberFormatter.format(node.count)}
-                  </p>
-                  {!isWon && (
-                    <span aria-hidden="true" className="relative hidden h-px flex-1 bg-accent/70 min-[1700px]:block">
-                      <span className="absolute -top-0.5 right-0 size-1.5 rounded-full bg-accent" />
-                    </span>
-                  )}
-                  {node.stalled > 0 && (
-                    <span className="text-2xs text-danger tabular">
-                      <span className="sr-only">parados: </span>●{node.stalled}
-                    </span>
-                  )}
-                </div>
-                <p className="truncate text-2xs text-muted tabular">{node.percentLabel}</p>
-                {/* "~" marca a etapa cujo dinheiro vem (em parte) do ticket — o tooltip diz quantos. */}
-                <p className="truncate text-2xs text-fg-muted tabular">
-                  {node.amount > 0 ? `${node.estimated > 0 ? "~" : ""}${formatMoneyCompact(node.amount)}` : "R$ —"}
-                </p>
-              </div>
-            </li>
-          )
-        })}
+        {stages.map(({ stage, node }) => (
+          <li key={stage} className="relative min-w-0">
+            <Hint content={stageHint(node, stalledAfterDays)}>
+              <button
+                type="button"
+                onClick={() => onOpenStage(stage)}
+                aria-label={`${node.label}: ${numberFormatter.format(node.count)} negócios, ${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor"}. Abrir no Pipeline`}
+                className="group flex size-full min-w-0 cursor-pointer gap-2.5 rounded-sm pr-2 text-left outline-offset-4 transition-colors hover:bg-surface-3/40 focus-visible:focus-ring"
+              >
+                <FunnelNodeBody node={node} isWon={false} />
+              </button>
+            </Hint>
+          </li>
+        ))}
+        {/* Filete tracejado: à direita dele é resultado do período, não fotografia do funil. */}
+        <li className="relative min-w-0 xl:border-l xl:border-dashed xl:border-line-strong/70 xl:pl-3">
+          <Hint content={wonHint(wonNode, periodName)}>
+            <div tabIndex={0} className="flex size-full min-w-0 gap-2.5 rounded-sm pr-2 outline-offset-4 focus-visible:focus-ring">
+              <FunnelNodeBody node={wonNode} isWon />
+            </div>
+          </Hint>
+        </li>
       </ol>
     </Panel>
   )
@@ -323,7 +368,19 @@ const stageTone: Record<DealStage, string> = {
   Perdido: "bg-danger/12 text-danger",
 }
 
-export function FeaturedDealsCard({ deals, onOpenDeal }: { deals: FeaturedDeal[]; onOpenDeal: (dealId: string) => void }) {
+/**
+ * A linha inteira abre o negócio (atalho de ponteiro); pelo teclado, o nome da empresa e o menu
+ * "⋯" são os alvos. Abaixo de 1700px o responsável vira só avatar, com o nome no tooltip.
+ */
+export function FeaturedDealsCard({
+  deals,
+  onOpenDeal,
+  onOpenCompany,
+}: {
+  deals: FeaturedDeal[]
+  onOpenDeal: (dealId: string) => void
+  onOpenCompany: (companyId: string) => void
+}) {
   return (
     <Panel aria-labelledby="featured-heading" className="gap-2 px-4 pt-4 pb-2">
       <PanelHeading id="featured-heading" title="Negócios em Destaque" />
@@ -333,83 +390,86 @@ export function FeaturedDealsCard({ deals, onOpenDeal }: { deals: FeaturedDeal[]
         </p>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-120 text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-2xs text-muted">
                 <th scope="col" className="pb-2 font-normal">Empresa</th>
                 <th scope="col" className="pb-2 font-normal">Valor</th>
                 <th scope="col" className="pb-2 font-normal">Etapa</th>
-                <th scope="col" className="pb-2 font-normal">Responsável</th>
+                <th scope="col" className="pb-2 font-normal">
+                  <span className="max-[1699px]:sr-only">Responsável</span>
+                  <span aria-hidden="true" className="min-[1700px]:hidden">Resp.</span>
+                </th>
                 <th scope="col" className="pb-2 font-normal">Ação</th>
-                <th scope="col" className="w-8 pb-2 max-[1699px]:hidden"><span className="sr-only">Abrir</span></th>
+                <th scope="col" className="sticky right-0 w-8 bg-surface pb-2">
+                  <span className="sr-only">Mais ações</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-soft/70 border-t border-line-soft/70">
               {deals.map((deal) => (
-                <tr key={deal.id} className="group transition-colors hover:bg-surface-3/40">
-                  <td className="py-1 pr-3">
+                <tr key={deal.id} onClick={() => onOpenDeal(deal.id)} className="group cursor-pointer transition-colors hover:bg-surface-3/40">
+                  <td className="py-1 pr-2 min-[1700px]:pr-3">
                     <span className="flex min-w-0 items-center gap-2.5">
                       <span
                         aria-hidden="true"
-                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-line-soft bg-surface-3 font-mono text-[0.5625rem] text-fg-muted"
+                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-line-soft bg-surface-3 font-mono text-[0.5625rem] text-fg-muted max-[1699px]:hidden"
                       >
                         {initialsOf(deal.companyName)}
                       </span>
-                      <button type="button" onClick={() => onOpenDeal(deal.id)} className="max-w-40 cursor-pointer truncate rounded-xs text-left text-fg hover:underline focus-visible:focus-ring">{deal.companyName}</button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onOpenDeal(deal.id)
+                        }}
+                        className="max-w-36 cursor-pointer truncate rounded-xs text-left text-fg group-hover:underline focus-visible:focus-ring min-[1700px]:max-w-40"
+                      >
+                        {deal.companyName}
+                      </button>
                     </span>
                   </td>
-                  <td className="py-1 pr-3 whitespace-nowrap text-fg tabular">
+                  <td className="py-1 pr-2 min-[1700px]:pr-3 whitespace-nowrap text-fg tabular">
                     {deal.amount === null ? (
                       "—"
                     ) : (
                       <>
                         {formatMoneyWhole(deal.amount)}
                         {deal.isEstimated && (
-                          <span
-                            className="ml-1 text-2xs text-muted"
-                            title="Valor estimado pelo ticket — o negócio ainda não tem valor em negociação."
-                          >
-                            est.
-                          </span>
+                          <Hint content="Valor estimado pelo ticket — o negócio ainda não tem valor em negociação.">
+                            <span className="ml-1 text-2xs text-muted">est.</span>
+                          </Hint>
                         )}
                       </>
                     )}
                   </td>
-                  <td className="py-1 pr-3">
+                  <td className="py-1 pr-2 min-[1700px]:pr-3">
                     <span className={cn("inline-flex rounded-sm px-2 py-0.5 text-2xs whitespace-nowrap", stageTone[deal.stage])}>
                       {stageLabels[deal.stage]}
                     </span>
                   </td>
-                  <td className="py-1 pr-3">
+                  <td className="py-1 pr-2 min-[1700px]:pr-3">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[0.5625rem] font-medium text-fg-muted ring-1 ring-line-strong/50"
-                      >
-                        {initialsOf(deal.ownerUserName)}
-                      </span>
-                      <span className="max-w-32 truncate text-fg-muted" title={deal.ownerUserName}>
-                        {deal.ownerUserName.split(/\s+/)[0]}
-                      </span>
+                      <Hint content={deal.ownerUserName}>
+                        <span className="relative inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[0.5625rem] font-medium text-fg-muted ring-1 ring-line-strong/50">
+                          <span aria-hidden="true">{initialsOf(deal.ownerUserName)}</span>
+                          <span className="sr-only min-[1700px]:hidden">{deal.ownerUserName}</span>
+                        </span>
+                      </Hint>
+                      <span className="max-w-32 truncate text-fg-muted max-[1699px]:hidden">{deal.ownerUserName.split(/\s+/)[0]}</span>
                     </span>
                   </td>
                   <td
                     className={cn(
-                      "py-2 pr-3 whitespace-nowrap tabular",
+                      "py-2 pr-2 whitespace-nowrap tabular min-[1700px]:pr-3",
                       !deal.nextTaskDueDate ? "text-danger" : new Date(deal.nextTaskDueDate) < new Date() ? "text-danger" : "text-fg-muted"
                     )}
                   >
                     {deal.nextTaskDueDate ? formatInstantDay(deal.nextTaskDueDate) : "Sem ação"}
                   </td>
-                  <td className="py-1 text-right max-[1699px]:hidden">
-                    <button
-                      type="button"
-                      onClick={() => onOpenDeal(deal.id)}
-                      aria-label={`Abrir negócio de ${deal.companyName}`}
-                      className="inline-flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
-                    >
-                      <Ellipsis className="size-4" aria-hidden="true" />
-                    </button>
+                  {/* Fixa na borda direita: se a tabela ainda rolar na horizontal, o menu continua à vista. */}
+                  <td className="sticky right-0 bg-surface py-1 pl-1 text-right" onClick={(event) => event.stopPropagation()}>
+                    <DealRowMenu deal={deal} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} />
                   </td>
                 </tr>
               ))}
@@ -421,9 +481,49 @@ export function FeaturedDealsCard({ deals, onOpenDeal }: { deals: FeaturedDeal[]
   )
 }
 
+function DealRowMenu({
+  deal,
+  onOpenDeal,
+  onOpenCompany,
+}: {
+  deal: FeaturedDeal
+  onOpenDeal: (dealId: string) => void
+  onOpenCompany: (companyId: string) => void
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Ações do negócio de ${deal.companyName}`}
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring data-[state=open]:bg-surface-3 data-[state=open]:text-fg"
+        >
+          <Ellipsis className="size-4" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      {/* O menu vai para um portal, mas o clique ainda borbulha pela árvore React até a linha. */}
+      <DropdownMenuContent onClick={(event) => event.stopPropagation()}>
+        <DropdownMenuItem onSelect={() => onOpenDeal(deal.id)}>
+          <SquareArrowOutUpRight aria-hidden="true" />
+          Abrir negócio
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onOpenCompany(deal.companyId)}>
+          <Building2 aria-hidden="true" />
+          Abrir empresa
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /* ─── Cartão Metup (potencial) ──────────────────────────────────────────────── */
 
-/** Assinatura visual da marca: linhas de "arquitetura" em dourado, com dados reais do potencial. */
+const FORECAST_HINT = "Valor aberto ponderado pela taxa histórica de fechamento de cada etapa; não depende do período."
+
+/**
+ * Assinatura visual da marca: linhas de "arquitetura" em dourado, com dados reais do potencial.
+ * Tudo aqui é fotografia do pipeline atual — o rótulo diz isso, para ninguém ler como "do período".
+ */
 export function PotentialCard({
   openAmount,
   forecast,
@@ -461,11 +561,20 @@ export function PotentialCard({
       </svg>
 
       <div className="relative flex h-full max-w-[68%] flex-col justify-center gap-2.5">
-        <p className="label-mono text-accent">Metup CRM</p>
+        <Hint
+          content={
+            forecast === null ? `${FORECAST_HINT}\nSem previsão: ainda não há histórico de fechamento para calibrar.` : FORECAST_HINT
+          }
+        >
+          <p tabIndex={0} className="inline-flex w-fit items-center gap-1.5 rounded-xs label-mono text-accent focus-visible:focus-ring">
+            Previsto no pipeline atual
+            <Info className="size-3" aria-hidden="true" />
+          </p>
+        </Hint>
         <h2 id="potential-heading" className="text-md leading-snug font-medium text-fg min-[1700px]:text-lg">
           {formatMoneyCompact(openAmount)} em aberto,{" "}
           <span className="text-fg-muted">
-            {forecast === null ? "pipeline para destravar." : `${formatMoneyCompact(forecast)} previstos.`}
+            {forecast === null ? "sem histórico de fechamento para calibrar." : `${formatMoneyCompact(forecast)} previstos.`}
           </span>
         </h2>
         <p className="line-clamp-2 text-xs text-fg-muted">

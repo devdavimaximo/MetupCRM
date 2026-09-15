@@ -33,15 +33,15 @@ public class GetDashboardOverviewQueryHandler(
         var scope = currentUserService.ResolveDealScope(request.Scope);
         var clock = await organizationClock.SnapshotAsync(cancellationToken);
 
-        // Dias inteiros no fuso da organização: a janela termina no fim do dia de hoje, para que a
-        // venda das 23h caia no dia certo e não no seguinte.
-        var today = clock.Today;
-        var periodStartLocal = today.AddDays(-(request.Days - 1));
-        var previousStartLocal = periodStartLocal.AddDays(-request.Days);
+        // Dias inteiros no fuso da organização: a janela termina no fim do último dia local, para que
+        // a venda das 23h caia no dia certo e não no seguinte.
+        var window = PeriodWindow.Resolve(request, clock.Today);
+        var periodStartLocal = window.StartLocal;
+        var periodEndLocal = window.EndLocal;
 
         var periodStart = clock.StartOfDayUtc(periodStartLocal);
-        var previousStart = clock.StartOfDayUtc(previousStartLocal);
-        var periodEnd = clock.EndOfDayUtc(today);
+        var previousStart = clock.StartOfDayUtc(window.PreviousStartLocal);
+        var periodEnd = clock.EndOfDayUtc(periodEndLocal);
 
         var deals = await ScopedDeals(scope)
             .Select(d => new DealRow(
@@ -154,7 +154,7 @@ public class GetDashboardOverviewQueryHandler(
             {
                 var next = nextTasks.GetValueOrDefault(d.Id);
                 return new FeaturedDealDto(
-                    d.Id, CompanyOf(d.CompanyId), d.Stage, d.EffectiveAmount, d.IsEstimated, UserOf(d.OwnerUserId),
+                    d.Id, d.CompanyId, CompanyOf(d.CompanyId), d.Stage, d.EffectiveAmount, d.IsEstimated, UserOf(d.OwnerUserId),
                     DaysInStage(d), next?.DueDate, next?.Type);
             })
             .ToList();
@@ -188,14 +188,16 @@ public class GetDashboardOverviewQueryHandler(
             .ThenByDescending(o => o.OpenAmount)
             .ToList();
 
-        var (series, granularity) = BuildRevenueSeries(won, lost, clock, periodStartLocal, today, request.Days);
+        var (series, granularity) = BuildRevenueSeries(won, lost, clock, periodStartLocal, periodEndLocal, window.Days);
 
         return new DashboardOverviewDto(
-            request.Days,
+            window.Days,
             scope.AppliedScope,
             periodStart,
             periodEnd,
             previousStart,
+            periodStartLocal,
+            periodEndLocal,
             deals.Count == 0 ? null : deals.Min(d => d.CreatedAt),
             revenue,
             new PeriodValueDto(won.Count(d => InPeriod(d.ClosedAt)), won.Count(d => InPrevious(d.ClosedAt))),
@@ -245,13 +247,13 @@ public class GetDashboardOverviewQueryHandler(
         IReadOnlyList<DealRow> lost,
         OrganizationClockSnapshot clock,
         DateOnly periodStartLocal,
-        DateOnly today,
+        DateOnly periodEndLocal,
         int days)
     {
         var bucketDays = days <= 31 ? 1 : 7;
         var points = new List<RevenuePointDto>();
 
-        for (var start = periodStartLocal; start <= today; start = start.AddDays(bucketDays))
+        for (var start = periodStartLocal; start <= periodEndLocal; start = start.AddDays(bucketDays))
         {
             var bucketStart = start;
             var bucketEnd = start.AddDays(bucketDays);
@@ -315,6 +317,23 @@ public class GetDashboardOverviewQueryHandler(
             .OrderByDescending(e => e.OccurredAt)
             .Take(RecentEventsLimit)
             .ToList();
+    }
+
+    /// <summary>
+    /// Recorte do período em datas locais da organização: o intervalo pedido (From/To, inclusive) ou
+    /// os últimos <c>Days</c> dias terminando hoje. A janela anterior tem a mesma quantidade de dias e
+    /// termina no dia imediatamente antes do início.
+    /// </summary>
+    internal sealed record PeriodWindow(DateOnly StartLocal, DateOnly EndLocal)
+    {
+        public int Days => EndLocal.DayNumber - StartLocal.DayNumber + 1;
+
+        public DateOnly PreviousStartLocal => StartLocal.AddDays(-Days);
+
+        public static PeriodWindow Resolve(GetDashboardOverviewQuery request, DateOnly today) =>
+            request is { From: { } from, To: { } to }
+                ? new PeriodWindow(from, to)
+                : new PeriodWindow(today.AddDays(-(request.Days - 1)), today);
     }
 
     /// <summary>

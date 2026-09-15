@@ -38,6 +38,7 @@ public record StageAdvanceRateDto(
 /// </summary>
 public record FeaturedDealDto(
     Guid Id,
+    Guid CompanyId,
     string CompanyName,
     DealStage Stage,
     decimal? Amount,
@@ -93,6 +94,9 @@ public record OwnerPerformanceDto(
 /// comparação, e o front diz isso em vez de inventar percentual. <c>WeightedForecast</c> é a receita
 /// prevista do pipeline aberto, ponderada pela probabilidade histórica de cada etapa — <c>null</c>
 /// quando não há histórico que a sustente.
+///
+/// <c>PeriodStartLocal</c>/<c>PeriodEndLocal</c> são as datas locais (inclusive) do período — o front
+/// rotula o intervalo com elas sem reconverter fuso.
 /// </summary>
 public record DashboardOverviewDto(
     int PeriodDays,
@@ -100,6 +104,8 @@ public record DashboardOverviewDto(
     DateTime PeriodStart,
     DateTime PeriodEnd,
     DateTime PreviousStart,
+    DateOnly PeriodStartLocal,
+    DateOnly PeriodEndLocal,
     DateTime? HistoryStart,
     PeriodValueDto Revenue,
     PeriodValueDto WonDeals,

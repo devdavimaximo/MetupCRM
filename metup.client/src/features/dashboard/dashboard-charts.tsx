@@ -1,8 +1,14 @@
-import { useId, useMemo } from "react"
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { createContext, useContext, useId, useMemo, useState } from "react"
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Sector, Tooltip, XAxis, YAxis } from "recharts"
+import type { PieSectorShapeProps } from "recharts/types/polar/Pie"
 
+import { Hint } from "@/components/ui/tooltip"
+import type { DealSource } from "@/features/deals/api"
+import { sourceLabels } from "@/features/deals/stage-labels"
 import { numberFormatter } from "@/lib/format"
-import { DONUT_COLORS, formatLocalDay, formatMoneyCompact, formatMoneyWhole, smoothSeries } from "./dashboard-format"
+import { cn } from "@/lib/utils"
+import type { SourceBreakdown } from "./api"
+import { DONUT_COLORS, formatLocalDay, formatMoneyCompact, formatMoneyWhole, formatPercent, smoothSeries } from "./dashboard-format"
 
 const ACCENT = "var(--color-accent)"
 
@@ -126,42 +132,183 @@ export function RevenueAreaChart({ data }: { data: RevenueDatum[] }) {
 
 /* ─── Origem (donut) ────────────────────────────────────────────────────────── */
 
-export function OriginDonut({
-  slices,
-  total,
-  caption,
-}: {
-  slices: { key: string; label: string; value: number }[]
-  total: number
-  caption: string
-}) {
+type OriginSlice = {
+  key: DealSource
+  label: string
+  value: number
+  wonDeals: number
+  revenue: number
+  color: string
+}
+
+const EMPTY_DONUT = [{ key: "empty", label: "", value: 1 }]
+
+/**
+ * A fatia destacada chega por contexto, não por closure: um `shape` novo a cada render trocaria o
+ * tipo do componente, remontaria os paths sob o ponteiro e o Recharts fecharia o tooltip.
+ */
+const ActiveSliceContext = createContext<DealSource | null>(null)
+
+function OriginSector(props: PieSectorShapeProps) {
+  const activeKey = useContext(ActiveSliceContext)
+  const isActive = activeKey !== null && (props.payload as OriginSlice | undefined)?.key === activeKey
+  return <Sector {...props} outerRadius={(props.outerRadius ?? 0) + (isActive ? 4 : 0)} />
+}
+
+const renderOriginSector = (props: PieSectorShapeProps) => <OriginSector {...props} />
+
+/** Tudo que a fatia representa — o mesmo conteúdo no tooltip do gráfico e no da legenda. */
+function OriginDetails({ slice, total }: { slice: OriginSlice; total: number }) {
+  const winRate = slice.value === 0 ? null : slice.wonDeals / slice.value
   return (
-    <div className="relative size-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={slices.length > 0 ? slices : [{ key: "empty", label: "", value: 1 }]}
-            dataKey="value"
-            nameKey="label"
-            innerRadius="72%"
-            outerRadius="100%"
-            paddingAngle={slices.length > 1 ? 2 : 0}
-            startAngle={90}
-            endAngle={-270}
-            stroke="var(--color-surface)"
-            strokeWidth={2}
-            isAnimationActive={slices.length > 0}
-          >
-            {(slices.length > 0 ? slices : [{ key: "empty" }]).map((slice, index) => (
-              <Cell key={slice.key} fill={slices.length > 0 ? DONUT_COLORS[index % DONUT_COLORS.length] : "var(--color-surface-3)"} />
-            ))}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-xl font-semibold text-fg tabular">{numberFormatter.format(total)}</span>
-        <span className="text-2xs text-fg-muted">{caption}</span>
-      </div>
+    <div className="flex flex-col gap-1 text-xs">
+      <p className="flex items-center gap-2 text-sm font-medium text-fg">
+        <span aria-hidden="true" className="size-2.5 rounded-full" style={{ background: slice.color }} />
+        {slice.label}
+      </p>
+      <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular">
+        <dt className="text-muted">Negócios no período</dt>
+        <dd className="text-right text-fg">{numberFormatter.format(slice.value)}</dd>
+        <dt className="text-muted">% do total</dt>
+        <dd className="text-right text-fg">{formatPercent(total === 0 ? 0 : slice.value / total)}</dd>
+        <dt className="text-muted">Ganhos</dt>
+        <dd className="text-right text-fg">{numberFormatter.format(slice.wonDeals)}</dd>
+        <dt className="text-muted">Receita</dt>
+        <dd className="text-right text-fg">{formatMoneyWhole(slice.revenue)}</dd>
+        <dt className="text-muted">Taxa de ganho</dt>
+        <dd className="text-right text-fg">{winRate === null ? "—" : formatPercent(winRate)}</dd>
+      </dl>
     </div>
   )
 }
+
+function DonutTooltip({
+  active,
+  payload,
+  total,
+}: {
+  active?: boolean
+  payload?: ReadonlyArray<{ payload?: OriginSlice }>
+  total: number
+}) {
+  const slice = payload?.[0]?.payload
+  if (!active || !slice) return null
+  return (
+    <div className="rounded-md border border-line-strong/60 bg-surface-2/95 px-3 py-2 shadow-raised backdrop-blur-sm">
+      <OriginDetails slice={slice} total={total} />
+    </div>
+  )
+}
+
+/**
+ * Donut + legenda com um único estado de destaque: o ponteiro na fatia realça a linha da legenda,
+ * e o ponteiro (ou o foco do teclado) na legenda realça a fatia e mostra os mesmos detalhes.
+ * A fatia ativa cresce 4px para fora; o anel reserva essa folga para não cortar.
+ */
+export function OriginBreakdown({ sources }: { sources: SourceBreakdown[] }) {
+  const [activeKey, setActiveKey] = useState<DealSource | null>(null)
+  const total = sources.reduce((sum, s) => sum + s.newDeals, 0)
+  // Dados estáveis entre renders: um array novo a cada hover faria o Recharts zerar o tooltip ativo.
+  const slices = useMemo<OriginSlice[]>(
+    () =>
+      sources.map((s, i) => ({
+        key: s.source,
+        label: sourceLabels[s.source],
+        value: s.newDeals,
+        wonDeals: s.wonDeals,
+        revenue: s.revenue,
+        color: DONUT_COLORS[i % DONUT_COLORS.length],
+      })),
+    [sources]
+  )
+  const isEmpty = slices.length === 0
+  const share = (slice: OriginSlice) => formatPercent(total === 0 ? 0 : slice.value / total)
+
+  return (
+    <div className="flex min-h-0 flex-1 items-center gap-4 min-[1440px]:gap-5">
+      <div className="relative my-2 size-24 shrink-0 min-[1440px]:size-28 min-[1700px]:size-34">
+        <ActiveSliceContext.Provider value={activeKey}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+            <Pie
+              data={isEmpty ? EMPTY_DONUT : slices}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="68%"
+              outerRadius="92%"
+              paddingAngle={slices.length > 1 ? 2 : 0}
+              startAngle={90}
+              endAngle={-270}
+              stroke="var(--color-surface)"
+              strokeWidth={2}
+              isAnimationActive={!isEmpty}
+              shape={renderOriginSector}
+              onMouseEnter={(_, index) => {
+                if (!isEmpty) setActiveKey(slices[index]?.key ?? null)
+              }}
+              onMouseLeave={() => setActiveKey(null)}
+            >
+              {(isEmpty ? [{ key: "empty", color: "var(--color-surface-3)" }] : slices).map((slice) => (
+                <Cell key={slice.key} fill={slice.color} />
+              ))}
+            </Pie>
+            {!isEmpty && (
+              <Tooltip
+                content={(props) => <DonutTooltip active={props.active} payload={props.payload as DonutTooltipPayload} total={total} />}
+                wrapperStyle={{ zIndex: 20 }}
+                allowEscapeViewBox={{ x: true, y: true }}
+                isAnimationActive={false}
+              />
+            )}
+          </PieChart>
+        </ResponsiveContainer>
+        </ActiveSliceContext.Provider>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="text-xl font-semibold text-fg tabular">{numberFormatter.format(total)}</span>
+          <span className="text-2xs text-fg-muted">no período</span>
+        </div>
+      </div>
+
+      <ul aria-label="Origens dos negócios" className="flex min-w-0 flex-1 flex-col gap-1">
+        {isEmpty && <li className="text-sm text-muted">Nenhum negócio novo.</li>}
+        {slices.map((slice) => {
+          const active = activeKey === slice.key
+          return (
+            <li key={slice.key}>
+              <Hint content={<OriginDetails slice={slice} total={total} />} side="left" className="max-w-none">
+                <button
+                  type="button"
+                  aria-label={`${slice.label}: ${share(slice)} dos negócios do período`}
+                  onMouseEnter={() => setActiveKey(slice.key)}
+                  onMouseLeave={() => setActiveKey(null)}
+                  onFocus={() => setActiveKey(slice.key)}
+                  onBlur={() => setActiveKey(null)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+                    event.preventDefault()
+                    const item = event.currentTarget.closest("li")
+                    const sibling = event.key === "ArrowDown" ? item?.nextElementSibling : item?.previousElementSibling
+                    sibling?.querySelector("button")?.focus()
+                  }}
+                  className={cn(
+                    "flex w-full cursor-default items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left text-sm transition-colors focus-visible:focus-ring",
+                    active && "bg-surface-3/60"
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: slice.color }} />
+                    <span className={cn("leading-tight transition-colors", active ? "text-fg" : "text-fg-muted")}>{slice.label}</span>
+                  </span>
+                  <span className="shrink-0 text-fg tabular">{share(slice)}</span>
+                </button>
+              </Hint>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+type DonutTooltipPayload = ReadonlyArray<{ payload?: OriginSlice }>
+

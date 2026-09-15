@@ -19,12 +19,15 @@ public class DashboardController(ISender sender) : ControllerBase
 
     /// <summary>
     /// O escopo é um pedido: quem decide o que este usuário enxerga é o caso de uso
-    /// (<c>ResolveDealScope</c>). O escopo aplicado volta no próprio DTO.
+    /// (<c>ResolveDealScope</c>). O escopo aplicado volta no próprio DTO. <c>from</c>/<c>to</c> são
+    /// datas locais da organização (yyyy-MM-dd, inclusive) e têm precedência sobre <c>days</c>.
     /// </summary>
     [HttpGet("overview")]
     public async Task<ActionResult<DashboardOverviewDto>> GetOverview(
         [FromQuery] int days = 30,
         [FromQuery] DealScope scope = DealScope.Organization,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
         CancellationToken cancellationToken = default) =>
-        Ok(await sender.Send(new GetDashboardOverviewQuery(days, scope), cancellationToken));
+        Ok(await sender.Send(new GetDashboardOverviewQuery(days, scope, from, to), cancellationToken));
 }

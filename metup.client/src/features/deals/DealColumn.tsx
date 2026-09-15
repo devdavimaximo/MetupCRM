@@ -8,11 +8,12 @@ type Props = {
   stage: DealStage
   deals: DealListItem[]
   movingDealId: string | null
+  highlighted?: boolean
   onOpenDeal: (dealId: string) => void
   onMoveStage: (dealId: string, stage: DealStage) => void
 }
 
-export function DealColumn({ stage, deals, movingDealId, onOpenDeal, onMoveStage }: Props) {
+export function DealColumn({ stage, deals, movingDealId, highlighted = false, onOpenDeal, onMoveStage }: Props) {
   const total = deals.reduce((sum, deal) => sum + (deal.amount ?? deal.ticket ?? 0), 0)
   const isWon = stage === "Ganho"
   const isLost = stage === "Perdido"
@@ -21,7 +22,12 @@ export function DealColumn({ stage, deals, movingDealId, onOpenDeal, onMoveStage
   return (
     <section
       aria-label={`Estágio ${stageLabels[stage]}`}
-      className="flex max-h-full w-[18rem] shrink-0 flex-col rounded-sm border border-line-soft bg-sunken/60"
+      data-stage={stage}
+      data-highlighted={highlighted || undefined}
+      className={cn(
+        "flex max-h-full w-[18rem] shrink-0 flex-col rounded-sm border border-line-soft bg-sunken/60 transition-[border-color,box-shadow] duration-500",
+        highlighted && "border-accent/70 shadow-glow-accent"
+      )}
     >
       <header className="flex shrink-0 flex-col gap-1 border-b border-line-soft px-3 pt-3 pb-2.5">
         <div className="flex items-center justify-between gap-2">

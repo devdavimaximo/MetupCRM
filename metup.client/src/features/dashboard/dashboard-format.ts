@@ -114,12 +114,3 @@ export function smoothSeries(values: number[], strength = 0.12): number[] {
 
 /** Tons da mesma família dourada → neutros: identidade por posição fixa, nunca arco-íris. */
 export const DONUT_COLORS = ["#f5a623", "#c98f3a", "#b9b6b1", "#8a857d", "#5c5a57", "#3a3b3e"]
-
-export const periodOptions = [
-  { value: "7", label: "Últimos 7 dias" },
-  { value: "30", label: "Últimos 30 dias" },
-  { value: "90", label: "Últimos 3 meses" },
-  { value: "180", label: "Últimos 6 meses" },
-] as const
-
-export type PeriodValueKey = (typeof periodOptions)[number]["value"]

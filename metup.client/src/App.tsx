@@ -3,6 +3,7 @@ import { useState } from "react"
 import { AppShell } from "@/components/AppShell"
 import { CompaniesPage } from "@/features/companies/CompaniesPage"
 import { DashboardPage } from "@/features/dashboard/DashboardPage"
+import type { DealStage } from "@/features/deals/api"
 import { PipelinePage } from "@/features/deals/PipelinePage"
 import { InboxPage } from "@/features/inbox/InboxPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
@@ -28,29 +29,37 @@ function App() {
     return <LoginPage onLoggedIn={setSession} />
   }
 
+  // `etapa` é um destaque de chegada no Pipeline: toda outra navegação o descarta.
   function navigate(nextView: View) {
-    writeUrlState({ view: nextView, companyId: null, dealId: null })
+    writeUrlState({ view: nextView, companyId: null, dealId: null, pipelineStage: "" })
     setNewDealIntent(null)
     setView(nextView)
     setNavSeed((seed) => seed + 1)
   }
 
   function openCompany(companyId: string) {
-    writeUrlState({ view: "empresas", companyId, dealId: null, search: "" })
+    writeUrlState({ view: "empresas", companyId, dealId: null, search: "", pipelineStage: "" })
     setNewDealIntent(null)
     setView("empresas")
     setNavSeed((seed) => seed + 1)
   }
 
   function openDeal(dealId: string) {
-    writeUrlState({ view: "pipeline", dealId, companyId: null })
+    writeUrlState({ view: "pipeline", dealId, companyId: null, pipelineStage: "" })
+    setNewDealIntent(null)
+    setView("pipeline")
+    setNavSeed((seed) => seed + 1)
+  }
+
+  function openPipelineAtStage(stage: DealStage) {
+    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: stage })
     setNewDealIntent(null)
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
   }
 
   function openNewDealForCompany(companyId: string, companyName: string) {
-    writeUrlState({ view: "pipeline", dealId: null, companyId: null })
+    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: "" })
     setNewDealIntent({ companyId, companyName })
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
@@ -73,6 +82,8 @@ function App() {
           role={session.user.role}
           initialScope={initialDashboardScope}
           onOpenDeal={openDeal}
+          onOpenCompany={openCompany}
+          onOpenPipelineAtStage={openPipelineAtStage}
           onNavigate={navigate}
         />
       )}

@@ -54,6 +54,7 @@ export type StageAdvanceRate = {
 
 export type FeaturedDeal = {
   id: string
+  companyId: string
   companyName: string
   stage: DealStage
   amount: number | null
@@ -98,6 +99,9 @@ export type DashboardOverview = {
   periodStart: string
   periodEnd: string
   previousStart: string
+  /** Datas locais (inclusive) do período — rotular sem reconverter fuso. */
+  periodStartLocal: string
+  periodEndLocal: string
   historyStart: string | null
   revenue: PeriodValue
   wonDeals: PeriodValue
@@ -120,11 +124,22 @@ export type DashboardOverview = {
 }
 
 /**
- * A central de comando: janela de `days` dias comparada à anterior, no escopo pedido — o servidor
- * decide o que este papel alcança e devolve em `scope` o recorte que de fato valeu.
+ * A central de comando: últimos `days` dias ou o intervalo local `from`–`to` (inclusive), comparado à
+ * janela anterior de mesmo tamanho, no escopo pedido — o servidor decide o que este papel alcança e
+ * devolve em `scope` o recorte que de fato valeu.
  */
-export function getDashboardOverview(days: number, scope: DealScope, signal?: AbortSignal) {
-  return apiFetch<DashboardOverview>(`/api/dashboard/overview?days=${days}&scope=${scope}`, { signal })
+export function getDashboardOverview(
+  period: { days: number } | { from: string; to: string },
+  scope: DealScope,
+  signal?: AbortSignal
+) {
+  const params = new URLSearchParams({ scope })
+  if ("days" in period) params.set("days", String(period.days))
+  else {
+    params.set("from", period.from)
+    params.set("to", period.to)
+  }
+  return apiFetch<DashboardOverview>(`/api/dashboard/overview?${params}`, { signal })
 }
 
 /** A fotografia de hoje: sempre "minha", o servidor resolve organização e usuário pelo token. */
