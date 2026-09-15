@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 
 import { toMessage } from "@/features/companies/form-errors"
+import { cn } from "@/lib/utils"
 import type { SalesPerformanceGroup, SalesPerformanceReport } from "./api"
 import { ReportError, ReportLoading } from "./ReportStatus"
 import { SalesPerformanceTable } from "./SalesPerformanceTable"
+import { ReportHeading } from "./report-ui"
 
 type Props = {
   headingId: string
@@ -16,7 +18,8 @@ type Props = {
   toIso?: string
   fetchReport: (params: { from?: string; to?: string }, signal: AbortSignal) => Promise<SalesPerformanceReport>
   mapGroup?: (group: SalesPerformanceGroup) => SalesPerformanceGroup
-  renderTable?: (groups: SalesPerformanceGroup[]) => React.ReactNode
+  renderTable?: (groups: SalesPerformanceGroup[]) => ReactNode
+  headingAside?: ReactNode
 }
 
 /**
@@ -36,6 +39,7 @@ export function SalesPerformanceSection({
   fetchReport,
   mapGroup,
   renderTable,
+  headingAside,
 }: Props) {
   const [report, setReport] = useState<SalesPerformanceReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -68,13 +72,8 @@ export function SalesPerformanceSection({
   const groups = mapGroup ? report.groups.map(mapGroup) : report.groups
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <div>
-        <h2 id={headingId} className="text-sm font-semibold text-foreground">
-          {heading}
-        </h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+    <section aria-labelledby={headingId} className={cn("flex flex-col gap-5", isLoading && "opacity-60")}>
+      <ReportHeading id={headingId} title={heading} description={description} aside={headingAside} />
 
       {renderTable ? (
         renderTable(groups)

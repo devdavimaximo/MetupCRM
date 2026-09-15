@@ -9,6 +9,7 @@ type Props = {
   onMoveStage: (dealId: string, stage: DealStage) => void
 }
 
+/** O quadro rola na horizontal; cada coluna rola na vertical dentro da altura da tela. */
 export function DealBoard({ deals, movingDealId, onOpenDeal, onMoveStage }: Props) {
   const dealsByStage = ALL_STAGES.reduce<Record<DealStage, DealListItem[]>>(
     (acc, stage) => {
@@ -19,7 +20,7 @@ export function DealBoard({ deals, movingDealId, onOpenDeal, onMoveStage }: Prop
   )
 
   return (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
+    <div className="flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto px-4 pb-4 sm:px-6 lg:px-10">
       {ALL_STAGES.map((stage) => (
         <DealColumn
           key={stage}

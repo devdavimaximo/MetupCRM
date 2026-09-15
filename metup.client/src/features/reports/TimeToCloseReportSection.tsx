@@ -1,17 +1,12 @@
 import { useEffect, useState } from "react"
-import { CheckCircle2, Timer } from "lucide-react"
 
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { toMessage } from "@/features/companies/form-errors"
+import { numberFormatter } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { getTimeToCloseReport, type TimeToCloseReport } from "./api"
 import { ReportError, ReportLoading } from "./ReportStatus"
-
-const numberFormatter = new Intl.NumberFormat("pt-BR")
-
-function formatDays(value: number): string {
-  const rounded = Math.round(value * 10) / 10
-  return `${numberFormatter.format(rounded)} ${rounded === 1 ? "dia" : "dias"}`
-}
+import { Metric, ReportHeading, formatDays } from "./report-ui"
 
 type Props = {
   fromIso?: string
@@ -48,40 +43,29 @@ export function TimeToCloseReportSection({ fromIso, toIso }: Props) {
   if (!report) return null
 
   return (
-    <section aria-labelledby="time-to-close-heading" className="flex flex-col gap-3">
-      <div>
-        <h2 id="time-to-close-heading" className="text-sm font-semibold text-foreground">
-          Tempo até fechamento
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Quanto tempo, em média, um negócio leva da criação até ser ganho.
-        </p>
-      </div>
+    <section aria-labelledby="time-to-close-heading" className={cn("flex flex-col gap-5", isLoading && "opacity-60")}>
+      <ReportHeading
+        id="time-to-close-heading"
+        title="Tempo até fechamento"
+        description="Quanto tempo, em média, um negócio leva da criação até ser ganho."
+      />
 
-      <Card className="border-primary/30 bg-primary/5">
-        <CardContent className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <Timer className="size-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Tempo médio até fechar</p>
-              <p className="text-2xl font-semibold tabular-nums text-foreground">
-                {report.averageDaysToClose === null ? "—" : formatDays(report.averageDaysToClose)}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {report.averageDaysToClose === null
-                  ? "Sem negócios ganhos no período para calcular."
-                  : "da criação do negócio até o fechamento como ganho"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <CheckCircle2 className="size-3.5" aria-hidden="true" />
-            {numberFormatter.format(report.wonDealsCount)} {report.wonDealsCount === 1 ? "negócio ganho" : "negócios ganhos"}
-          </div>
-        </CardContent>
+      <Card className="grid sm:grid-cols-2">
+        <Metric
+          className="border-b border-line-soft sm:border-r sm:border-b-0"
+          label="Tempo médio até fechar"
+          value={formatDays(report.averageDaysToClose)}
+          caption={
+            report.averageDaysToClose === null
+              ? "Sem negócios ganhos no período para calcular."
+              : "da criação do negócio até o fechamento como ganho"
+          }
+        />
+        <Metric
+          label="Base do cálculo"
+          value={numberFormatter.format(report.wonDealsCount)}
+          caption={report.wonDealsCount === 1 ? "negócio ganho no período" : "negócios ganhos no período"}
+        />
       </Card>
     </section>
   )

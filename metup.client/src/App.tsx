@@ -65,7 +65,14 @@ function App() {
         setSession(null)
       }}
     >
-      {view === "dashboard" && <DashboardPage key={`dashboard-${navSeed}`} onOpenDeal={openDeal} />}
+      {view === "dashboard" && (
+        <DashboardPage
+          key={`dashboard-${navSeed}`}
+          userName={session.user.name}
+          onOpenDeal={openDeal}
+          onNavigate={navigate}
+        />
+      )}
       {view === "empresas" && (
         <CompaniesPage
           key={`empresas-${navSeed}`}

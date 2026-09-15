@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, MessagesSquare } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Monogram } from "@/components/ui/monogram"
+import { EmptyState } from "@/components/ui/states"
 import { useDebouncedValue } from "@/lib/hooks"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
+import { cn } from "@/lib/utils"
 import { toMessage } from "@/features/companies/form-errors"
 import { ConversationList } from "./ConversationList"
 import { ContextPanel } from "./ContextPanel"
@@ -104,18 +107,14 @@ export function InboxPage({ onOpenDeal }: Props) {
     writeUrlState({ search, conversationId: selectedId })
   }, [search, selectedId])
 
-  function selectConversation(id: string) {
-    setSelectedId(id)
-  }
-
   const selectedConversation = conversations.find((c) => c.id === selectedId) ?? null
   const isThreadOpen = selectedId !== null
 
   return (
-    <div className="mx-auto grid h-[calc(100svh-4rem)] w-full max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[22rem_1fr_20rem] lg:items-stretch">
+    <div className="grid h-[calc(100svh-3.5rem)] min-h-128 lg:h-svh lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[22rem_minmax(0,1fr)_20rem]">
       <section
         aria-label="Conversas"
-        className={`flex min-h-0 flex-col lg:flex ${isThreadOpen ? "hidden lg:flex" : "flex"}`}
+        className={cn("min-h-0 flex-col border-r border-line-soft bg-sunken/40", isThreadOpen ? "hidden lg:flex" : "flex")}
       >
         <ConversationList
           conversations={conversations}
@@ -125,26 +124,48 @@ export function InboxPage({ onOpenDeal }: Props) {
           isLoading={isListLoading}
           error={listError}
           onSearchChange={setSearch}
-          onSelect={selectConversation}
+          onSelect={setSelectedId}
           onRetry={() => setListVersion((v) => v + 1)}
         />
       </section>
 
       <section
         aria-label="Thread da conversa"
-        className={`min-h-0 rounded-xl border border-border bg-card ${isThreadOpen ? "flex flex-col" : "hidden lg:flex lg:flex-col"}`}
+        className={cn("min-h-0 min-w-0 flex-col", isThreadOpen ? "flex" : "hidden lg:flex")}
       >
         {isThreadOpen && selectedConversation ? (
           <>
-            <div className="border-b border-border px-2 py-2 lg:hidden">
-              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedId(null)}>
+            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-soft px-3 sm:px-6">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="lg:hidden"
+                aria-label="Voltar para conversas"
+                onClick={() => setSelectedId(null)}
+              >
                 <ArrowLeft aria-hidden="true" />
-                Conversas
               </Button>
-            </div>
+              <Monogram name={selectedConversation.contactName} size="sm" />
+              <div className="min-w-0">
+                <p className="truncate text-base font-medium text-fg">{selectedConversation.contactName}</p>
+                <p className="truncate text-sm text-muted">{selectedConversation.companyName}</p>
+              </div>
+              <span className="label-mono ml-auto hidden text-faint sm:block">WhatsApp</span>
+              {context?.dealId && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto sm:ml-2 xl:hidden"
+                  onClick={() => onOpenDeal(context.dealId!)}
+                >
+                  Abrir negócio
+                </Button>
+              )}
+            </header>
             <MessageThread
               conversationId={selectedConversation.id}
-              contactName={selectedConversation.contactName}
               messages={messages}
               isLoading={isThreadLoading}
               error={threadError}
@@ -152,18 +173,20 @@ export function InboxPage({ onOpenDeal }: Props) {
             />
           </>
         ) : (
-          <p className="flex flex-1 items-center justify-center p-8 text-center text-sm text-muted-foreground">
-            Selecione uma conversa na lista para ver a thread.
-          </p>
+          <EmptyState
+            icon={MessagesSquare}
+            title={isThreadOpen ? "Carregando conversa…" : "Nenhuma conversa aberta"}
+            description={
+              isThreadOpen ? undefined : "Escolha uma conversa na lista para ler a thread e responder com o contexto do negócio ao lado."
+            }
+            className="flex-1"
+          />
         )}
       </section>
 
-      <section
-        aria-label="Contexto do contato"
-        className="hidden min-h-0 overflow-y-auto rounded-xl border border-border bg-card lg:block"
-      >
+      <aside aria-label="Contexto do contato" className="hidden min-h-0 overflow-y-auto border-l border-line-soft bg-sunken/40 xl:block">
         <ContextPanel context={context} isLoading={isContextLoading} error={contextError} onOpenDeal={onOpenDeal} />
-      </section>
+      </aside>
     </div>
   )
 }

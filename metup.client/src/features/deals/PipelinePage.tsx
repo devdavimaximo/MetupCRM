@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, X } from "lucide-react"
+import { X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { PageHeader } from "@/components/ui/page"
 import { Select } from "@/components/ui/select"
+import { Alert, Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
+import { numberFormatter, pluralize } from "@/lib/format"
+import { formatMoney } from "@/lib/money"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
 import { DealBoard } from "./DealBoard"
 import { DealDrawer, type DealDrawerTarget } from "./DealDrawer"
@@ -17,7 +21,7 @@ import {
   type DealStage,
   type UserSummary,
 } from "./api"
-import { sourceLabels } from "./stage-labels"
+import { ALL_STAGES, sourceLabels } from "./stage-labels"
 
 type Props = {
   onOpenCompany: (companyId: string) => void
@@ -28,6 +32,7 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
   const initialUrlState = readUrlState()
 
   const [deals, setDeals] = useState<DealListItem[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadVersion, setReloadVersion] = useState(0)
@@ -57,7 +62,10 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
       { pageSize: 200, ownerUserId: ownerUserId || undefined, source: source || undefined },
       controller.signal
     )
-      .then((result) => setDeals(result.items))
+      .then((result) => {
+        setDeals(result.items)
+        setTotalCount(result.totalCount)
+      })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
         setError(toMessage(err, "Não foi possível carregar o pipeline."))
@@ -105,99 +113,98 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
     }
   }
 
+  const openDeals = deals.filter((d) => d.status === "Aberto")
+  const openValue = openDeals.reduce((sum, d) => sum + (d.amount ?? d.ticket ?? 0), 0)
+  const hasFilters = Boolean(ownerUserId || source)
+
   return (
-    <div className="mx-auto flex w-full max-w-[110rem] flex-col gap-4 px-4 py-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Pipeline</h1>
-          <p className="text-sm text-muted-foreground">
-            {isLoading ? "Carregando…" : `${deals.length} ${deals.length === 1 ? "negócio" : "negócios"} no funil`}
-          </p>
-        </div>
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-128 flex-col lg:h-svh">
+      <div className="flex shrink-0 flex-col gap-5 px-4 pt-6 pb-5 sm:px-6 lg:px-10 lg:pt-10">
+        <PageHeader
+          eyebrow="Comercial"
+          title="Pipeline"
+          description={
+            isLoading && deals.length === 0 ? (
+              "Carregando o funil…"
+            ) : (
+              <>
+                {pluralize(openDeals.length, "negócio em aberto", "negócios em aberto")}
+                <span className="mx-2 text-faint">·</span>
+                <span className="text-fg tabular">{formatMoney(openValue)}</span> em negociação
+                {totalCount > deals.length && (
+                  <>
+                    <span className="mx-2 text-faint">·</span>
+                    <span className="text-muted">
+                      exibindo {numberFormatter.format(deals.length)} de {numberFormatter.format(totalCount)}
+                    </span>
+                  </>
+                )}
+              </>
+            )
+          }
+          actions={
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:w-auto">
+              <Label htmlFor="pipeline-filter-owner" className="sr-only">
+                Filtrar por responsável
+              </Label>
+              <Select
+                id="pipeline-filter-owner"
+                value={ownerUserId}
+                onChange={(e) => setOwnerUserId(e.target.value)}
+                className="h-9 w-full sm:w-56"
+              >
+                <option value="">Todos os responsáveis</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </Select>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-40">
-            <Label htmlFor="pipeline-filter-owner" className="sr-only">
-              Filtrar por responsável
-            </Label>
-            <Select
-              id="pipeline-filter-owner"
-              value={ownerUserId}
-              onChange={(e) => setOwnerUserId(e.target.value)}
-            >
-              <option value="">Todos os responsáveis</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+              <Label htmlFor="pipeline-filter-source" className="sr-only">
+                Filtrar por origem
+              </Label>
+              <Select
+                id="pipeline-filter-source"
+                value={source}
+                onChange={(e) => setSource(e.target.value as DealSource | "")}
+                className="h-9 w-full sm:w-44"
+              >
+                <option value="">Todas as origens</option>
+                {Object.entries(sourceLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
 
-          <div className="w-40">
-            <Label htmlFor="pipeline-filter-source" className="sr-only">
-              Filtrar por origem
-            </Label>
-            <Select
-              id="pipeline-filter-source"
-              value={source}
-              onChange={(e) => setSource(e.target.value as DealSource | "")}
-            >
-              <option value="">Todas as origens</option>
-              {Object.entries(sourceLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </div>
+              {hasFilters && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Limpar filtros"
+                  title="Limpar filtros"
+                  onClick={() => {
+                    setOwnerUserId("")
+                    setSource("")
+                  }}
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              )}
+            </div>
+          }
+        />
 
-          {(ownerUserId || source) && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setOwnerUserId("")
-                setSource("")
-              }}
-            >
-              <X aria-hidden="true" />
-              Limpar filtros
-            </Button>
-          )}
-        </div>
-      </header>
+        {error && <Alert onRetry={reload}>{error}</Alert>}
+        {boardError && <Alert>{boardError}</Alert>}
+      </div>
 
-      {error && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">
-          <p className="text-sm font-medium text-destructive">{error}</p>
-          <Button type="button" size="sm" variant="outline" onClick={reload}>
-            Tentar de Novo
-          </Button>
-        </div>
-      )}
-
-      {boardError && (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          {boardError}
-        </p>
-      )}
-
-      {isLoading && deals.length === 0 && !error && (
-        <p className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          Carregando pipeline…
-        </p>
-      )}
+      {isLoading && deals.length === 0 && !error && <BoardSkeleton />}
 
       {!error && (isLoading === false || deals.length > 0) && (
-        <DealBoard
-          deals={deals}
-          movingDealId={movingDealId}
-          onOpenDeal={openDeal}
-          onMoveStage={handleMoveStage}
-        />
+        <DealBoard deals={deals} movingDealId={movingDealId} onOpenDeal={openDeal} onMoveStage={handleMoveStage} />
       )}
 
       <DealDrawer
@@ -209,6 +216,23 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
         onOpenCompany={onOpenCompany}
         onSaved={reload}
       />
+    </div>
+  )
+}
+
+function BoardSkeleton() {
+  return (
+    <div role="status" className="flex min-h-0 flex-1 gap-3 overflow-hidden px-4 pb-4 sm:px-6 lg:px-10">
+      <span className="sr-only">Carregando pipeline…</span>
+      {ALL_STAGES.slice(0, 6).map((stage, i) => (
+        <div key={stage} className="flex w-[18rem] shrink-0 flex-col gap-2 rounded-sm border border-line-soft bg-sunken/60 p-3">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="mb-2 h-2.5 w-16" />
+          {Array.from({ length: 4 - (i % 3) }, (_, j) => (
+            <Skeleton key={j} className="h-20 w-full" />
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

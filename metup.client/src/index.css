@@ -1,131 +1,233 @@
+@import "@fontsource/fraunces/latin-600.css";
+@import "@fontsource/work-sans/latin-400.css";
+@import "@fontsource/work-sans/latin-500.css";
+@import "@fontsource/work-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
 @import "tailwindcss";
 @import "tw-animate-css";
-@custom-variant dark (&:is(.dark *));
 
 /*
- * Paleta "CRM & Client Management": azul institucional (confiança) + verde de negócio
- * reservado para sinal comercial (ganho/positivo), nunca para superfície neutra.
- * Estilo: flat + suíço, densidade alta — a tela é para operar rápido, não para contemplar.
+ * Design tokens — espelho da direção "Terminal Precision" da landing page.
+ *
+ * FONTE DA VERDADE: LP/src/styles/tokens.css. Os dois projetos vivem em repositórios
+ * separados, então não há pacote compartilhado — os valores de marca (cor, tipo, raio,
+ * sombra, motion) são copiados de lá e só DERIVADOS aqui quando uma tela operacional
+ * precisa de algo que a LP não tem (camadas extras de superfície, escala tipográfica
+ * densa). Mudou a marca na LP? Atualize este bloco.
+ *
+ * Os defaults de cor/raio/sombra do Tailwind são apagados: se `bg-slate-800` ou
+ * `rounded-full` não compilam, ninguém escorrega para o visual de template.
  */
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+
+  /* ── Primitivas (só para color-mix) ─────────────────────────────────────── */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-transparent: transparent;
+
+  /* ── Superfícies — LP: sunken, bg, surface. Derivadas: surface-2/3 para hover,
+     linhas selecionadas e popovers, subindo luminância no mesmo matiz neutro. */
+  --color-sunken: #050505;
+  --color-bg: #060606;
+  --color-surface: #0d0f10;
+  --color-surface-2: #131517;
+  --color-surface-3: #1a1c1f;
+
+  /* ── Texto — valores e contrastes da LP (contra #060606). */
+  --color-fg: #f4f1ea; /* 17.96:1 */
+  --color-fg-muted: #b9b6b1; /* 10.02:1 — secundário padrão */
+  --color-muted: #908e8a; /*  6.19:1 — meta e rótulos */
+  --color-faint: #71706d; /*  4.09:1 — só disabled/decorativo */
+  --color-on-accent: #000000;
+
+  /* ── Linhas — `line` decorativo; `line-strong` para borda interativa (3.39:1).
+     `line-soft` é derivado entre os dois para divisórias de tabela e painéis, onde
+     #1a1a1a some sobre a superfície elevada. */
+  --color-line: #1a1a1a;
+  --color-line-soft: #26272a;
+  --color-line-strong: #6b6259;
+
+  /* ── Marca */
+  --color-accent: #f5a623;
+  --color-accent-hover: #f7b344;
+  --color-accent-active: #d08d1e;
+  --color-focus: #4fd1c5;
+
+  /* ── Estado — mesmos valores da LP. */
+  --color-success: #5fd08a;
+  --color-danger: #ff5c72;
+
+  /* ── Tipografia ─────────────────────────────────────────────────────────── */
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Escala de produto: a LP é fluida e editorial; uma tela operacional precisa de
+     passos fixos e densos. Base de 14px. */
+  --text-2xs: 0.6875rem; /* 11 — rótulo mono */
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem; /* 12 — meta */
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem; /* 13 — secundário, tabela */
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem; /* 14 — corpo de interface */
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem; /* 16 — campos (iOS não dá zoom) */
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem; /* 18 — títulos de painel */
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.375rem; /* 22 */
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.75rem; /* 28 — título de página */
+  --text-2xl--line-height: 2.125rem;
+  --text-3xl: 2.25rem; /* 36 — número de destaque */
+  --text-3xl--line-height: 2.5rem;
+  --text-4xl: 3rem; /* 48 — a métrica de ouro */
+  --text-4xl--line-height: 1;
+
+  /* ── Raio — "canto usinado, nunca pílula" (LP). */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.625rem;
+  --radius-full: 9999px; /* só pontos/indicadores */
+
+  /* ── Luz — em tema escuro, glow e hairline leem melhor que drop shadow. */
+  --shadow-hairline: inset 0 1px 0 0 color-mix(in oklab, var(--color-white) 6%, transparent);
+  --shadow-raised: 0 12px 32px -18px var(--color-black);
+  --shadow-panel: 0 32px 72px -40px var(--color-black);
+  --shadow-glow-accent:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 35%, transparent),
+    0 10px 36px -10px color-mix(in oklab, var(--color-accent) 45%, transparent);
+
+  /* ── Motion — espelho de LP/src/animations/motion.ts. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --default-transition-duration: 160ms;
+  --default-transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-skeleton: skeleton 1.6s ease-in-out infinite;
+  @keyframes skeleton {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
 :root {
-  color-scheme: light;
-
-  --radius: 0.625rem;
-
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-
-  --secondary: #f1f5fd;
-  --secondary-foreground: #0f172a;
-
-  --muted: #f1f5fd;
-  --muted-foreground: #475569;
-
-  --accent: #e4ecfc;
-  --accent-foreground: #1d4ed8;
-
-  /* Sinal comercial — usado em números de negócio, nunca como fundo genérico. */
-  --success: #047857;
-  --success-foreground: #ffffff;
-
-  --destructive: #dc2626;
-
-  --border: #e2e8f0;
-  --input: #cbd5e1;
-  --ring: #2563eb;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --sidebar-width: 15rem;
+  --sidebar-width-collapsed: 4rem;
 }
 
-.dark {
-  color-scheme: dark;
-
-  --background: #0b1220;
-  --foreground: #e7edf7;
-  --card: #111a2b;
-  --card-foreground: #e7edf7;
-  --popover: #111a2b;
-  --popover-foreground: #e7edf7;
-
-  --primary: #60a5fa;
-  --primary-foreground: #07101f;
-
-  --secondary: #1b2740;
-  --secondary-foreground: #e7edf7;
-
-  --muted: #1b2740;
-  --muted-foreground: #a3b4cd;
-
-  --accent: #1e2e4d;
-  --accent-foreground: #dbeafe;
-
-  --success: #34d399;
-  --success-foreground: #07101f;
-
-  --destructive: #f87171;
-
-  --border: #24324f;
-  --input: #2c3b5c;
-  --ring: #60a5fa;
+/* Rótulo de terminal — a assinatura da direção (LP: `--text-label`). */
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-@theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+/* Anel de foco único do sistema (LP): turquesa com afastamento, nunca sobre o fill. */
+@utility focus-ring {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+@utility tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 @layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--color-line-soft);
   }
 
   body {
-    @apply bg-background font-sans text-foreground;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Contagens e telefones em colunas não devem "dançar" entre linhas. */
-  .tabular {
-    font-variant-numeric: tabular-nums;
+  :is(h1, h2, h3, h4) {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  /*
+   * Ícones com o contrato de traço da LP: 1.5px, pontas quadradas, cantos vivos.
+   * Os ícones do lucide nascem com pontas redondas e traço 2; CSS vence o atributo
+   * de apresentação, então a biblioteca inteira passa a falar a língua da marca.
+   */
+  svg.lucide {
+    stroke-width: 1.5;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+  }
+
+  /* Seletores de data/hora nativos no tema escuro. */
+  ::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
+
+  option {
+    background-color: var(--color-surface-2);
+    color: var(--color-fg);
+  }
+
+  /* Barras de rolagem discretas — o kanban e os painéis rolam o tempo todo. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-3) transparent;
   }
 }
 
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/*
+ * prefers-reduced-motion por token (mesma abordagem da LP): durações encurtam e o
+ * deslocamento some, sem `!important` em `*` quebrando feedback de cor.
+ */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --default-transition-duration: 80ms;
+  }
+
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+    scroll-behavior: auto;
   }
 }

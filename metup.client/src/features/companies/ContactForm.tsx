@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Field } from "@/components/ui/field"
+import { InlineError } from "@/components/ui/states"
 import { createContact, updateContact, type Contact, type ContactInput } from "./api"
 import { toFieldErrors, toMessage, type FieldErrors } from "./form-errors"
 
@@ -63,9 +64,7 @@ export function ContactForm({ companyId, contact, onSaved, onCancel }: Props) {
 
     try {
       const input = toInput(form)
-      const saved = contact
-        ? await updateContact(contact.id, input)
-        : await createContact(companyId, input)
+      const saved = contact ? await updateContact(contact.id, input) : await createContact(companyId, input)
       onSaved(saved)
     } catch (err) {
       const errors = toFieldErrors(err)
@@ -79,10 +78,13 @@ export function ContactForm({ companyId, contact, onSaved, onCancel }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4"
+      className="flex flex-col gap-5 rounded-sm border border-line-strong/50 bg-surface-2/40 p-4"
       noValidate
+      aria-label={contact ? `Editar ${contact.name}` : "Novo contato"}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <p className="label-mono text-fg-muted">{contact ? "Editar contato" : "Novo contato"}</p>
+
+      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
         <Field
           id={`${prefix}-name`}
           label="Nome"
@@ -92,6 +94,7 @@ export function ContactForm({ companyId, contact, onSaved, onCancel }: Props) {
           autoComplete="off"
           placeholder="Maria Souza…"
           error={fieldErrors.name}
+          autoFocus
         />
 
         <Field
@@ -146,20 +149,16 @@ export function ContactForm({ companyId, contact, onSaved, onCancel }: Props) {
       </div>
 
       <div aria-live="polite" className="empty:hidden">
-        {error && (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {error}
-          </p>
-        )}
+        {error && <InlineError>{error}</InlineError>}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" disabled={isSaving}>
-          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
-          {isSaving ? "Salvando…" : contact ? "Salvar Contato" : "Adicionar Contato"}
-        </Button>
+      <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isSaving}>
           Cancelar
+        </Button>
+        <Button type="submit" size="sm" disabled={isSaving}>
+          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
+          {isSaving ? "Salvando…" : contact ? "Salvar contato" : "Adicionar contato"}
         </Button>
       </div>
     </form>
