@@ -1,7 +1,6 @@
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Dashboard.Common;
 using Metup.Application.Tasks.Common;
-using Metup.Domain.Deals;
 using Metup.Domain.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +21,6 @@ public class GetDashboardSummaryQueryHandler(
         // recortado no fuso da organização: a tarefa das 22h de hoje em Brasília é "hoje".
         var clock = await organizationClock.SnapshotAsync(cancellationToken);
         var now = clock.UtcNow;
-        var startOfToday = clock.StartOfDayUtc(clock.Today);
         var endOfToday = clock.EndOfDayUtc(clock.Today);
 
         var pendingTasks = context.Tasks
@@ -36,13 +34,6 @@ public class GetDashboardSummaryQueryHandler(
             await pendingTasks.CountAsync(t => t.DueDate >= now && t.DueDate <= endOfToday, cancellationToken),
             await pendingTasks.CountAsync(t => t.DueDate > endOfToday, cancellationToken));
 
-        var todayTasks = await pendingTasks
-            .Where(t => t.DueDate <= endOfToday)
-            .OrderBy(t => t.DueDate)
-            .ThenBy(t => t.Id)
-            .ToTaskDto(context)
-            .ToListAsync(cancellationToken);
-
         // Fila curta em ordem de prazo, incluindo o que vem depois de hoje — o painel lateral do dashboard.
         var nextTasks = await pendingTasks
             .OrderBy(t => t.DueDate)
@@ -51,30 +42,6 @@ public class GetDashboardSummaryQueryHandler(
             .ToTaskDto(context)
             .ToListAsync(cancellationToken);
 
-        var openDealsByStage = await context.Deals
-            .AsNoTracking()
-            .Where(d => d.OrganizationId == organizationId && d.Status == DealStatus.Aberto)
-            .GroupBy(d => d.Stage)
-            .Select(g => new DealsByStageDto(g.Key, g.Count()))
-            .ToListAsync(cancellationToken);
-
-        var activitiesToday = await context.Activities
-            .AsNoTracking()
-            .Where(a => a.OrganizationId == organizationId
-                && a.AuthorUserId == userId
-                && a.OccurredAt >= startOfToday
-                && a.OccurredAt <= endOfToday)
-            .GroupBy(a => a.Type)
-            .Select(g => new ActivitiesByTypeDto(g.Key, g.Count()))
-            .ToListAsync(cancellationToken);
-
-        return new DashboardSummaryDto(
-            taskCounts,
-            todayTasks,
-            nextTasks,
-            openDealsByStage,
-            openDealsByStage.Sum(d => d.Count),
-            activitiesToday,
-            activitiesToday.Sum(a => a.Count));
+        return new DashboardSummaryDto(taskCounts, nextTasks);
     }
 }

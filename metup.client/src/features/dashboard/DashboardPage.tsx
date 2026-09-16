@@ -9,17 +9,12 @@ import type { DealStage } from "@/features/deals/api"
 import type { AuthenticatedUser } from "@/lib/auth"
 import type { TaskItem } from "@/features/tasks/api"
 import { numberFormatter } from "@/lib/format"
+import { useAsyncResource } from "@/lib/hooks"
 import { addDays, todayLocal, type LocalDate } from "@/lib/local-date"
 import { useRealtime, useRealtimeStatus } from "@/lib/realtime"
 import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
-import {
-  getDashboardOverview,
-  getDashboardSummary,
-  type DashboardOverview,
-  type DashboardSummary,
-  type DealScope,
-} from "./api"
+import { getDashboardOverview, getDashboardSummary, type DashboardOverview, type DealScope } from "./api"
 import { OriginBreakdown, RevenueAreaChart } from "./dashboard-charts"
 import { FeaturedDealsCard, KpiCard, Panel, PanelHeading, PipelineCard, PotentialCard, DeltaLine } from "./dashboard-cards"
 import {
@@ -44,6 +39,7 @@ import {
   type DashboardPeriod,
 } from "./dashboard-period"
 import { ActivityFeedSheet } from "./ActivityFeedSheet"
+import { PeriodDetailsPopover } from "./PeriodDetailsPopover"
 import { SideColumn } from "./dashboard-side"
 
 type Props = {
@@ -124,89 +120,72 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
     setFeedOpenState(open)
   }, [])
 
-  const [overview, setOverview] = useState<DashboardOverview | null>(null)
   const [loadedPeriod, setLoadedPeriod] = useState<DashboardPeriod>(period)
-  const [isOverviewLoading, setIsOverviewLoading] = useState(true)
-  const [overviewError, setOverviewError] = useState<string | null>(null)
-  const [overviewVersion, setOverviewVersion] = useState(0)
-
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [summaryError, setSummaryError] = useState<string | null>(null)
   // Concluídas que o servidor ainda não confirmou numa resposta nova — nunca "ressuscitam".
   const [hiddenTaskIds, setHiddenTaskIds] = useState<ReadonlySet<string>>(() => new Set())
-  const summaryRequest = useRef<AbortController | null>(null)
   // Ids da Atividade Recente já mostrados: o que chegar fora deles, via tempo real, ganha realce.
   const knownEventIds = useRef<ReadonlySet<string> | null>(null)
+  const [highlightedEventIds, setHighlightedEventIds] = useState<ReadonlySet<string>>(() => new Set())
+  const highlightTimer = useRef<number | undefined>(undefined)
 
   const request = useMemo(() => resolvePeriod(period, orgToday), [period, orgToday])
   const requestKey = "days" in request ? `d:${request.days}` : `r:${request.from}:${request.to}`
 
-  useEffect(() => {
-    const controller = new AbortController()
-    setIsOverviewLoading(true)
-    setOverviewError(null)
-    getDashboardOverview(request, scope, controller.signal)
-      .then((data) => {
-        // Eventos que vieram por troca de período/escopo não são "novos" para o realce do tempo real.
-        knownEventIds.current = new Set(data.recentEvents.map((event) => event.id))
-        setOverview(data)
-        setLoadedPeriod(period)
-        if ("days" in request) setOrgToday(data.periodEndLocal)
-      })
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) setOverviewError(toMessage(err, "Não foi possível carregar o panorama."))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsOverviewLoading(false)
-      })
-    return () => controller.abort()
-    // `request` e `period` mudam junto com `requestKey`; a chave evita refazer por identidade de objeto.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestKey, scope, overviewVersion])
-
   /**
-   * Busca a fila no servidor. Uma nova busca aborta a anterior, então conclusões em sequência
-   * rápida nunca aplicam uma resposta velha por cima de uma nova.
+   * O panorama do período. Os dados do período anterior seguem na tela (esmaecidos) enquanto o novo
+   * não chega; uma troca de período cancela a busca anterior.
    */
-  const loadSummary = useCallback(() => {
-    summaryRequest.current?.abort()
-    const controller = new AbortController()
-    summaryRequest.current = controller
-    getDashboardSummary(controller.signal)
-      .then((data) => {
-        setSummary(data)
-        setSummaryError(null)
-        setHiddenTaskIds((hidden) => {
-          const stillListed = new Set([...hidden].filter((id) => data.nextTasks.some((t) => t.id === id)))
-          return stillListed.size === hidden.size ? hidden : stillListed
-        })
-      })
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) setSummaryError(toMessage(err, "Não foi possível carregar suas tarefas."))
-      })
-  }, [])
+  const overviewResource = useAsyncResource(
+    (signal) => getDashboardOverview(request, scope, signal),
+    // `request` e `period` mudam junto com `requestKey`; a chave evita refazer por identidade de objeto.
+    [requestKey, scope],
+    {
+      keepPreviousData: true,
+      onSuccess: (data, { silent }) => {
+        const known = knownEventIds.current ?? new Set<string>()
+        knownEventIds.current = new Set(data.recentEvents.map((event) => event.id))
 
-  useEffect(() => {
-    loadSummary()
-    return () => summaryRequest.current?.abort()
-  }, [loadSummary])
+        if (!silent) {
+          // Eventos que vieram por troca de período/escopo não são "novos" para o realce do tempo real.
+          setLoadedPeriod(period)
+          if ("days" in request) setOrgToday(data.periodEndLocal)
+          return
+        }
+
+        const fresh = data.recentEvents.filter((event) => !known.has(event.id)).map((event) => event.id)
+        if (fresh.length === 0) return
+        setHighlightedEventIds(new Set(fresh))
+        window.clearTimeout(highlightTimer.current)
+        highlightTimer.current = window.setTimeout(() => setHighlightedEventIds(new Set()), HIGHLIGHT_MS)
+      },
+    }
+  )
+
+  /** A fila de hoje. Uma nova busca cancela a anterior: conclusões em sequência rápida não se atropelam. */
+  const summaryResource = useAsyncResource((signal) => getDashboardSummary(signal), [], {
+    keepPreviousData: true,
+    onSuccess: (data) =>
+      setHiddenTaskIds((hidden) => {
+        const stillListed = new Set([...hidden].filter((id) => data.nextTasks.some((t) => t.id === id)))
+        return stillListed.size === hidden.size ? hidden : stillListed
+      }),
+  })
+
+  const overview = overviewResource.data
+  const isOverviewLoading = overviewResource.isLoading
+  const overviewError = overviewResource.error ? toMessage(overviewResource.error, "Não foi possível carregar o panorama.") : null
+  const summary = summaryResource.data
+  const summaryError = summaryResource.error ? toMessage(summaryResource.error, "Não foi possível carregar suas tarefas.") : null
+  const loadSummary = summaryResource.reload
 
   // ── Tempo real ────────────────────────────────────────────────────────────────
   // Evento chegou (ou a conexão voltou / a aba ganhou foco sem conexão): refaz overview e tarefas em
-  // segundo plano, 2s depois do último evento, sem skeleton e com o mesmo período e escopo.
-  const [highlightedEventIds, setHighlightedEventIds] = useState<ReadonlySet<string>>(() => new Set())
-  const latestQuery = useRef({ request, scope, loading: isOverviewLoading })
-  const silentRequest = useRef<AbortController | null>(null)
+  // segundo plano, 2s depois do último evento, sem skeleton e com o mesmo período e escopo. Uma troca
+  // de período em andamento já vai trazer dados novos, então o recarregamento silencioso a respeita.
   const realtimeTimer = useRef<number | undefined>(undefined)
-  const highlightTimer = useRef<number | undefined>(undefined)
-
-  useEffect(() => {
-    latestQuery.current = { request, scope, loading: isOverviewLoading }
-  })
 
   useEffect(
     () => () => {
-      silentRequest.current?.abort()
       window.clearTimeout(realtimeTimer.current)
       window.clearTimeout(highlightTimer.current)
     },
@@ -214,29 +193,9 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
   )
 
   const refreshSilently = useCallback(() => {
-    const { request: currentRequest, scope: currentScope, loading } = latestQuery.current
     loadSummary()
-    // Uma troca de período em andamento já vai trazer dados novos.
-    if (loading) return
-    silentRequest.current?.abort()
-    const controller = new AbortController()
-    silentRequest.current = controller
-    getDashboardOverview(currentRequest, currentScope, controller.signal)
-      .then((data) => {
-        const known = knownEventIds.current ?? new Set<string>()
-        const fresh = data.recentEvents.filter((event) => !known.has(event.id)).map((event) => event.id)
-        knownEventIds.current = new Set(data.recentEvents.map((event) => event.id))
-        setOverview(data)
-        setOverviewError(null)
-        if (fresh.length > 0) {
-          setHighlightedEventIds(new Set(fresh))
-          window.clearTimeout(highlightTimer.current)
-          highlightTimer.current = window.setTimeout(() => setHighlightedEventIds(new Set()), HIGHLIGHT_MS)
-        }
-      })
-      // Falha silenciosa: os dados na tela continuam válidos e a próxima revalidação tenta de novo.
-      .catch(() => undefined)
-  }, [loadSummary])
+    overviewResource.reload({ silent: true })
+  }, [loadSummary, overviewResource])
 
   useRealtime(() => {
     window.clearTimeout(realtimeTimer.current)
@@ -318,11 +277,17 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
               onRangeSelect={({ from, to }) => changePeriod({ kind: "custom", from, to })}
               className="min-w-56 max-sm:flex-1"
             />
+            <PeriodDetailsPopover
+              overview={overview}
+              periodName={periodLabel(loadedPeriod)}
+              scope={overview?.scope ?? scope}
+              currentUserName={userName}
+            />
           </div>
         </header>
 
         {overviewError && (
-          <Alert onRetry={() => setOverviewVersion((v) => v + 1)}>
+          <Alert onRetry={() => overviewResource.reload()}>
             {overview ? `${overviewError} Mostrando os dados de ${periodLabel(loadedPeriod)}.` : overviewError}
           </Alert>
         )}

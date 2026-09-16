@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AlarmClock, Bell, CircleAlert, MessageCircleWarning, PauseCircle, RotateCw, type LucideIcon } from "lucide-react"
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { activityTypeLabels } from "@/features/activities/activity-labels"
 import { toMessage } from "@/features/companies/form-errors"
 import { numberFormatter } from "@/lib/format"
+import { useAsyncResource } from "@/lib/hooks"
 import { useRealtime } from "@/lib/realtime"
 import { cn } from "@/lib/utils"
 import { listNotifications, type AppNotification, type NotificationKind } from "./api"
@@ -78,41 +79,26 @@ export function NotificationBell({
   onOpenConversation: (conversationId: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<AppNotification[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [seenAt, setSeenAt] = useState(() => readSeen(userId))
   // O que era novo no momento de abrir continua marcado enquanto o sino estiver aberto.
   const [seenBeforeOpen, setSeenBeforeOpen] = useState(seenAt)
-  const request = useRef<AbortController | null>(null)
   const debounce = useRef<number | undefined>(undefined)
 
-  const load = useCallback(() => {
-    request.current?.abort()
-    const controller = new AbortController()
-    request.current = controller
-    listNotifications(controller.signal)
-      .then((data) => {
-        setItems(data)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (!controller.signal.aborted) setError(toMessage(err, "Não foi possível carregar as notificações."))
-      })
-  }, [])
+  const notifications = useAsyncResource((signal) => listNotifications(signal), [], { keepPreviousData: true })
+  const items = notifications.data
+  const error = notifications.error ? toMessage(notifications.error, "Não foi possível carregar as notificações.") : null
+  const load = notifications.reload
 
   useEffect(() => {
-    const first = window.setTimeout(load, 0)
     const poll = window.setInterval(load, POLL_MS)
     const onVisible = () => {
       if (document.visibilityState === "visible") load()
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => {
-      window.clearTimeout(first)
       window.clearInterval(poll)
       window.clearTimeout(debounce.current)
       document.removeEventListener("visibilitychange", onVisible)
-      request.current?.abort()
     }
   }, [load])
 
@@ -177,7 +163,7 @@ export function NotificationBell({
               <span>{error}</span>
               <button
                 type="button"
-                onClick={load}
+                onClick={() => load()}
                 className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xs text-accent hover:text-accent-hover focus-visible:focus-ring"
               >
                 <RotateCw className="size-3.5" aria-hidden="true" />

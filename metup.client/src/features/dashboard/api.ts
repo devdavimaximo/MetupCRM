@@ -9,24 +9,10 @@ export type TaskCounts = {
   upcoming: number
 }
 
-export type DealsByStage = {
-  stage: DealStage
-  count: number
-}
-
-export type ActivitiesByType = {
-  type: ActivityType
-  count: number
-}
-
+/** A fotografia de hoje: só o que a tela usa. Funil, origens e números do período vêm do overview. */
 export type DashboardSummary = {
   taskCounts: TaskCounts
-  todayTasks: TaskItem[]
   nextTasks: TaskItem[]
-  openDealsByStage: DealsByStage[]
-  openDealsTotal: number
-  activitiesToday: ActivitiesByType[]
-  activitiesTodayTotal: number
 }
 
 export type PeriodValue = { current: number; previous: number }

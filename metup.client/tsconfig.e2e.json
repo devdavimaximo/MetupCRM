@@ -1,23 +1,18 @@
 {
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
-    "module": "esnext",
-    "types": ["vite/client", "vitest/globals"],
-    "allowArbitraryExtensions": true,
+    "types": ["node"],
     "skipLibCheck": true,
 
-    /* Bundler mode */
+    /* Bundler mode: os testes de ponta a ponta importam como o resto do front. */
+    "module": "esnext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-    "jsx": "react-jsx",
+    "strict": true,
 
     /* Linting */
     "noUnusedLocals": true,
@@ -25,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["playwright.config.ts", "tests/**/*.ts"]
 }
