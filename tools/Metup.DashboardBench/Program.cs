@@ -23,6 +23,7 @@ using Metup.Domain.Users;
 using Metup.Infrastructure.Persistence;
 using Metup.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 
 const string OrgName = "Metup Perf";
@@ -284,8 +285,41 @@ static async Task MeasureAsync(string connectionString)
             // Contexto novo por rodada: sem cache de primeiro nível, como numa requisição de verdade.
             await using var db = OpenContext(connectionString);
             var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
+            // Provider sem cache: a medição tem que mostrar o custo do cálculo, não o de um acerto
+            // de cache. O ganho do cache é a diferença entre este número e o do cenário "cache quente".
             var handler = new GetDashboardOverviewQueryHandler(
-                db, currentUser, new OrganizationClock(db, currentUser), new ActivityFeedReader(db));
+                db, currentUser, new OrganizationClock(db, currentUser), new ActivityFeedReader(db),
+                new StageAnalyticsProvider(db));
+
+            var stopwatch = Stopwatch.StartNew();
+            await handler.Handle(new GetDashboardOverviewQuery(days, scope), CancellationToken.None);
+            stopwatch.Stop();
+
+            if (run >= 3) samples.Add(stopwatch.Elapsed.TotalMilliseconds);
+        }
+
+        samples.Sort();
+        Console.WriteLine($"{name,-34}{samples[0],7:N0}ms{Percentile(samples, 0.50),7:N0}ms{Percentile(samples, 0.95),7:N0}ms");
+    }
+
+    // O mesmo cenário com o cache da leitura histórica quente — a diferença para a primeira linha é
+    // o ganho do item 22. O cache é compartilhado entre as rodadas; o contexto continua novo.
+    foreach (var (name, days, user, role, scope) in new[]
+    {
+        ("overview days=30 · org · cache quente", 30, admin, UserRole.Admin, DealScope.Organization),
+        ("overview days=180 · org · cache quente", 180, admin, UserRole.Admin, DealScope.Organization),
+    })
+    {
+        var samples = new List<double>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+
+        for (var run = 0; run < 33; run++)
+        {
+            await using var db = OpenContext(connectionString);
+            var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
+            var analytics = new CachedStageAnalyticsProvider(new StageAnalyticsProvider(db), cache);
+            var handler = new GetDashboardOverviewQueryHandler(
+                db, currentUser, new OrganizationClock(db, currentUser), new ActivityFeedReader(db), analytics);
 
             var stopwatch = Stopwatch.StartNew();
             await handler.Handle(new GetDashboardOverviewQuery(days, scope), CancellationToken.None);

@@ -25,7 +25,8 @@ public class GetDashboardOverviewQueryHandler(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
     IOrganizationClock organizationClock,
-    ActivityFeedReader feedReader) : IRequestHandler<GetDashboardOverviewQuery, DashboardOverviewDto>
+    ActivityFeedReader feedReader,
+    IStageAnalyticsProvider stageAnalytics) : IRequestHandler<GetDashboardOverviewQuery, DashboardOverviewDto>
 {
     private const int FeaturedDealsLimit = 5;
     private const int RecentEventsLimit = 5;
@@ -81,16 +82,13 @@ public class GetDashboardOverviewQueryHandler(
             activityCounts.Where(a => a.Type == type && a.IsCurrent).Sum(a => a.Count),
             activityCounts.Where(a => a.Type == type && !a.IsCurrent).Sum(a => a.Count));
 
-        var stageReaches = await ScopedStageChanges(scope, dealIds)
-            .Select(sc => new StageReach(sc.DealId, sc.ToStage, sc.ChangedAt))
-            .ToListAsync(cancellationToken);
+        // Leitura histórica do funil (taxa de avanço, probabilidade de ganho e última transição de
+        // cada negócio). É a parte cara da tela e envelhece devagar, por isso vem de um serviço que
+        // pode servi-la de cache — ver StageAnalyticsProvider.
+        var analytics = await stageAnalytics.GetAsync(scope, cancellationToken);
 
         // Última transição de cada negócio = há quanto tempo ele está no estágio atual.
-        var lastStageChangeByDeal = stageReaches
-            .GroupBy(r => r.DealId)
-            .ToDictionary(g => g.Key, g => g.Max(r => r.ChangedAt));
-
-        DateTime LastStageChange(DealRow deal) => lastStageChangeByDeal.GetValueOrDefault(deal.Id, deal.CreatedAt);
+        DateTime LastStageChange(DealRow deal) => analytics.LastStageChangeByDeal.GetValueOrDefault(deal.Id, deal.CreatedAt);
         int DaysInStage(DealRow deal) => StalledDealRule.DaysInStage(LastStageChange(deal), clock.UtcNow);
 
         var pipeline = open
@@ -104,16 +102,10 @@ public class GetDashboardOverviewQueryHandler(
             .OrderBy(p => p.Stage)
             .ToList();
 
-        var closedDealStatusById = deals
-            .Where(d => d.Status != DealStatus.Aberto)
-            .ToDictionary(d => d.Id, d => d.Status);
-
-        var winProbabilityByStage = StageAnalytics.CalculateWinProbabilities(stageReaches, closedDealStatusById);
-
         // Receita prevista: fotografia do pipeline aberto ponderada pela probabilidade histórica de
         // cada etapa (mesma regra do relatório de forecast). Sem histórico não há previsão honesta.
         var weightedByStage = pipeline
-            .Select(p => winProbabilityByStage.GetValueOrDefault(p.Stage) is { } probability
+            .Select(p => analytics.WinProbabilityByStage.GetValueOrDefault(p.Stage) is { } probability
                 ? p.Amount * probability
                 : (decimal?)null)
             .ToList();
@@ -124,8 +116,7 @@ public class GetDashboardOverviewQueryHandler(
 
         var expectedToClose = ExpectedCloseForecast.Calculate(open, clock.Today, window.Days);
 
-        var stageAdvanceRates = StageAnalytics
-            .CalculateAdvanceStats(stageReaches)
+        var stageAdvanceRates = analytics.AdvanceStats
             .Select(s => new StageAdvanceRateDto(s.Stage, s.EnteredCount, s.AdvancedCount, s.AdvanceRate, s.AverageDaysInStage))
             .ToList();
 
@@ -246,12 +237,6 @@ public class GetDashboardOverviewQueryHandler(
     {
         var activities = context.Activities.AsNoTracking().Where(a => a.OrganizationId == scope.OrganizationId);
         return scope.OwnerUserId is null ? activities : activities.Where(a => dealIds.Contains(a.DealId));
-    }
-
-    private IQueryable<StageChange> ScopedStageChanges(DealScopeFilter scope, IReadOnlyList<Guid> dealIds)
-    {
-        var stageChanges = context.StageChanges.AsNoTracking().Where(sc => sc.OrganizationId == scope.OrganizationId);
-        return scope.OwnerUserId is null ? stageChanges : stageChanges.Where(sc => dealIds.Contains(sc.DealId));
     }
 
     /// <summary>

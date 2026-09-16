@@ -1,6 +1,7 @@
 using Metup.Application.Activities.Common;
 using FluentValidation;
 using Metup.Application.Dashboard.Common;
+using Metup.Application.Deals.Analytics;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
 using Metup.Domain.Users;
 using Xunit;
@@ -16,7 +17,7 @@ public class CustomPeriodTests
 
     private static Task<DashboardOverviewDto> RunAsync(DashboardOverviewTestContext context, DateOnly from, DateOnly to)
     {
-        var handler = new GetDashboardOverviewQueryHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), Clock(), new ActivityFeedReader(context.Db));
+        var handler = new GetDashboardOverviewQueryHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), Clock(), new ActivityFeedReader(context.Db), new StageAnalyticsProvider(context.Db));
         return handler.Handle(new GetDashboardOverviewQuery(From: from, To: to), CancellationToken.None);
     }
 
@@ -32,7 +33,7 @@ public class CustomPeriodTests
         context.AddWonDeal(context.AdminUserId, 3_000m, NowUtc.AddDays(-60), new DateTime(2026, 9, 1, 2, 0, 0, DateTimeKind.Utc));
         context.AddWonDeal(context.AdminUserId, 9_000m, NowUtc.AddDays(-60), new DateTime(2026, 9, 1, 4, 0, 0, DateTimeKind.Utc));
 
-        var handler = new GetDashboardOverviewQueryHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), Clock(), new ActivityFeedReader(context.Db));
+        var handler = new GetDashboardOverviewQueryHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), Clock(), new ActivityFeedReader(context.Db), new StageAnalyticsProvider(context.Db));
         var overview = await handler.Handle(
             new GetDashboardOverviewQuery(Days: 7, From: new DateOnly(2026, 8, 1), To: new DateOnly(2026, 8, 31)),
             CancellationToken.None);

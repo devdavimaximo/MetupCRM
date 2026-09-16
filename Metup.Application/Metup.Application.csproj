@@ -8,6 +8,9 @@
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageReference Include="MediatR" Version="14.2.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <!-- Cache da leitura histórica do funil (StageAnalyticsProvider). Vinha transitivo pelo EF;
+         explícito porque a camada usa IMemoryCache diretamente. -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
   </ItemGroup>
 
   <PropertyGroup>

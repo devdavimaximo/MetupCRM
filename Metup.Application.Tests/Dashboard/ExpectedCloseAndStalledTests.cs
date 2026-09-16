@@ -2,6 +2,7 @@ using Metup.Application.Activities.Common;
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
+using Metup.Application.Deals.Analytics;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
 using Metup.Application.Organizations.Commands.UpdateOrganizationSettings;
 using Metup.Domain.Common.Exceptions;
@@ -27,7 +28,8 @@ public class ExpectedCloseAndStalledTests
                 context.Db,
                 context.As(userId, role),
                 new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc),
-                new ActivityFeedReader(context.Db))
+                new ActivityFeedReader(context.Db),
+                new StageAnalyticsProvider(context.Db))
             .Handle(new GetDashboardOverviewQuery(days, DealScope.Organization), TestContext.Current.CancellationToken);
 
     [Fact]

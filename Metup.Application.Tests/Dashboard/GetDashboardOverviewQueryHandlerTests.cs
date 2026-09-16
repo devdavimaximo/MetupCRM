@@ -1,6 +1,7 @@
 using Metup.Application.Activities.Common;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
+using Metup.Application.Deals.Analytics;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
 using Metup.Domain.Deals;
 using Metup.Domain.Users;
@@ -25,7 +26,9 @@ public class GetDashboardOverviewQueryHandlerTests
             context.Db,
             context.As(userId, role),
             new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc),
-            new ActivityFeedReader(context.Db));
+            new ActivityFeedReader(context.Db),
+            // Sem cache: o teste prova o cálculo, não a política de validade.
+            new StageAnalyticsProvider(context.Db));
 
         return handler.Handle(new GetDashboardOverviewQuery(days, scope), CancellationToken.None);
     }
