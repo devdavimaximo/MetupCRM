@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ferramenta de desenvolvimento — massa sintética de volume e medição da duração dos handlers do
+    dashboard (item 22 do plano). Não faz parte das camadas do produto e não é referenciada por elas.
+
+    A connection string vem do ambiente, nunca do repositório (seção 10 do CLAUDE.md):
+
+      METUP_BENCH_CONNECTION="Host=localhost;Port=5432;Database=metup_perf;Username=...;Password=..."
+
+    Uso, de dentro de tools/Metup.DashboardBench:
+      "dotnet run" seguido de "seed"     cria o banco se faltar, aplica migrations e gera a massa
+      "dotnet run" seguido de "measure"  mede p50/p95 por período e escopo
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Metup.Infrastructure\Metup.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- Pinadas para a mesma versão do Metup.Infrastructure — evita conflito de assembly em runtime. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+</Project>

@@ -77,4 +77,21 @@ Nada aqui é silenciado: todo `test.skip` diz por que existe.
 |---|---|---|
 | `dashboard-layout` › sem rolagem vertical | < 1600px | A regra vale para 1600×900 e 1920×1080; abaixo disso a tela pode rolar. |
 | `dashboard-layout` › tabela de destaques | ≠ 1366px | A folga de rolagem que sobrou é específica dessa faixa (pendência da P1, teto de 60px para não piorar). |
-| `dashboard-actions` › tooltip do nó Ganhos | < 1024px | Tooltip por toque no mobile é o item 26 (onda 3B). |
+| `dashboard-mobile` › o arquivo inteiro | ≥ 768px | Abaixo de `md` o dashboard monta **outra árvore** (item 26); as asserções de ordem não valem no desktop. |
+
+> O pulo do tooltip do nó Ganhos saiu na onda 3B: o item 26 deu ao `Hint` a abertura por toque
+> (`openOnTap`), e o cenário passou a valer em todas as larguras.
+
+## O celular tem uma árvore própria
+
+Abaixo de 768px o `DashboardPage` renderiza `MobileGrid` em vez de `MainGrid` + `SideColumn`, via
+`useMediaQuery`. Isso é escolha de **árvore**, não de estilo: a ordem de leitura muda, e `order` do
+CSS deixaria o teclado e o leitor de tela na ordem antiga.
+
+Consequência para quem escreve teste: **um seletor que existe no desktop pode não existir em
+390×844, e vice-versa.** Casos concretos já vividos:
+
+- Não há `<table>` no celular — os destaques são cards.
+- A frase do erro do panorama muda ("disponíveis **ao lado**" no desktop, "**acima**" no celular);
+  `dashboard-errors` casa as duas com regex.
+- Um cenário que dependa da ordem dos painéis pertence a `dashboard-mobile.spec.ts`, não aos outros.

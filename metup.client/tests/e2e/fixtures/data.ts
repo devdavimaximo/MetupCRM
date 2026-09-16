@@ -81,7 +81,7 @@ export const recentEvents = [
     occurredAt: "2026-09-15T11:05:00Z",
     toStage: null,
     activityType: "Call",
-    outcome: "Interested",
+    outcome: "Interessado",
     amount: null,
   },
 ]

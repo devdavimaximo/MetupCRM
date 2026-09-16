@@ -1,4 +1,30 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react"
+
+/**
+ * Acompanha uma media query do CSS. Serve para escolher a **árvore** que vai ao DOM quando a ordem
+ * de leitura muda com a largura — o que `order` do CSS não resolve, porque ele move o pixel e deixa
+ * o teclado e o leitor de tela na ordem antiga.
+ *
+ * `useSyncExternalStore` em vez de efeito + `setState`: o valor já sai certo no primeiro render.
+ */
+export function useMediaQuery(query: string): boolean {
+  const list = useMemo(
+    () => (typeof window === "undefined" ? null : window.matchMedia(query)),
+    [query]
+  )
+
+  return useSyncExternalStore(
+    useCallback(
+      (onChange) => {
+        list?.addEventListener("change", onChange)
+        return () => list?.removeEventListener("change", onChange)
+      },
+      [list]
+    ),
+    () => list?.matches ?? false,
+    () => false
+  )
+}
 
 /** Evita disparar uma busca por tecla digitada. */
 export function useDebouncedValue<T>(value: T, delayMs = 300): T {

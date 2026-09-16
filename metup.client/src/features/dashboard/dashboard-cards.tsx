@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode, Ref } from "react"
+import { useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react"
 import { ArrowDown, ArrowRight, ArrowUp, Building2, Ellipsis, Info, Minus, SquareArrowOutUpRight, type LucideIcon } from "lucide-react"
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -166,6 +166,61 @@ export function KpiCard({
   )
 }
 
+/**
+ * Os KPIs no celular: faixa que rola na horizontal com encaixe, duas de cada vez. A rolagem é do
+ * próprio trilho, então a página não rola de lado. Pelo teclado, Tab já percorre os cartões (o
+ * navegador traz o foco para a vista); as setas movem de página para quem estiver com o trilho em foco.
+ */
+export function KpiCarousel({ children, label }: { children: ReactNode[]; label: string }) {
+  const trackRef = useRef<HTMLUListElement>(null)
+  const [page, setPage] = useState(0)
+  const pages = Math.ceil(children.length / 2)
+
+  function goTo(next: number) {
+    const track = trackRef.current
+    if (!track) return
+    const target = Math.max(0, Math.min(pages - 1, next))
+    track.scrollTo({ left: target * track.clientWidth, behavior: "smooth" })
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <ul
+        ref={trackRef}
+        aria-label={label}
+        tabIndex={0}
+        onScroll={(event) => {
+          const track = event.currentTarget
+          setPage(track.clientWidth === 0 ? 0 : Math.round(track.scrollLeft / track.clientWidth))
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return
+          event.preventDefault()
+          goTo(page + (event.key === "ArrowRight" ? 1 : -1))
+        }}
+        className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1 scrollbar-none focus-visible:focus-ring"
+      >
+        {children.map((child, index) => (
+          <li key={index} className="w-[calc(50%-0.375rem)] shrink-0 snap-start">
+            {child}
+          </li>
+        ))}
+      </ul>
+      <div className="flex justify-center gap-1.5" aria-hidden="true">
+        {Array.from({ length: pages }, (_, index) => (
+          <button
+            key={index}
+            type="button"
+            tabIndex={-1}
+            onClick={() => goTo(index)}
+            className={cn("h-1 w-5 cursor-pointer rounded-full transition-colors", index === page ? "bg-accent" : "bg-line-strong")}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ─── Pipeline ──────────────────────────────────────────────────────────────── */
 
 type FunnelNode = {
@@ -271,6 +326,7 @@ export function PipelineCard({
   periodShort,
   periodName,
   onOpenStage,
+  compact = false,
 }: {
   pipeline: PipelineStage[]
   advanceRates: StageAdvanceRate[]
@@ -282,6 +338,8 @@ export function PipelineCard({
   periodShort: string
   periodName: string
   onOpenStage: (stage: DealStage) => void
+  /** No celular o funil vira lista: etapa, quantidade, valor e % que avança, um por linha. */
+  compact?: boolean
 }) {
   const byStage = new Map(pipeline.map((s) => [s.stage, s]))
   const advanceByStage = new Map(advanceRates.map((s) => [s.stage, s]))
@@ -339,30 +397,89 @@ export function PipelineCard({
         }
       />
 
-      <ol className="grid grid-cols-2 gap-y-5 border-t border-line-soft pt-3 sm:grid-cols-4 xl:grid-cols-8">
-        {stages.map(({ stage, node }) => (
-          <li key={stage} className="relative min-w-0">
-            <Hint content={stageHint(node, stalledAfterDays)}>
-              <button
-                type="button"
-                onClick={() => onOpenStage(stage)}
-                aria-label={`${node.label}: ${numberFormatter.format(node.count)} negócios, ${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor"}. Abrir no Pipeline`}
-                className="group flex size-full min-w-0 cursor-pointer gap-2.5 rounded-sm pr-2 text-left outline-offset-4 transition-colors hover:bg-surface-3/40 focus-visible:focus-ring"
+      {compact ? (
+        <ol className="flex flex-col divide-y divide-line-soft/70 border-t border-line-soft">
+          {stages.map(({ stage, node }) => (
+            <li key={stage}>
+              {/* Sem `openOnTap`: aqui o toque tem que abrir o Pipeline. O tooltip continua alcançável
+                  pelo teclado, e o essencial (valor, % que avança, parados) está na própria linha. */}
+              <Hint content={stageHint(node, stalledAfterDays)}>
+                <button
+                  type="button"
+                  onClick={() => onOpenStage(stage)}
+                  aria-label={`${node.label}: ${numberFormatter.format(node.count)} negócios, ${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor"}. Abrir no Pipeline`}
+                  className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-sm px-1 py-2 text-left transition-colors active:bg-surface-3/40 focus-visible:focus-ring"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn("size-2.5 shrink-0 rounded-full border-2", node.count > 0 ? "border-accent" : "border-line-strong")}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-fg">{node.label}</span>
+                    <span className="block text-2xs text-muted tabular">
+                      {node.percentLabel}
+                      {node.stalled > 0 && <span className="text-danger"> · {node.stalled} parados</span>}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className={cn("block text-md font-semibold text-fg tabular", node.count === 0 && "text-faint")}>
+                      {numberFormatter.format(node.count)}
+                    </span>
+                    <span className="block text-2xs text-fg-muted tabular">
+                      {node.amount > 0 ? `${node.estimated > 0 ? "~" : ""}${formatMoneyCompact(node.amount)}` : "R$ —"}
+                    </span>
+                  </span>
+                </button>
+              </Hint>
+            </li>
+          ))}
+          <li className="border-t border-dashed border-line-strong/70">
+            <Hint content={wonHint(wonNode, periodName)} openOnTap>
+              <div
+                tabIndex={0}
+                className="flex min-h-11 w-full items-center gap-3 rounded-sm px-1 py-2 focus-visible:focus-ring"
               >
-                <FunnelNodeBody node={node} isWon={false} />
-              </button>
+                <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full border-2 border-accent", wonNode.count > 0 && "bg-accent")} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-fg">{wonNode.label}</span>
+                  <span className="block text-2xs text-muted tabular">{wonNode.percentLabel}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block text-md font-semibold text-fg tabular">{numberFormatter.format(wonNode.count)}</span>
+                  <span className="block text-2xs text-fg-muted tabular">
+                    {wonNode.amount > 0 ? formatMoneyCompact(wonNode.amount) : "R$ —"}
+                  </span>
+                </span>
+              </div>
             </Hint>
           </li>
-        ))}
-        {/* Filete tracejado: à direita dele é resultado do período, não fotografia do funil. */}
-        <li className="relative min-w-0 xl:border-l xl:border-dashed xl:border-line-strong/70 xl:pl-3">
-          <Hint content={wonHint(wonNode, periodName)}>
-            <div tabIndex={0} className="flex size-full min-w-0 gap-2.5 rounded-sm pr-2 outline-offset-4 focus-visible:focus-ring">
-              <FunnelNodeBody node={wonNode} isWon />
-            </div>
-          </Hint>
-        </li>
-      </ol>
+        </ol>
+      ) : (
+        <ol className="grid grid-cols-2 gap-y-5 border-t border-line-soft pt-3 sm:grid-cols-4 xl:grid-cols-8">
+          {stages.map(({ stage, node }) => (
+            <li key={stage} className="relative min-w-0">
+              <Hint content={stageHint(node, stalledAfterDays)}>
+                <button
+                  type="button"
+                  onClick={() => onOpenStage(stage)}
+                  aria-label={`${node.label}: ${numberFormatter.format(node.count)} negócios, ${node.amount > 0 ? formatMoneyWhole(node.amount) : "sem valor"}. Abrir no Pipeline`}
+                  className="group flex size-full min-w-0 cursor-pointer gap-2.5 rounded-sm pr-2 text-left outline-offset-4 transition-colors hover:bg-surface-3/40 focus-visible:focus-ring"
+                >
+                  <FunnelNodeBody node={node} isWon={false} />
+                </button>
+              </Hint>
+            </li>
+          ))}
+          {/* Filete tracejado: à direita dele é resultado do período, não fotografia do funil. */}
+          <li className="relative min-w-0 xl:border-l xl:border-dashed xl:border-line-strong/70 xl:pl-3">
+            <Hint content={wonHint(wonNode, periodName)} openOnTap>
+              <div tabIndex={0} className="flex size-full min-w-0 gap-2.5 rounded-sm pr-2 outline-offset-4 focus-visible:focus-ring">
+                <FunnelNodeBody node={wonNode} isWon />
+              </div>
+            </Hint>
+          </li>
+        </ol>
+      )}
     </Panel>
   )
 }
@@ -390,12 +507,15 @@ export function FeaturedDealsCard({
   today,
   onOpenDeal,
   onOpenCompany,
+  compact = false,
 }: {
   deals: FeaturedDeal[]
   /** "Hoje" da organização (data local), para marcar previsão vencida sem depender do fuso do navegador. */
   today: string
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
+  /** No celular vira lista de cards: uma tabela de 6 colunas só rolaria na horizontal. */
+  compact?: boolean
 }) {
   return (
     <Panel aria-labelledby="featured-heading" className="gap-2 px-4 pt-4 pb-2">
@@ -404,6 +524,39 @@ export function FeaturedDealsCard({
         <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted">
           Nenhum negócio aberto com valor ou ticket informado.
         </p>
+      ) : compact ? (
+        <ul className="flex flex-col gap-2 pb-2">
+          {deals.map((deal) => (
+            <li key={deal.id} className="rounded-md border border-line-soft bg-surface-2/40 px-3 py-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenDeal(deal.id)}
+                  className="min-h-11 min-w-0 flex-1 cursor-pointer rounded-xs text-left focus-visible:focus-ring"
+                >
+                  <span className="block truncate text-sm text-fg">{deal.companyName}</span>
+                  <span className="mt-0.5 flex items-center gap-2">
+                    <span className="text-md font-semibold text-fg tabular">
+                      {deal.amount === null ? "—" : formatMoneyWhole(deal.amount)}
+                    </span>
+                    {deal.isEstimated && <span className="text-2xs text-muted">est.</span>}
+                  </span>
+                </button>
+                <DealRowMenu deal={deal} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} />
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
+                <span className={cn("inline-flex rounded-sm px-2 py-0.5", stageTone[deal.stage])}>{stageLabels[deal.stage]}</span>
+                <span className="text-fg-muted">{deal.ownerUserName.split(/\s+/)[0]}</span>
+                <span className={cn("tabular", deal.expectedCloseDate && deal.expectedCloseDate < today ? "text-danger" : "text-muted")}>
+                  {deal.expectedCloseDate ? `Previsão ${formatLocalDay(deal.expectedCloseDate)}` : "Sem previsão"}
+                </span>
+                <span className={cn("tabular", !deal.nextTaskDueDate ? "text-danger" : "text-muted")}>
+                  {deal.nextTaskDueDate ? `Ação ${formatInstantDay(deal.nextTaskDueDate)}` : "Sem ação"}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full text-left text-sm">

@@ -51,8 +51,8 @@ test.describe("o que parece clicável funciona", () => {
   })
 
   test("o nó Ganhos explica que é resultado do período, não fotografia do funil", async ({ page }) => {
-    // Só no desktop: no mobile o funil vira lista e o tooltip por toque é o item 26 (onda 3B).
-    test.skip((page.viewportSize()?.width ?? 0) < 1024, "Tooltip do funil no mobile é escopo do item 26.")
+    // Vale em todas as larguras: no celular o funil vira lista, mas o nó Ganhos continua focável e
+    // com o mesmo tooltip (item 26 — o toque está coberto em `dashboard-mobile.spec.ts`).
     await installApi(page)
     await gotoDashboard(page)
 

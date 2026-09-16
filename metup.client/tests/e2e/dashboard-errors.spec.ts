@@ -6,7 +6,8 @@ test.describe("cada fonte falha e se recupera sozinha", () => {
     await gotoDashboard(page)
 
     await expect(page.getByRole("alert")).toContainText("O panorama não respondeu.")
-    await expect(page.getByText("O panorama não carregou. Suas tarefas continuam disponíveis ao lado.")).toBeVisible()
+    // A fila de tarefas fica ao lado no desktop e acima no celular (item 26); a frase acompanha.
+    await expect(page.getByText(/O panorama não carregou\. Suas tarefas continuam disponíveis (ao lado|acima)\./)).toBeVisible()
     // A outra fonte continua de pé, com os números dela.
     await expect(page.getByRole("region", { name: "Próximas Tarefas" }).getByText("Padaria Aurora")).toBeVisible()
   })

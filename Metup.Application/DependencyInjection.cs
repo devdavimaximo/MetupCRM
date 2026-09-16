@@ -13,6 +13,8 @@ public static class DependencyInjection
         services.AddMediatR(config =>
         {
             config.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly);
+            // A medição envolve a validação: o que o log reporta é o custo real da requisição.
+            config.AddOpenBehavior(typeof(PerformanceBehavior<,>));
             config.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 
