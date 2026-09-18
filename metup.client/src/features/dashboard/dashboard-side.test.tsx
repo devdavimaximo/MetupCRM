@@ -112,6 +112,7 @@ describe("erro isolado por fonte", () => {
         companyName: "Padaria Aurora",
         actorName: "Davi",
         occurredAt: "2026-09-15T12:00:00Z",
+        occurredOnLocal: "2026-09-15",
         toStage: null,
         activityType: null,
         outcome: null,

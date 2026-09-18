@@ -12,6 +12,7 @@ import { formatMoney } from "@/lib/money"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
 import { DealBoard } from "./DealBoard"
 import { DealDrawer, type DealDrawerTarget } from "./DealDrawer"
+import { dealSectionFromUrl } from "./deal-section"
 import {
   changeDealStage,
   listDeals,
@@ -48,8 +49,8 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
 
   const [target, setTarget] = useState<DealDrawerTarget>(() => {
     if (newDealIntent) return { mode: "new", ...newDealIntent }
-    const dealId = readUrlState().dealId
-    return dealId ? { mode: "deal", id: dealId } : null
+    const { dealId, dealSection } = readUrlState()
+    return dealId ? { mode: "deal", id: dealId, section: dealSectionFromUrl(dealSection) } : null
   })
 
   const [movingDealId, setMovingDealId] = useState<string | null>(null)
@@ -94,12 +95,12 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
   }, [ownerUserId, source])
 
   function openDeal(dealId: string) {
-    writeUrlState({ dealId })
+    writeUrlState({ dealId, dealSection: "" })
     setTarget({ mode: "deal", id: dealId })
   }
 
   function closeDrawer() {
-    writeUrlState({ dealId: null })
+    writeUrlState({ dealId: null, dealSection: "" })
     setTarget(null)
   }
 

@@ -287,9 +287,10 @@ static async Task MeasureAsync(string connectionString)
             var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
             // Provider sem cache: a medição tem que mostrar o custo do cálculo, não o de um acerto
             // de cache. O ganho do cache é a diferença entre este número e o do cenário "cache quente".
+            // Um relógio só, como o escopo de DI da requisição: o fuso é lido uma vez.
+            var clock = new OrganizationClock(db, currentUser);
             var handler = new GetDashboardOverviewQueryHandler(
-                db, currentUser, new OrganizationClock(db, currentUser), new ActivityFeedReader(db),
-                new StageAnalyticsProvider(db));
+                db, currentUser, clock, new ActivityFeedReader(db, clock), new StageAnalyticsProvider(db));
 
             var stopwatch = Stopwatch.StartNew();
             await handler.Handle(new GetDashboardOverviewQuery(days, scope), CancellationToken.None);
@@ -318,8 +319,9 @@ static async Task MeasureAsync(string connectionString)
             await using var db = OpenContext(connectionString);
             var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
             var analytics = new CachedStageAnalyticsProvider(new StageAnalyticsProvider(db), cache);
+            var clock = new OrganizationClock(db, currentUser);
             var handler = new GetDashboardOverviewQueryHandler(
-                db, currentUser, new OrganizationClock(db, currentUser), new ActivityFeedReader(db), analytics);
+                db, currentUser, clock, new ActivityFeedReader(db, clock), analytics);
 
             var stopwatch = Stopwatch.StartNew();
             await handler.Handle(new GetDashboardOverviewQuery(days, scope), CancellationToken.None);
@@ -344,7 +346,7 @@ static async Task MeasureAsync(string connectionString)
         {
             await using var db = OpenContext(connectionString);
             var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
-            var reader = new ActivityFeedReader(db);
+            var reader = new ActivityFeedReader(db, new OrganizationClock(db, currentUser));
 
             var stopwatch = Stopwatch.StartNew();
             await reader.ReadAsync(

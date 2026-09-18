@@ -13,7 +13,7 @@ public class ActivityFeedTests
     private static readonly DateTime BaseUtc = new(2026, 9, 15, 17, 0, 0, DateTimeKind.Utc);
 
     private static ListActivityFeedQueryHandler Handler(DashboardOverviewTestContext context, Guid userId, UserRole role) =>
-        new(context.As(userId, role), new ActivityFeedReader(context.Db));
+        new(context.As(userId, role), new ActivityFeedReader(context.Db, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, BaseUtc)));
 
     private static void AddActivity(DashboardOverviewTestContext context, Deal deal, Guid authorUserId, DateTime occurredAt, ActivityType type = ActivityType.Note)
     {
@@ -175,6 +175,24 @@ public class ActivityFeedTests
             .ValidateAsync(new ListActivityFeedQuery(cursor, null, null, pageSize), TestContext.Current.CancellationToken);
 
         Assert.Equal(valid, result.IsValid);
+    }
+
+    [Fact]
+    public async Task Dia_local_segue_o_fuso_da_organizacao_e_nao_o_UTC()
+    {
+        using var context = new DashboardOverviewTestContext();
+        var deal = context.AddOpenDeal(context.AdminUserId, amount: 1_000m, ticket: null, BaseUtc.AddDays(-30));
+
+        // 23h30 de 14/09 em Brasília já é 15/09 em UTC; 00h10 de 15/09 em Brasília ainda é 15/09 em UTC.
+        var lateNight = new DateTime(2026, 9, 15, 2, 30, 0, DateTimeKind.Utc);
+        var afterMidnight = new DateTime(2026, 9, 15, 3, 10, 0, DateTimeKind.Utc);
+        AddActivity(context, deal, context.AdminUserId, lateNight);
+        AddActivity(context, deal, context.AdminUserId, afterMidnight);
+
+        var feed = await ReadAllAsync(Handler(context, context.AdminUserId, UserRole.Admin), 20, [ActivityFeedFilter.Note]);
+
+        Assert.Equal(new DateOnly(2026, 9, 14), feed.Single(e => e.OccurredAt == lateNight).OccurredOnLocal);
+        Assert.Equal(new DateOnly(2026, 9, 15), feed.Single(e => e.OccurredAt == afterMidnight).OccurredOnLocal);
     }
 
     [Fact]

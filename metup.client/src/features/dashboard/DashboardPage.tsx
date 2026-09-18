@@ -49,6 +49,7 @@ type Props = {
   initialScope: string
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
+  onLogActivity: (dealId: string) => void
   onOpenPipelineAtStage: (stage: DealStage) => void
   onNavigate: (view: View) => void
 }
@@ -102,7 +103,16 @@ function runningSum(values: number[]) {
  * Cada fonte carrega, falha e se recupera sozinha: o panorama (overview) e a fila de tarefas
  * (summary) têm estado, erro e retry próprios.
  */
-export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpenCompany, onOpenPipelineAtStage, onNavigate }: Props) {
+export function DashboardPage({
+  userName,
+  role,
+  initialScope,
+  onOpenDeal,
+  onOpenCompany,
+  onLogActivity,
+  onOpenPipelineAtStage,
+  onNavigate,
+}: Props) {
   // Abaixo de `md` a tela é reorganizada por ação (item 26). É a árvore que muda, não só o estilo:
   // a ordem do DOM tem que acompanhar a ordem visual para o teclado e o leitor de tela.
   const isMobile = useMediaQuery("(max-width: 767px)")
@@ -312,6 +322,7 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
                 stale={isOverviewLoading || overviewError !== null}
                 onOpenDeal={onOpenDeal}
                 onOpenCompany={onOpenCompany}
+                onLogActivity={onLogActivity}
                 onOpenStage={onOpenPipelineAtStage}
                 activity={
                   <Panel className="overflow-hidden pb-3">
@@ -338,6 +349,7 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
                 stale={isOverviewLoading || overviewError !== null}
                 onOpenDeal={onOpenDeal}
                 onOpenCompany={onOpenCompany}
+                onLogActivity={onLogActivity}
                 onOpenStage={onOpenPipelineAtStage}
                 onNavigate={onNavigate}
               />
@@ -355,6 +367,7 @@ export function DashboardPage({ userName, role, initialScope, onOpenDeal, onOpen
         key={feedSession}
         open={feedOpen}
         role={role}
+        today={orgToday}
         onOpenChange={setFeedOpen}
         returnFocusRef={feedTriggerRef}
         onOpenDeal={(dealId) => {
@@ -560,11 +573,12 @@ type GridProps = {
   stale: boolean
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
+  onLogActivity: (dealId: string) => void
   onOpenStage: (stage: DealStage) => void
   onNavigate: (view: View) => void
 }
 
-function MainGrid({ overview, period, stale, onOpenDeal, onOpenCompany, onOpenStage, onNavigate }: GridProps) {
+function MainGrid({ overview, period, stale, onOpenDeal, onOpenCompany, onLogActivity, onOpenStage, onNavigate }: GridProps) {
   const model = useOverviewModel(overview, period)
 
   return (
@@ -603,6 +617,7 @@ function MainGrid({ overview, period, stale, onOpenDeal, onOpenCompany, onOpenSt
           today={overview.expectedClose.windowStartLocal}
           onOpenDeal={onOpenDeal}
           onOpenCompany={onOpenCompany}
+          onLogActivity={onLogActivity}
         />
         <PotentialCard
           openAmount={model.openAmount}
@@ -630,6 +645,7 @@ function MobileGrid({
   stale,
   onOpenDeal,
   onOpenCompany,
+  onLogActivity,
   onOpenStage,
   activity,
 }: Omit<GridProps, "onNavigate"> & { activity: ReactNode }) {
@@ -664,6 +680,7 @@ function MobileGrid({
         today={overview.expectedClose.windowStartLocal}
         onOpenDeal={onOpenDeal}
         onOpenCompany={onOpenCompany}
+        onLogActivity={onLogActivity}
       />
 
       {activity}

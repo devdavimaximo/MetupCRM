@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react"
 import { ArrowUpRight, CalendarCheck, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -17,13 +17,14 @@ import { formatDue } from "@/lib/format"
 import { formatLocalDate, todayLocal } from "@/lib/local-date"
 import { formatMoney, parseMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
+import type { DealDrawerSection } from "./deal-section"
 import { DealForm } from "./DealForm"
 import { StageHistory } from "./StageHistory"
 import { closeDeal, getDeal, type Deal, type UserSummary } from "./api"
 import { sourceLabels, stageLabels, statusLabels } from "./stage-labels"
 
 export type DealDrawerTarget =
-  | { mode: "deal"; id: string }
+  | { mode: "deal"; id: string; section?: DealDrawerSection }
   | { mode: "new"; companyId: string; companyName: string }
   | null
 
@@ -114,8 +115,20 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
 
   const openCompanyId = target?.mode === "deal" ? (deal?.companyId ?? null) : (target?.companyId ?? null)
   const isNew = target?.mode === "new"
-  const isReady = !isLoading && !loadError && (isNew || deal)
+  const isReady = !isLoading && !loadError && (isNew || deal !== null)
   const value = deal ? (deal.amount ?? deal.ticket) : null
+
+  // Chegada em "Registrar atividade": quando o formulário existe, leva a rolagem e o foco ao primeiro campo.
+  const logSectionRef = useRef<HTMLElement>(null)
+  const opensAtActivity = target?.mode === "deal" && target.section === "activity"
+  useEffect(() => {
+    if (!isReady || !opensAtActivity) return
+    const firstField = logSectionRef.current?.querySelector<HTMLElement>(
+      '[role="radio"][tabindex="0"], input, select, textarea'
+    )
+    logSectionRef.current?.scrollIntoView({ block: "start" })
+    firstField?.focus({ preventScroll: true })
+  }, [isReady, opensAtActivity])
 
   return (
     <Sheet open={target !== null} onOpenChange={onOpenChange}>
@@ -192,7 +205,7 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
           {isReady && (
             <>
               {deal && (
-                <DrawerSection id="deal-log-heading" title="Registrar atividade">
+                <DrawerSection ref={logSectionRef} id="deal-log-heading" title="Registrar atividade">
                   <LogActivityForm dealId={deal.id} contacts={contacts} onLogged={handleActivityLogged} />
                   {lastNextAction && (
                     <Alert tone="success" className="mt-4">
@@ -248,12 +261,14 @@ function Stat({ label, children, className }: { label: string; children: ReactNo
 }
 
 function DrawerSection({
+  ref,
   id,
   title,
   count,
   children,
   className,
 }: {
+  ref?: Ref<HTMLElement>
   id: string
   title: string
   count?: number
@@ -261,7 +276,7 @@ function DrawerSection({
   className?: string
 }) {
   return (
-    <section aria-labelledby={id} className={cn("flex flex-col gap-4 border-b border-line-soft px-5 py-6 last:border-b-0 sm:px-6", className)}>
+    <section ref={ref} aria-labelledby={id} className={cn("flex flex-col gap-4 border-b border-line-soft px-5 py-6 last:border-b-0 sm:px-6", className)}>
       <SectionTitle id={id} as="h3" count={count}>
         {title}
       </SectionTitle>

@@ -77,6 +77,8 @@ export type RecentEvent = {
   companyName: string
   actorName: string
   occurredAt: string
+  /** Dia de `occurredAt` no fuso da organização ("2026-09-15") — agrupar por ele, nunca reconverter fuso. */
+  occurredOnLocal: string
   toStage: DealStage | null
   activityType: ActivityType | null
   outcome: ActivityOutcome | null

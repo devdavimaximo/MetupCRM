@@ -1,4 +1,13 @@
+import type { Page } from "@playwright/test"
+
 import { data, expect, gotoDashboard, installApi, test } from "./fixtures/app"
+
+/** O drawer do negócio abriu com o foco no primeiro campo do registro de atividade (o tipo). */
+async function expectFocusOnLogForm(page: Page) {
+  const drawer = page.getByRole("dialog")
+  await expect(drawer.getByRole("heading", { name: "Registrar atividade" })).toBeInViewport()
+  await expect(drawer.getByRole("radiogroup", { name: "Tipo da atividade" }).locator(":focus")).toHaveCount(1)
+}
 
 test.describe("o que parece clicável funciona", () => {
   test("o menu ⋯ do destaque abre o negócio e a empresa, pelo ponteiro", async ({ page }) => {
@@ -38,6 +47,61 @@ test.describe("o que parece clicável funciona", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("menu")).toBeHidden()
     await expect(menu).toBeFocused()
+  })
+
+  test("'Registrar atividade' abre o negócio com o foco no formulário, pelo ponteiro", async ({ page }) => {
+    // O menu é o mesmo na tabela (desktop) e nos cards (celular): este cenário vale nos quatro tamanhos.
+    await installApi(page)
+    await gotoDashboard(page)
+
+    await page.getByRole("button", { name: "Ações do negócio de Padaria Aurora" }).click()
+    await page.getByRole("menuitem", { name: "Registrar atividade" }).click()
+
+    await expect(page).toHaveURL(/negocio=deal-1/)
+    await expect(page).toHaveURL(/acao=atividade/)
+    await expectFocusOnLogForm(page)
+  })
+
+  test("'Registrar atividade' pelo teclado chega ao mesmo lugar", async ({ page }) => {
+    await installApi(page)
+    await gotoDashboard(page)
+
+    await page.getByRole("button", { name: "Ações do negócio de Padaria Aurora" }).focus()
+    await page.keyboard.press("Enter")
+    const item = page.getByRole("menuitem", { name: "Registrar atividade" })
+    await expect(page.getByRole("menuitem").first()).toBeFocused()
+    // Seta para baixo até o item, sem depender da posição dele no menu (no máximo o tamanho do menu).
+    const itemCount = await page.getByRole("menuitem").count()
+    for (let step = 0; step < itemCount && !(await item.evaluate((element) => element === document.activeElement)); step++) {
+      await page.keyboard.press("ArrowDown")
+    }
+    await expect(item).toBeFocused()
+    await page.keyboard.press("Enter")
+
+    await expect(page).toHaveURL(/acao=atividade/)
+    await expectFocusOnLogForm(page)
+  })
+
+  test("recarregar com ?acao=atividade reabre no formulário, e fechar o negócio limpa o parâmetro", async ({ page }) => {
+    await installApi(page)
+    await page.goto("/?vista=pipeline&negocio=deal-1&acao=atividade")
+    await expectFocusOnLogForm(page)
+
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page).not.toHaveURL(/acao=/)
+    await expect(page).not.toHaveURL(/negocio=/)
+  })
+
+  test("'Abrir negócio' não leva o parâmetro de seção", async ({ page }) => {
+    await installApi(page)
+    await gotoDashboard(page, "?acao=atividade")
+
+    await page.getByRole("button", { name: "Ações do negócio de Padaria Aurora" }).click()
+    await page.getByRole("menuitem", { name: "Abrir negócio" }).click()
+
+    await expect(page).toHaveURL(/negocio=deal-1/)
+    await expect(page).not.toHaveURL(/acao=/)
   })
 
   test("a etapa do pipeline abre o Pipeline já naquela etapa", async ({ page }) => {

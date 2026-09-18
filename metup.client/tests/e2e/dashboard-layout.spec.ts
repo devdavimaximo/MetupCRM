@@ -89,7 +89,7 @@ test.describe("layout", () => {
 
   test("a tabela de destaques em 1366px não piorou", async ({ page }) => {
     const width = page.viewportSize()?.width ?? 0
-    test.skip(width !== 1366, "A folga que sobrou é específica de 1366px.")
+    test.skip(width !== 1366, "1366px é a faixa mais estreita da tabela; do celular para baixo ela vira cards.")
 
     await installApi(page)
     await gotoDashboard(page)
@@ -99,8 +99,8 @@ test.describe("layout", () => {
       const holder = table.parentElement
       return holder ? holder.scrollWidth - holder.clientWidth : 0
     })
-    // Pendência registrada da P1: sobram ~60px de rolagem horizontal nessa faixa. O item 26/1366px da
-    // onda 3B zera isto; até lá, o teto aqui impede que piore.
-    expect(overflow).toBeLessThanOrEqual(60)
+    // Onda 4A: abaixo de 1600px a coluna Responsável sai e o nome da empresa trunca mais cedo, então a
+    // tabela cabe sem rolar na horizontal.
+    expect(overflow).toBeLessThanOrEqual(0)
   })
 })

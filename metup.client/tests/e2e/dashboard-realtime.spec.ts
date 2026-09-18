@@ -1,3 +1,5 @@
+import type { RecentEvent } from "@/features/dashboard/api"
+
 import { data, expect, gotoDashboard, installApi, test } from "./fixtures/app"
 
 /**
@@ -6,13 +8,14 @@ import { data, expect, gotoDashboard, installApi, test } from "./fixtures/app"
  * trata um evento do hub: espera o debounce, refaz as consultas em segundo plano (sem skeleton) e
  * realça o que chegou. É esse caminho que os testes aqui exercitam.
  */
-const NEW_EVENT = {
+const NEW_EVENT: RecentEvent = {
   id: "ev-novo",
   kind: "DealWon",
   dealId: "deal-9",
   companyName: "Ótica Central",
   actorName: "Ana Prado",
   occurredAt: "2026-09-15T14:20:00Z",
+  occurredOnLocal: "2026-09-15",
   toStage: null,
   activityType: null,
   outcome: null,

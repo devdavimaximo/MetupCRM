@@ -99,7 +99,7 @@ test.describe("recortes de dados que quebram conta", () => {
       overview: (route) => {
         const scope = new URL(route.request().url()).searchParams.get("scope") ?? ""
         scopes.push(scope)
-        return data.overview({ scope })
+        return data.overview({ scope: scope === "Mine" ? "Mine" : "Organization" })
       },
     })
     await gotoDashboard(page)

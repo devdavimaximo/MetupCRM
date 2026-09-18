@@ -3,8 +3,14 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "skipLibCheck": true,
+
+    /* As fixtures importam os tipos dos DTOs do front (os api.ts de cada feature) para um valor fora
+       do enum quebrar aqui, e não só na tela. */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
 
     /* Bundler mode: os testes de ponta a ponta importam como o resto do front. */
     "module": "esnext",

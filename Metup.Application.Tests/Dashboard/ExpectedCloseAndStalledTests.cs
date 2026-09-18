@@ -23,14 +23,17 @@ public class ExpectedCloseAndStalledTests
         Guid userId,
         UserRole role,
         int days = 30,
-        DateTime? nowUtc = null) =>
-        new GetDashboardOverviewQueryHandler(
+        DateTime? nowUtc = null)
+    {
+        var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc);
+        return new GetDashboardOverviewQueryHandler(
                 context.Db,
                 context.As(userId, role),
-                new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc),
-                new ActivityFeedReader(context.Db),
+                clock,
+                new ActivityFeedReader(context.Db, clock),
                 new StageAnalyticsProvider(context.Db))
             .Handle(new GetDashboardOverviewQuery(days, DealScope.Organization), TestContext.Current.CancellationToken);
+    }
 
     [Fact]
     public async Task Previsto_para_fechar_soma_o_valor_efetivo_dos_abertos_de_hoje_ate_o_fim_da_janela()

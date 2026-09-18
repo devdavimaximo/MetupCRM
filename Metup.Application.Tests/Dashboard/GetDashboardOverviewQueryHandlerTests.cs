@@ -22,11 +22,12 @@ public class GetDashboardOverviewQueryHandlerTests
         DealScope scope = DealScope.Organization,
         DateTime? nowUtc = null)
     {
+        var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc);
         var handler = new GetDashboardOverviewQueryHandler(
             context.Db,
             context.As(userId, role),
-            new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc),
-            new ActivityFeedReader(context.Db),
+            clock,
+            new ActivityFeedReader(context.Db, clock),
             // Sem cache: o teste prova o cálculo, não a política de validade.
             new StageAnalyticsProvider(context.Db));
 

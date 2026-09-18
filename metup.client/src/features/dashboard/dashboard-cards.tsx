@@ -1,5 +1,5 @@
 import { useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react"
-import { ArrowDown, ArrowRight, ArrowUp, Building2, Ellipsis, Info, Minus, SquareArrowOutUpRight, type LucideIcon } from "lucide-react"
+import { ArrowDown, ArrowRight, ArrowUp, Building2, Ellipsis, Info, Minus, NotebookPen, SquareArrowOutUpRight, type LucideIcon } from "lucide-react"
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { initialsOf } from "@/components/ui/monogram"
@@ -500,13 +500,15 @@ const stageTone: Record<DealStage, string> = {
 
 /**
  * A linha inteira abre o negócio (atalho de ponteiro); pelo teclado, o nome da empresa e o menu
- * "⋯" são os alvos. Abaixo de 1700px o responsável vira só avatar, com o nome no tooltip.
+ * "⋯" são os alvos. Abaixo de 1700px o responsável vira só avatar, com o nome no tooltip; abaixo de
+ * 1600px a coluna sai, para a tabela caber sem rolar na horizontal.
  */
 export function FeaturedDealsCard({
   deals,
   today,
   onOpenDeal,
   onOpenCompany,
+  onLogActivity,
   compact = false,
 }: {
   deals: FeaturedDeal[]
@@ -514,6 +516,8 @@ export function FeaturedDealsCard({
   today: string
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
+  /** Abre o negócio já no formulário de registro de atividade. */
+  onLogActivity: (dealId: string) => void
   /** No celular vira lista de cards: uma tabela de 6 colunas só rolaria na horizontal. */
   compact?: boolean
 }) {
@@ -542,7 +546,7 @@ export function FeaturedDealsCard({
                     {deal.isEstimated && <span className="text-2xs text-muted">est.</span>}
                   </span>
                 </button>
-                <DealRowMenu deal={deal} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} />
+                <DealRowMenu deal={deal} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} onLogActivity={onLogActivity} />
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
                 <span className={cn("inline-flex rounded-sm px-2 py-0.5", stageTone[deal.stage])}>{stageLabels[deal.stage]}</span>
@@ -565,7 +569,7 @@ export function FeaturedDealsCard({
                 <th scope="col" className="pb-2 font-normal">Empresa</th>
                 <th scope="col" className="pb-2 font-normal">Valor</th>
                 <th scope="col" className="pb-2 font-normal">Etapa</th>
-                <th scope="col" className="pb-2 font-normal">
+                <th scope="col" className="pb-2 font-normal max-[1599px]:hidden">
                   <span className="max-[1699px]:sr-only">Responsável</span>
                   <span aria-hidden="true" className="min-[1700px]:hidden">Resp.</span>
                 </th>
@@ -596,7 +600,7 @@ export function FeaturedDealsCard({
                           event.stopPropagation()
                           onOpenDeal(deal.id)
                         }}
-                        className="max-w-36 cursor-pointer truncate rounded-xs text-left text-fg group-hover:underline focus-visible:focus-ring min-[1700px]:max-w-40"
+                        className="max-w-36 cursor-pointer truncate rounded-xs text-left text-fg group-hover:underline focus-visible:focus-ring max-[1599px]:max-w-28 min-[1700px]:max-w-40"
                       >
                         {deal.companyName}
                       </button>
@@ -621,7 +625,9 @@ export function FeaturedDealsCard({
                       {stageLabels[deal.stage]}
                     </span>
                   </td>
-                  <td className="py-1 pr-2 min-[1700px]:pr-3">
+                  {/* Abaixo de 1600px a coluna sai: a previsão e a próxima ação valem mais que o avatar, e o
+                      responsável segue no drawer do negócio. */}
+                  <td className="py-1 pr-2 max-[1599px]:hidden min-[1700px]:pr-3">
                     <span className="flex min-w-0 items-center gap-2">
                       <Hint content={deal.ownerUserName}>
                         <span className="relative inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[0.5625rem] font-medium text-fg-muted ring-1 ring-line-strong/50">
@@ -659,7 +665,7 @@ export function FeaturedDealsCard({
                   </td>
                   {/* Fixa na borda direita: se a tabela ainda rolar na horizontal, o menu continua à vista. */}
                   <td className="sticky right-0 bg-surface py-1 pl-1 text-right" onClick={(event) => event.stopPropagation()}>
-                    <DealRowMenu deal={deal} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} />
+                    <DealRowMenu deal={deal} onOpenDeal={onOpenDeal} onOpenCompany={onOpenCompany} onLogActivity={onLogActivity} />
                   </td>
                 </tr>
               ))}
@@ -675,10 +681,12 @@ function DealRowMenu({
   deal,
   onOpenDeal,
   onOpenCompany,
+  onLogActivity,
 }: {
   deal: FeaturedDeal
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
+  onLogActivity: (dealId: string) => void
 }) {
   return (
     <DropdownMenu modal={false}>
@@ -700,6 +708,10 @@ function DealRowMenu({
         <DropdownMenuItem onSelect={() => onOpenCompany(deal.companyId)}>
           <Building2 aria-hidden="true" />
           Abrir empresa
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onLogActivity(deal.id)}>
+          <NotebookPen aria-hidden="true" />
+          Registrar atividade
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

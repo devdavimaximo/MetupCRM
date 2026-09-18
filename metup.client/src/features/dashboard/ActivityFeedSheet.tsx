@@ -9,10 +9,12 @@ import { toMessage } from "@/features/companies/form-errors"
 import { listUsers, type UserSummary } from "@/features/deals/api"
 import type { AuthenticatedUser } from "@/lib/auth"
 import { useAsyncResource } from "@/lib/hooks"
+import type { LocalDate } from "@/lib/local-date"
 import { cn } from "@/lib/utils"
 import { useRealtime } from "@/lib/realtime"
 import { listActivityFeed, type ActivityFeedFilter, type RecentEvent } from "./api"
 import { ActivityEventButton } from "./activity-event"
+import { groupByDay } from "./activity-feed-days"
 
 const PAGE_SIZE = 20
 
@@ -31,34 +33,6 @@ const FILTERS: { value: ActivityFeedFilter; label: string }[] = [
   { value: "Note", label: "Nota" },
 ]
 
-const dayWithMonth = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long" })
-const dayWithYear = new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", year: "numeric" })
-
-function localDayKey(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
-}
-
-/** "Hoje", "Ontem", "12 de setembro" (com o ano só quando não é o ano corrente). */
-function dayLabel(date: Date, now = new Date()) {
-  const yesterday = new Date(now)
-  yesterday.setDate(now.getDate() - 1)
-  if (localDayKey(date) === localDayKey(now)) return "Hoje"
-  if (localDayKey(date) === localDayKey(yesterday)) return "Ontem"
-  return (date.getFullYear() === now.getFullYear() ? dayWithMonth : dayWithYear).format(date)
-}
-
-function groupByDay(events: RecentEvent[]) {
-  const groups: { key: string; label: string; events: RecentEvent[] }[] = []
-  for (const event of events) {
-    const date = new Date(event.occurredAt)
-    const key = localDayKey(date)
-    const last = groups.at(-1)
-    if (last?.key === key) last.events.push(event)
-    else groups.push({ key, label: dayLabel(date), events: [event] })
-  }
-  return groups
-}
-
 /** O que já foi carregado do feed: as páginas somadas e onde continuar (`cursor` nulo = fim). */
 type FeedData = { items: RecentEvent[]; cursor: string | null }
 
@@ -74,12 +48,15 @@ type MoreState = { key: string; loading: boolean; error: string | null }
 export function ActivityFeedSheet({
   open,
   role,
+  today,
   onOpenChange,
   onOpenDeal,
   returnFocusRef,
 }: {
   open: boolean
   role: AuthenticatedUser["role"]
+  /** "Hoje" da organização, para os rótulos "Hoje"/"Ontem" dos grupos. */
+  today: LocalDate
   onOpenChange: (open: boolean) => void
   onOpenDeal: (dealId: string) => void
   /** Para onde o foco volta ao fechar (o sheet é controlado e remontado, sem gatilho do Radix). */
@@ -224,7 +201,7 @@ export function ActivityFeedSheet({
     return () => observer.disconnect()
   }, [open, loadMore, items.length])
 
-  const groups = useMemo(() => groupByDay(items), [items])
+  const groups = useMemo(() => groupByDay(items, today), [items, today])
 
   function toggleKind(kind: ActivityFeedFilter) {
     setKinds((current) => (current.includes(kind) ? current.filter((k) => k !== kind) : [...current, kind]))

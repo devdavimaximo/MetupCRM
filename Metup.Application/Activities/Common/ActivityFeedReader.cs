@@ -29,7 +29,7 @@ public sealed record ActivityFeedRequest(
 /// não é a do <see cref="Guid.CompareTo(Guid)"/> do .NET — comparar no banco duplicaria ou pularia
 /// itens de mesmo instante entre páginas.
 /// </summary>
-public sealed class ActivityFeedReader(IApplicationDbContext context)
+public sealed class ActivityFeedReader(IApplicationDbContext context, IOrganizationClock clock)
 {
     public async Task<ActivityFeedPageDto> ReadAsync(
         DealScopeFilter scope,
@@ -163,7 +163,7 @@ public sealed class ActivityFeedReader(IApplicationDbContext context)
         return rows;
     }
 
-    /// <summary>Nomes de empresa e autor e o valor do ganho, só para os itens da página.</summary>
+    /// <summary>Nomes de empresa e autor, o dia local e o valor do ganho, só para os itens da página.</summary>
     private async Task<IReadOnlyList<ActivityFeedItemDto>> ToItemsAsync(
         Guid organizationId,
         IReadOnlyList<FeedRow> page,
@@ -188,6 +188,8 @@ public sealed class ActivityFeedReader(IApplicationDbContext context)
             .Where(u => u.OrganizationId == organizationId && actorIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.Name, cancellationToken);
 
+        var now = await clock.SnapshotAsync(cancellationToken);
+
         return page
             .Select(r =>
             {
@@ -199,6 +201,7 @@ public sealed class ActivityFeedReader(IApplicationDbContext context)
                     deal?.CompanyName ?? "—",
                     actors.GetValueOrDefault(r.ActorUserId, "—"),
                     r.OccurredAt,
+                    now.LocalDateOf(r.OccurredAt),
                     r.ToStage,
                     r.ActivityType,
                     r.Outcome,

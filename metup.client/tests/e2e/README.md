@@ -76,7 +76,7 @@ Nada aqui é silenciado: todo `test.skip` diz por que existe.
 | Onde | Tamanho | Por quê |
 |---|---|---|
 | `dashboard-layout` › sem rolagem vertical | < 1600px | A regra vale para 1600×900 e 1920×1080; abaixo disso a tela pode rolar. |
-| `dashboard-layout` › tabela de destaques | ≠ 1366px | A folga de rolagem que sobrou é específica dessa faixa (pendência da P1, teto de 60px para não piorar). |
+| `dashboard-layout` › tabela de destaques | ≠ 1366px | 1366px é a faixa mais estreita em que a tabela existe (no celular ela vira cards). Desde a onda 4A o teto é 0: nenhuma rolagem horizontal. |
 | `dashboard-mobile` › o arquivo inteiro | ≥ 768px | Abaixo de `md` o dashboard monta **outra árvore** (item 26); as asserções de ordem não valem no desktop. |
 
 > O pulo do tooltip do nó Ganhos saiu na onda 3B: o item 26 deu ao `Hint` a abertura por toque

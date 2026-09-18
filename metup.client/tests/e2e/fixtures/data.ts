@@ -1,16 +1,31 @@
 /**
  * Os dados que a API dublada devolve. Tudo aqui é construído por função, para cada cenário pedir só
  * o recorte de que precisa (`overview({ revenue: { current: 0, previous: 0 } })`) sem repetir o DTO
- * inteiro. Os nomes dos campos acompanham `src/features/dashboard/api.ts`.
+ * inteiro. Cada corpo é tipado contra o DTO do front (`satisfies`, sem cast): um valor fora do enum
+ * quebra no `tsc -b`, não na tela três ondas depois.
  */
+
+import type { Activity } from "@/features/activities/api"
+import type { Company } from "@/features/companies/api"
+import type {
+  ActivityFeedPage,
+  DashboardOverview,
+  DashboardSummary,
+  PipelineStage,
+  RecentEvent,
+  RevenuePoint,
+} from "@/features/dashboard/api"
+import type { Deal, DealListItem, PagedResult, UserSummary } from "@/features/deals/api"
+import type { AppNotification } from "@/features/notifications/api"
+import type { SearchResult } from "@/features/search/api"
+import type { TaskItem } from "@/features/tasks/api"
+import type { Session } from "@/lib/auth"
 
 /** O "hoje" de todo cenário. Fixo, para rótulo de data e janela de previsão não mudarem com o dia. */
 export const TODAY = "2026-09-15"
 export const PERIOD_START = "2026-08-17"
 
-export type Json = Record<string, unknown>
-
-export const session = {
+export const session: Session = {
   token: "token-de-teste",
   expiresAtUtc: "2099-01-01T00:00:00Z",
   user: {
@@ -18,12 +33,12 @@ export const session = {
     organizationId: "22222222-2222-2222-2222-222222222222",
     name: "Davi Maximo",
     email: "davi@exemplo.test",
-    role: "Admin" as "Admin" | "Closer" | "Sdr",
+    role: "Admin",
   },
 }
 
 /** Uma série diária simples: só os dias com ganho têm receita, como acontece no B2B. */
-function revenueSeries(days = 30) {
+function revenueSeries(days = 30): RevenuePoint[] {
   const start = new Date(`${PERIOD_START}T12:00:00`)
   return Array.from({ length: days }, (_, index) => {
     const day = new Date(start)
@@ -38,7 +53,7 @@ function revenueSeries(days = 30) {
   })
 }
 
-export const pipelineStages = [
+export const pipelineStages: PipelineStage[] = [
   { stage: "Prospect", count: 42, amount: 210_000, estimatedCount: 12, stalledCount: 3 },
   { stage: "PrimeiroContato", count: 21, amount: 126_000, estimatedCount: 6, stalledCount: 1 },
   { stage: "Qualificacao", count: 14, amount: 98_000, estimatedCount: 2, stalledCount: 0 },
@@ -47,7 +62,7 @@ export const pipelineStages = [
   { stage: "Negociacao", count: 3, amount: 45_000, estimatedCount: 0, stalledCount: 1 },
 ]
 
-export const recentEvents = [
+export const recentEvents: RecentEvent[] = [
   {
     id: "ev-1",
     kind: "DealWon",
@@ -55,6 +70,7 @@ export const recentEvents = [
     companyName: "Padaria Aurora",
     actorName: "Davi Maximo",
     occurredAt: "2026-09-15T13:40:00Z",
+    occurredOnLocal: TODAY,
     toStage: null,
     activityType: null,
     outcome: null,
@@ -67,6 +83,7 @@ export const recentEvents = [
     companyName: "Mercado Bonfim",
     actorName: "Ana Prado",
     occurredAt: "2026-09-15T12:10:00Z",
+    occurredOnLocal: TODAY,
     toStage: "Proposta",
     activityType: null,
     outcome: null,
@@ -79,6 +96,7 @@ export const recentEvents = [
     companyName: "Clínica Vitória",
     actorName: "Davi Maximo",
     occurredAt: "2026-09-15T11:05:00Z",
+    occurredOnLocal: TODAY,
     toStage: null,
     activityType: "Call",
     outcome: "Interessado",
@@ -86,8 +104,8 @@ export const recentEvents = [
   },
 ]
 
-export function overview(patch: Json = {}): Json {
-  return {
+export function overview(patch: Partial<DashboardOverview> = {}): DashboardOverview {
+  const body = {
     periodDays: 30,
     scope: "Organization",
     periodStart: "2026-08-17T03:00:00Z",
@@ -176,12 +194,12 @@ export function overview(patch: Json = {}): Json {
       { ownerUserId: "u-1", ownerUserName: "Davi Maximo", wonDeals: 3, revenue: 28_500, openDeals: 24, openAmount: 320_000 },
       { ownerUserId: "u-2", ownerUserName: "Ana Prado", wonDeals: 2, revenue: 20_000, openDeals: 18, openAmount: 212_000 },
     ],
-    ...patch,
-  }
+  } satisfies DashboardOverview
+  return { ...body, ...patch }
 }
 
-export function task(patch: Json = {}): Json {
-  return {
+export function task(patch: Partial<TaskItem> = {}): TaskItem {
+  const body = {
     id: "task-1",
     dealId: "deal-1",
     companyId: "company-1",
@@ -194,11 +212,11 @@ export function task(patch: Json = {}): Json {
     status: "Pendente",
     createdAt: "2026-09-10T12:00:00Z",
     completedAt: null,
-    ...patch,
-  }
+  } satisfies TaskItem
+  return { ...body, ...patch }
 }
 
-export function summary(patch: Json = {}): Json {
+export function summary(patch: Partial<DashboardSummary> = {}): DashboardSummary {
   return {
     taskCounts: { overdue: 3, today: 5, upcoming: 9 },
     nextTasks: [
@@ -210,19 +228,24 @@ export function summary(patch: Json = {}): Json {
   }
 }
 
-/** Uma página do feed. `cursor` nulo fecha o feed com "Fim da atividade". */
-export function feedPage(index: number, hasNext: boolean) {
+/**
+ * Uma página do feed, um dia por página. `cursor` nulo fecha o feed com "Fim da atividade". Os
+ * horários (13h UTC, 10h em Brasília) caem no mesmo dia nos dois fusos, como o servidor devolveria.
+ */
+export function feedPage(index: number, hasNext: boolean): ActivityFeedPage {
+  const day = new Date(Date.UTC(2026, 8, 15 - index))
   return {
     items: Array.from({ length: 20 }, (_, position) => ({
       ...recentEvents[position % recentEvents.length],
       id: `feed-${index}-${position}`,
       occurredAt: new Date(Date.UTC(2026, 8, 15 - index, 13, 40 - position)).toISOString(),
+      occurredOnLocal: day.toISOString().slice(0, 10),
     })),
     nextCursor: hasNext ? `cursor-${index + 1}` : null,
   }
 }
 
-export const notifications = [
+export const notifications: AppNotification[] = [
   {
     id: "n-1",
     kind: "TaskOverdue",
@@ -251,27 +274,28 @@ export const notifications = [
   },
 ]
 
-export const searchResult = {
+export const searchResult: SearchResult = {
   companies: [{ id: "company-1", name: "Padaria Aurora", segment: "Alimentação", city: "Curitiba" }],
   contacts: [],
-  deals: [{ id: "deal-1", companyId: "company-1", companyName: "Padaria Aurora", stage: "Negociacao", status: "Open", amount: 24_000 }],
+  deals: [{ id: "deal-1", companyId: "company-1", companyName: "Padaria Aurora", stage: "Negociacao", status: "Aberto", amount: 24_000 }],
 }
 
-export const users = [
-  { id: "u-1", name: "Davi Maximo" },
-  { id: "u-2", name: "Ana Prado" },
+export const users: UserSummary[] = [
+  { id: "u-1", name: "Davi Maximo", role: "Admin" },
+  { id: "u-2", name: "Ana Prado", role: "Sdr" },
 ]
 
 /** Lista paginada do Pipeline — o bastante para a tela abrir depois de clicar numa etapa. */
-export const dealsPage = {
+export const dealsPage: PagedResult<DealListItem> = {
   items: [
     {
       id: "deal-1",
       companyId: "company-1",
       companyName: "Padaria Aurora",
+      contactId: "contact-1",
       contactName: "Marina Alves",
       stage: "Negociacao",
-      status: "Open",
+      status: "Aberto",
       source: "Sdr",
       amount: 24_000,
       ticket: 24_000,
@@ -284,5 +308,43 @@ export const dealsPage = {
   ],
   page: 1,
   pageSize: 25,
-  total: 1,
+  totalCount: 1,
+  totalPages: 1,
 }
+
+/** O negócio que o drawer do Pipeline abre (`GET /api/deals/deal-1`). */
+export const deal: Deal = {
+  ...dealsPage.items[0],
+  stageHistory: [
+    { id: "sc-1", fromStage: null, toStage: "Prospect", changedAt: "2026-08-20T12:00:00Z", changedByUserId: "u-1" },
+    { id: "sc-2", fromStage: "Prospect", toStage: "Negociacao", changedAt: "2026-09-09T12:00:00Z", changedByUserId: "u-1" },
+  ],
+}
+
+export const company: Company = {
+  id: "company-1",
+  name: "Padaria Aurora",
+  segment: "Alimentação",
+  city: "Curitiba",
+  instagram: null,
+  phone: null,
+  contacts: [
+    { id: "contact-1", companyId: "company-1", name: "Marina Alves", role: "Sócia", phone: null, whatsApp: null, email: null },
+  ],
+}
+
+export const dealActivities: Activity[] = [
+  {
+    id: "activity-1",
+    dealId: "deal-1",
+    contactId: "contact-1",
+    contactName: "Marina Alves",
+    type: "Call",
+    outcome: "Interessado",
+    note: null,
+    authorUserId: "u-1",
+    authorUserName: "Davi Maximo",
+    occurredAt: "2026-09-12T14:00:00Z",
+    createdAt: "2026-09-12T14:00:00Z",
+  },
+]

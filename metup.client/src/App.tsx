@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell"
 import { CompaniesPage } from "@/features/companies/CompaniesPage"
 import { DashboardPage } from "@/features/dashboard/DashboardPage"
 import type { DealStage } from "@/features/deals/api"
+import { dealSectionToUrl, type DealDrawerSection } from "@/features/deals/deal-section"
 import { PipelinePage } from "@/features/deals/PipelinePage"
 import { InboxPage } from "@/features/inbox/InboxPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
@@ -13,6 +14,9 @@ import { clearSession, getSession, type Session } from "@/lib/auth"
 import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
 
 type NewDealIntent = { companyId: string; companyName: string } | null
+
+/** Parâmetros de chegada (destaque, sheet, seção inicial): valem só para a navegação que os pôs. */
+const ARRIVAL_CLEARED = { pipelineStage: "", activityFeed: "", dealSection: "" }
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => getSession())
@@ -29,45 +33,45 @@ function App() {
     return <LoginPage onLoggedIn={setSession} />
   }
 
-  // `etapa` é um destaque de chegada no Pipeline e `feed` é o sheet da atividade no dashboard: toda
-  // navegação descarta os dois.
+  // `etapa` é um destaque de chegada no Pipeline, `feed` é o sheet da atividade no dashboard e `acao`
+  // é a seção de chegada no negócio: toda navegação descarta os três.
   function navigate(nextView: View) {
-    writeUrlState({ view: nextView, companyId: null, dealId: null, pipelineStage: "", activityFeed: "" })
+    writeUrlState({ view: nextView, companyId: null, dealId: null, ...ARRIVAL_CLEARED })
     setNewDealIntent(null)
     setView(nextView)
     setNavSeed((seed) => seed + 1)
   }
 
   function openCompany(companyId: string) {
-    writeUrlState({ view: "empresas", companyId, dealId: null, search: "", pipelineStage: "", activityFeed: "" })
+    writeUrlState({ view: "empresas", companyId, dealId: null, search: "", ...ARRIVAL_CLEARED })
     setNewDealIntent(null)
     setView("empresas")
     setNavSeed((seed) => seed + 1)
   }
 
-  function openDeal(dealId: string) {
-    writeUrlState({ view: "pipeline", dealId, companyId: null, pipelineStage: "", activityFeed: "" })
+  function openDeal(dealId: string, section?: DealDrawerSection) {
+    writeUrlState({ view: "pipeline", dealId, companyId: null, ...ARRIVAL_CLEARED, dealSection: dealSectionToUrl(section) })
     setNewDealIntent(null)
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
   }
 
   function openPipelineAtStage(stage: DealStage) {
-    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: stage, activityFeed: "" })
+    writeUrlState({ view: "pipeline", dealId: null, companyId: null, ...ARRIVAL_CLEARED, pipelineStage: stage })
     setNewDealIntent(null)
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
   }
 
   function openConversation(conversationId: string) {
-    writeUrlState({ view: "inbox", conversationId, dealId: null, companyId: null, search: "", pipelineStage: "", activityFeed: "" })
+    writeUrlState({ view: "inbox", conversationId, dealId: null, companyId: null, search: "", ...ARRIVAL_CLEARED })
     setNewDealIntent(null)
     setView("inbox")
     setNavSeed((seed) => seed + 1)
   }
 
   function openNewDealForCompany(companyId: string, companyName: string) {
-    writeUrlState({ view: "pipeline", dealId: null, companyId: null, pipelineStage: "", activityFeed: "" })
+    writeUrlState({ view: "pipeline", dealId: null, companyId: null, ...ARRIVAL_CLEARED })
     setNewDealIntent({ companyId, companyName })
     setView("pipeline")
     setNavSeed((seed) => seed + 1)
@@ -92,6 +96,7 @@ function App() {
           initialScope={initialDashboardScope}
           onOpenDeal={openDeal}
           onOpenCompany={openCompany}
+          onLogActivity={(dealId) => openDeal(dealId, "activity")}
           onOpenPipelineAtStage={openPipelineAtStage}
           onNavigate={navigate}
         />

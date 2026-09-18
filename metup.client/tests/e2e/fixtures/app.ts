@@ -25,6 +25,9 @@ export type ApiPath =
   | "users"
   | "search"
   | "deals"
+  | "deal"
+  | "dealActivities"
+  | "company"
   | "completeTask"
 
 const ROUTES: Record<ApiPath, string> = {
@@ -35,6 +38,9 @@ const ROUTES: Record<ApiPath, string> = {
   users: "**/api/users",
   search: "**/api/search**",
   deals: "**/api/deals?**",
+  deal: "**/api/deals/*",
+  dealActivities: "**/api/deals/*/activities",
+  company: "**/api/companies/*",
   completeTask: "**/api/tasks/*/complete",
 }
 
@@ -60,7 +66,10 @@ function defaults(): Record<ApiPath, Handler | ResponseBody> {
     users: data.users,
     search: data.searchResult,
     deals: data.dealsPage,
-    completeTask: data.task({ status: "Done", completedAt: "2026-09-15T17:05:00Z" }),
+    deal: data.deal,
+    dealActivities: data.dealActivities,
+    company: data.company,
+    completeTask: data.task({ status: "Concluida", completedAt: "2026-09-15T17:05:00Z" }),
   }
 }
 

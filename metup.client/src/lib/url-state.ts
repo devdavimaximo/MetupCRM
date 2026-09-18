@@ -31,6 +31,7 @@ export function readUrlState() {
     dashboardTo: params.get("ate") ?? "",
     pipelineStage: params.get("etapa") ?? "",
     activityFeed: params.get("feed") ?? "",
+    dealSection: params.get("acao") ?? "",
   }
 }
 
@@ -56,6 +57,7 @@ type UrlStatePatch = {
   dashboardTo?: string
   pipelineStage?: string
   activityFeed?: string
+  dealSection?: string
 }
 
 const STRING_KEYS = [
@@ -76,6 +78,7 @@ const STRING_KEYS = [
   ["dashboardTo", "ate"],
   ["pipelineStage", "etapa"],
   ["activityFeed", "feed"],
+  ["dealSection", "acao"],
 ] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */
