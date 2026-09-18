@@ -8,17 +8,20 @@ namespace Metup.Application.Tasks.Commands.RescheduleTask;
 
 public class RescheduleTaskCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<RescheduleTaskCommand, TaskDto>
+    ICurrentUserService currentUserService,
+    IOrganizationClock organizationClock) : IRequestHandler<RescheduleTaskCommand, TaskDto>
 {
     public async Task<TaskDto> Handle(RescheduleTaskCommand request, CancellationToken cancellationToken)
     {
         var organizationId = currentUserService.RequireOrganizationId();
+        var userId = currentUserService.RequireUserId();
+        var clock = await organizationClock.SnapshotAsync(cancellationToken);
 
         var task = await context.Tasks
             .FirstOrDefaultAsync(t => t.Id == request.Id && t.OrganizationId == organizationId, cancellationToken)
             ?? throw new NotFoundException("Tarefa");
 
-        task.Reschedule(request.DueDate);
+        context.TaskReschedules.Add(task.Reschedule(request.DueDate, userId, clock.UtcNow));
 
         await context.SaveChangesAsync(cancellationToken);
 

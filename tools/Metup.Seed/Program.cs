@@ -39,6 +39,7 @@ if (previousOrg is not null)
     var orgId = previousOrg.Id;
     await db.Messages.Where(m => m.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Conversations.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
+    await db.TaskReschedules.Where(r => r.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Tasks.Where(t => t.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Activities.Where(a => a.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.StageChanges.Where(s => s.OrganizationId == orgId).ExecuteDeleteAsync();

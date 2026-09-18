@@ -212,6 +212,10 @@ export function task(patch: Partial<TaskItem> = {}): TaskItem {
     status: "Pendente",
     createdAt: "2026-09-10T12:00:00Z",
     completedAt: null,
+    dealStage: "Proposta",
+    dealAmount: 24_000,
+    dealAmountIsEstimated: false,
+    contactName: null,
   } satisfies TaskItem
   return { ...body, ...patch }
 }

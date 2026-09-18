@@ -30,6 +30,8 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options) : DbContex
 
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
+    public DbSet<TaskReschedule> TaskReschedules => Set<TaskReschedule>();
+
     public DbSet<Conversation> Conversations => Set<Conversation>();
 
     public DbSet<Message> Messages => Set<Message>();

@@ -3,6 +3,7 @@ using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Common;
 using Metup.Application.Deals.Analytics;
+using Metup.Application.Deals.Common;
 using Metup.Domain.Activities;
 using Metup.Domain.Deals;
 using Metup.Domain.Organizations;
@@ -336,8 +337,8 @@ public class GetDashboardOverviewQueryHandler(
         DateTime? ClosedAt,
         DateOnly? ExpectedCloseDate)
     {
-        public decimal? EffectiveAmount => Amount ?? Ticket;
+        public decimal? EffectiveAmount => DealValue.EffectiveAmount(Amount, Ticket);
 
-        public bool IsEstimated => Amount is null && Ticket is not null;
+        public bool IsEstimated => DealValue.IsEstimated(Amount, Ticket);
     }
 }

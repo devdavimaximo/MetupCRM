@@ -61,16 +61,32 @@ public class TaskItem : BaseEntity
         CompletedAt = nowUtc;
     }
 
-    public void Reschedule(DateTime newDueDate)
+    /// <summary>
+    /// Muda o prazo e devolve o registro de histórico. Quem chama precisa adicioná-lo ao contexto
+    /// (<c>context.TaskReschedules.Add(...)</c>) — mesmo contrato de <c>Deal.ChangeStage</c>.
+    /// </summary>
+    public TaskReschedule Reschedule(DateTime newDueDate, Guid rescheduledByUserId, DateTime nowUtc)
     {
         EnsurePending();
 
-        if (newDueDate < DateTime.UtcNow)
+        if (newDueDate < nowUtc)
         {
             throw new DomainRuleException("A nova data da tarefa não pode ser no passado.");
         }
 
+        var reschedule = new TaskReschedule
+        {
+            OrganizationId = OrganizationId,
+            TaskId = Id,
+            FromDueDate = DueDate,
+            ToDueDate = newDueDate,
+            RescheduledByUserId = rescheduledByUserId,
+            RescheduledAt = nowUtc,
+        };
+
         DueDate = newDueDate;
+
+        return reschedule;
     }
 
     private void EnsurePending()

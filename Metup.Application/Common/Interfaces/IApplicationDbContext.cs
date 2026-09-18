@@ -29,6 +29,8 @@ public interface IApplicationDbContext
 
     DbSet<TaskItem> Tasks { get; }
 
+    DbSet<TaskReschedule> TaskReschedules { get; }
+
     DbSet<Conversation> Conversations { get; }
 
     DbSet<Message> Messages { get; }

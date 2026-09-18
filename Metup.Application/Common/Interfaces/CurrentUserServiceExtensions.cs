@@ -42,11 +42,40 @@ public static class CurrentUserServiceExtensions
         var organizationId = currentUserService.RequireOrganizationId();
         var userId = currentUserService.RequireUserId();
 
-        var reachesOrganization = Enum.TryParse<UserRole>(currentUserService.Role, out var role)
-            && role is UserRole.Admin or UserRole.Closer;
-
-        return requestedScope == DealScope.Organization && reachesOrganization
+        return requestedScope == DealScope.Organization && currentUserService.ReachesOrganization()
             ? new DealScopeFilter(organizationId, null, DealScope.Organization)
             : new DealScopeFilter(organizationId, userId, DealScope.Mine);
     }
+
+    /// <summary>
+    /// Ponto único de decisão de "de quem são as tarefas" — listagem, resumo, criação e, nas próximas
+    /// ondas, calendário e ações em massa. Sem pedido = as do próprio usuário. Pedir outro responsável
+    /// (<paramref name="ownerUserId"/>) ou todos (<paramref name="allOwners"/>) só vale para
+    /// Admin/Closer. Diferente de <see cref="ResolveDealScope"/>, o pedido não permitido é
+    /// <b>recusado</b> (403), não rebaixado: a tela de tarefas já pedia um responsável explícito e
+    /// devolver as tarefas de outra pessoa em silêncio seria enganoso.
+    /// </summary>
+    public static TaskOwnerFilter ResolveTaskOwnerScope(
+        this ICurrentUserService currentUserService,
+        Guid? ownerUserId = null,
+        bool allOwners = false)
+    {
+        var organizationId = currentUserService.RequireOrganizationId();
+        var userId = currentUserService.RequireUserId();
+
+        var asksForOthers = allOwners || (ownerUserId is { } requested && requested != userId);
+        if (asksForOthers && !currentUserService.ReachesOrganization())
+        {
+            throw new ForbiddenAccessException("Sem permissão para ver as tarefas de outro usuário.");
+        }
+
+        return allOwners
+            ? new TaskOwnerFilter(organizationId, null)
+            : new TaskOwnerFilter(organizationId, ownerUserId ?? userId);
+    }
+
+    /// <summary>Admin e Closer alcançam a organização inteira; SDR e papel desconhecido, não.</summary>
+    private static bool ReachesOrganization(this ICurrentUserService currentUserService) =>
+        Enum.TryParse<UserRole>(currentUserService.Role, out var role)
+            && role is UserRole.Admin or UserRole.Closer;
 }
