@@ -11,6 +11,7 @@ export type DealSearchHit = {
   stage: DealStage
   status: DealStatus
   amount: number | null
+  ownerUserName: string | null
 }
 
 export type SearchResult = { companies: CompanySearchHit[]; contacts: ContactSearchHit[]; deals: DealSearchHit[] }

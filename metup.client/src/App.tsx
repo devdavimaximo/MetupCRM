@@ -116,7 +116,7 @@ function App() {
         />
       )}
       {view === "tarefas" && (
-        <TasksPage key={`tarefas-${navSeed}`} role={session.user.role} onOpenDeal={openDeal} />
+        <TasksPage key={`tarefas-${navSeed}`} user={session.user} onOpenCompany={openCompany} />
       )}
       {view === "inbox" && <InboxPage key={`inbox-${navSeed}`} onOpenDeal={openDeal} />}
       {view === "relatorios" && (

@@ -69,6 +69,26 @@ real.
 - **Ambiguidade de nome acessível:** "Mês anterior" é atalho de período *e* navegação do calendário;
   "Buscar no CRM" é o diálogo *e* o campo. Sempre dê escopo (`getByRole("list", { name: "Atalhos" })`).
 
+## Tela de Tarefas (`tasks-page.spec.ts`)
+
+A API de tarefas é dublada **com estado** por `TaskStore` (`fixtures/tasks.ts`): concluir, cancelar,
+reagendar e criar mudam a loja, e a listagem e o resumo seguintes refletem isso, com recortes de
+prazo iguais aos do servidor. `gotoTasks(page, "&aba=hoje")` congela o relógio do navegador em
+`NOW` (terça, 15/09/2026, 15:00) com `page.clock.setFixedTime`.
+
+```ts
+const store = new TaskStore()
+await installApi(page, { ...store.routes(), createTask: problem("Negócio fechado.", 409) })
+await gotoTasks(page)
+expect(store.listRequests.at(-1)?.get("scope")).toBe("All") // o que a tela pediu
+```
+
+## OneDrive: specs que "somem"
+
+Com o repositório no OneDrive, arquivos só na nuvem viram *reparse points*. O Node os vê como
+symlink, e o Playwright **não lista** esses specs, sem erro nenhum (`--list` mostra menos arquivos).
+Se o total cair, marque a pasta como "Sempre manter neste dispositivo" ou regrave os arquivos.
+
 ## Pulos declarados
 
 Nada aqui é silenciado: todo `test.skip` diz por que existe.
@@ -77,6 +97,9 @@ Nada aqui é silenciado: todo `test.skip` diz por que existe.
 |---|---|---|
 | `dashboard-layout` › sem rolagem vertical | < 1600px | A regra vale para 1600×900 e 1920×1080; abaixo disso a tela pode rolar. |
 | `dashboard-layout` › tabela de destaques | ≠ 1366px | 1366px é a faixa mais estreita em que a tabela existe (no celular ela vira cards). Desde a onda 4A o teto é 0: nenhuma rolagem horizontal. |
+| `tasks-page` › cabeçalho Prazo | < 768px | Cabeçalhos de coluna só existem na tabela. |
+| `tasks-page` › 1366×768 sem rolagem | ≠ 1366px | Faixa mais estreita com tabela. |
+| `tasks-page` › 390×844 cards | ≥ 768px | Cards só abaixo de `md`. |
 | `dashboard-mobile` › o arquivo inteiro | ≥ 768px | Abaixo de `md` o dashboard monta **outra árvore** (item 26); as asserções de ordem não valem no desktop. |
 
 > O pulo do tooltip do nó Ganhos saiu na onda 3B: o item 26 deu ao `Hint` a abertura por toque

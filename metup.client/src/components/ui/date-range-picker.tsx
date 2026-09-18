@@ -224,7 +224,7 @@ export function DateRangePicker({
   )
 }
 
-function MonthButton({
+export function MonthButton({
   label,
   onClick,
   disabled,
@@ -253,7 +253,7 @@ function MonthButton({
   )
 }
 
-function MonthGrid({
+export function MonthGrid({
   month,
   preview,
   pendingStart,

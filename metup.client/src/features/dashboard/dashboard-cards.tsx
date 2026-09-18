@@ -10,22 +10,27 @@ import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { ExpectedClose, FeaturedDeal, PipelineStage, StageAdvanceRate } from "./api"
 import { daysInclusive } from "@/lib/local-date"
-import { formatInstantDay, formatLocalDay, formatMoneyCompact, formatMoneyWhole, formatPercent, type Delta } from "./dashboard-format"
+import {
+  deltaTone,
+  formatInstantDay,
+  formatLocalDay,
+  formatMoneyCompact,
+  formatMoneyWhole,
+  formatPercent,
+  type Delta,
+  type DeltaPolarity,
+  type DeltaTone,
+} from "./dashboard-format"
 import { Sparkline } from "./dashboard-charts"
 
 /* ─── Base ──────────────────────────────────────────────────────────────────── */
 
+const panelSurface =
+  "relative flex min-h-0 min-w-0 flex-col rounded-lg border border-line-soft bg-linear-to-b from-surface-2/70 to-surface"
+
 /** Painel do dashboard: canto de 10px, filete discreto e um véu de luz no topo. */
 export function Panel({ className, ...props }: ComponentProps<"section">) {
-  return (
-    <section
-      className={cn(
-        "relative flex min-h-0 min-w-0 flex-col rounded-lg border border-line-soft bg-linear-to-b from-surface-2/70 to-surface",
-        className
-      )}
-      {...props}
-    />
-  )
+  return <section className={cn(panelSurface, className)} {...props} />
 }
 
 export function PanelHeading({
@@ -84,13 +89,32 @@ const deltaFallback = {
     text: "primeiro período com dados",
     hint: "O período anterior é anterior ao primeiro negócio — ainda não há base de comparação.",
   },
+  "no-base": { text: "Sem base anterior", hint: "Nada existia no escopo nessa data — não há o que comparar." },
 } as const
 
-export function DeltaLine({ delta, comparison }: { delta: Delta; comparison: string }) {
+const toneClasses: Record<DeltaTone, string> = {
+  positive: "text-success",
+  negative: "text-danger",
+  neutral: "text-fg-muted",
+}
+
+export function DeltaLine({
+  delta,
+  comparison,
+  polarity = "higher-is-better",
+  caption,
+}: {
+  delta: Delta
+  comparison: string
+  /** Que cor a seta ganha. O padrão é o do dashboard: subir é bom. */
+  polarity?: DeltaPolarity
+  /** Legenda sob o número. Sem ela: "vs. período anterior" (encurta abaixo de 2xl). */
+  caption?: string
+}) {
   if (delta.kind !== "change") {
     const { text, hint } = deltaFallback[delta.kind]
     return (
-      <Hint content={delta.kind === "no-history" ? hint : `${hint} Comparado com ${comparison}.`}>
+      <Hint content={delta.kind === "no-history" || delta.kind === "no-base" ? hint : `${hint} Comparado com ${comparison}.`}>
         <p className="text-xs text-muted">{text}</p>
       </Hint>
     )
@@ -103,16 +127,18 @@ export function DeltaLine({ delta, comparison }: { delta: Delta; comparison: str
         <span
           className={cn(
             "inline-flex items-center gap-1 text-sm font-medium tabular",
-            delta.direction === "up" && "text-success",
-            delta.direction === "down" && "text-danger",
-            delta.direction === "flat" && "text-fg-muted"
+            toneClasses[deltaTone(delta.direction, polarity)]
           )}
         >
           <Icon className="size-3.5" aria-hidden="true" />
           {delta.label}
         </span>
         <span className="text-xs text-muted">
-          vs. <span className="max-2xl:hidden">período </span>anterior
+          {caption ?? (
+            <>
+              vs. <span className="max-2xl:hidden">período </span>anterior
+            </>
+          )}
         </span>
       </div>
     </Hint>
@@ -128,7 +154,12 @@ export function KpiCard({
   value,
   delta,
   comparison,
-  trend,
+  trend = [],
+  tone = "default",
+  polarity,
+  caption,
+  pressed,
+  onClick,
 }: {
   icon: LucideIcon
   label: string
@@ -137,12 +168,24 @@ export function KpiCard({
   value: string
   delta: Delta
   comparison: string
-  trend: number[]
+  trend?: number[]
+  /** `danger`: ícone e número em vermelho (Atrasadas). */
+  tone?: "default" | "danger"
+  polarity?: DeltaPolarity
+  caption?: string
+  /** Com `onClick` o cartão inteiro vira um botão de alternância (`aria-pressed`). */
+  pressed?: boolean
+  onClick?: () => void
 }) {
-  return (
-    <Panel aria-label={label} className="min-h-fit gap-2 overflow-hidden px-4 py-3.5">
+  const body = (
+    <>
       <div className="flex items-center gap-2.5">
-        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line-soft bg-surface-3/80 text-accent">
+        <span
+          className={cn(
+            "inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-line-soft bg-surface-3/80",
+            tone === "danger" ? "text-danger" : "text-accent"
+          )}
+        >
           <Icon className="size-4" aria-hidden="true" />
         </span>
         {hint ? (
@@ -155,13 +198,43 @@ export function KpiCard({
           <p className="truncate text-sm text-fg">{label}</p>
         )}
       </div>
-      <p className="text-2xl font-semibold tracking-[-0.01em] whitespace-nowrap text-fg tabular">{value}</p>
+      <p
+        className={cn(
+          "text-2xl font-semibold tracking-[-0.01em] whitespace-nowrap tabular",
+          tone === "danger" ? "text-danger" : "text-fg"
+        )}
+      >
+        {value}
+      </p>
       <div className="flex items-end justify-between gap-2">
-        <DeltaLine delta={delta} comparison={comparison} />
+        <DeltaLine delta={delta} comparison={comparison} polarity={polarity} caption={caption} />
         <div className="h-9 min-w-0 flex-1 max-w-28" aria-hidden="true">
           {trend.length > 1 && <Sparkline values={trend} />}
         </div>
       </div>
+    </>
+  )
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        aria-pressed={pressed}
+        onClick={onClick}
+        className={cn(
+          panelSurface,
+          "min-h-fit w-full cursor-pointer gap-2 overflow-hidden px-4 py-3.5 text-left transition-colors hover:border-line-strong focus-visible:focus-ring",
+          pressed && "border-accent/60 hover:border-accent/60"
+        )}
+      >
+        {body}
+      </button>
+    )
+  }
+
+  return (
+    <Panel aria-label={label} className="min-h-fit gap-2 overflow-hidden px-4 py-3.5">
+      {body}
     </Panel>
   )
 }

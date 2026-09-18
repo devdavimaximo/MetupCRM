@@ -8,8 +8,18 @@ public record CompanySearchHitDto(Guid Id, string Name, string? Segment, string?
 /// <summary>Contato encontrado, com a empresa dele (abrir o contato = abrir a ficha da empresa).</summary>
 public record ContactSearchHitDto(Guid Id, string Name, Guid CompanyId, string CompanyName, string? Role);
 
-/// <summary>Negócio encontrado pela empresa: etapa e valor efetivo (valor em negociação ou ticket).</summary>
-public record DealSearchHitDto(Guid Id, Guid CompanyId, string CompanyName, DealStage Stage, DealStatus Status, decimal? Amount);
+/// <summary>
+/// Negócio encontrado pela empresa: etapa, valor efetivo (valor em negociação ou ticket) e o
+/// responsável, que o diálogo "Nova tarefa" mostra para desambiguar negócios da mesma empresa.
+/// </summary>
+public record DealSearchHitDto(
+    Guid Id,
+    Guid CompanyId,
+    string CompanyName,
+    DealStage Stage,
+    DealStatus Status,
+    decimal? Amount,
+    string? OwnerUserName);
 
 /// <summary>Até <see cref="Queries.GlobalSearch.SearchQuery.MaxHitsPerGroup"/> resultados de cada tipo.</summary>
 public record SearchResultDto(

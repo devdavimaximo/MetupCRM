@@ -4,13 +4,8 @@ namespace Metup.Application.Tasks.Queries.ListTasks;
 
 public class ListTasksQueryValidator : AbstractValidator<ListTasksQuery>
 {
+    /// <summary>Vale com e sem <c>Scope</c>: o limite de 200 do modo legado saiu com a T2.</summary>
     public const int MaxPageSize = 100;
-
-    /// <summary>
-    /// Limite do modo legado (sem <c>Scope</c>): a TasksPage atual pede 200 de uma vez. Sai quando a
-    /// onda T2 trocar a tela pela listagem paginada.
-    /// </summary>
-    public const int LegacyMaxPageSize = 200;
 
     public const int MaxSearchLength = 100;
 
@@ -21,13 +16,7 @@ public class ListTasksQueryValidator : AbstractValidator<ListTasksQuery>
 
         RuleFor(x => x.PageSize)
             .InclusiveBetween(1, MaxPageSize)
-            .When(x => x.Scope.HasValue)
             .WithMessage($"O tamanho da página deve estar entre 1 e {MaxPageSize}.");
-
-        RuleFor(x => x.PageSize)
-            .InclusiveBetween(1, LegacyMaxPageSize)
-            .When(x => !x.Scope.HasValue)
-            .WithMessage($"O tamanho da página deve estar entre 1 e {LegacyMaxPageSize}.");
 
         RuleFor(x => x.Status).IsInEnum().WithMessage("Status inválido.").When(x => x.Status.HasValue);
 

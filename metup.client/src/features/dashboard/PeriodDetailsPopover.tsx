@@ -45,7 +45,7 @@ function measures(overview: DashboardOverview, context: DeltaContext): Measure[]
 
 /** Variação em uma linha, com o intervalo da comparação no tooltip. */
 function DeltaBadge({ delta, comparison }: { delta: Delta; comparison: string }) {
-  if (delta.kind === "no-history") {
+  if (delta.kind === "no-history" || delta.kind === "no-base") {
     return <span className="text-xs text-muted">sem base anterior</span>
   }
   if (delta.kind === "new") {

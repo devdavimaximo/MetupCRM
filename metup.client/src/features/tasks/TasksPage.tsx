@@ -1,296 +1,514 @@
-import { useCallback, useEffect, useState } from "react"
-import { CheckCheck, X } from "lucide-react"
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { CalendarClock, CalendarDays, CheckCheck, CircleAlert, Plus, SearchX, Sun, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Page, PageHeader } from "@/components/ui/page"
-import { SegmentedControl } from "@/components/ui/segmented"
-import { Select } from "@/components/ui/select"
-import { Alert, EmptyState, SkeletonRows } from "@/components/ui/states"
+import { DatePicker } from "@/components/ui/date-picker"
+import { Page } from "@/components/ui/page"
+import { Alert, EmptyState, Skeleton, SkeletonRows } from "@/components/ui/states"
+import { Hint, TooltipProvider } from "@/components/ui/tooltip"
 import { toMessage } from "@/features/companies/form-errors"
-import { listUsers, type UserSummary } from "@/features/deals/api"
+import { KpiCard, Panel } from "@/features/dashboard/dashboard-cards"
+import { countDelta } from "@/features/dashboard/dashboard-format"
+import { DealDrawer, type DealDrawerTarget } from "@/features/deals/DealDrawer"
+import { listUsers } from "@/features/deals/api"
 import type { AuthenticatedUser } from "@/lib/auth"
-import { pluralize } from "@/lib/format"
-import { readUrlState, writeUrlState } from "@/lib/url-state"
+import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
+import { addDays, todayLocal } from "@/lib/local-date"
+import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { TaskListItem } from "./TaskListItem"
-import { listTasks, type TaskItem, type TaskStatus } from "./api"
+import { NewTaskSheet } from "./NewTaskSheet"
+import { OwnerPicker } from "./OwnerPicker"
+import { TaskCards, TaskTable } from "./TaskTable"
+import { TaskFiltersButton, TaskPagination, TaskSortMenu } from "./TaskToolbar"
+import type { TaskItem, TaskScope, TaskSummary } from "./api"
+import { TASK_TABS } from "./task-format"
+import { taskTitle } from "./task-labels"
+import { useTasksView } from "./useTasksView"
 
 type Props = {
-  role: AuthenticatedUser["role"]
-  onOpenDeal: (dealId: string) => void
+  user: AuthenticatedUser
+  onOpenCompany: (companyId: string) => void
 }
 
-/** Data local (YYYY-MM-DD) do input type="date" convertida para o início/fim do dia em ISO. */
-function toIsoDayStart(date: string): string | undefined {
-  return date ? new Date(`${date}T00:00:00`).toISOString() : undefined
+const tabLabels: Record<TaskScope, string> = {
+  All: "Todas",
+  Overdue: "Atrasadas",
+  Today: "Hoje",
+  ThisWeek: "Esta semana",
+  Later: "Mais tarde",
 }
 
-function toIsoDayEnd(date: string): string | undefined {
-  return date ? new Date(`${date}T23:59:59.999`).toISOString() : undefined
+const countKey: Record<TaskScope, keyof TaskSummary["counts"]> = {
+  All: "all",
+  Overdue: "overdue",
+  Today: "today",
+  ThisWeek: "thisWeek",
+  Later: "later",
 }
 
-type Bucket = "overdue" | "today" | "upcoming"
+const emptyByTab: Record<TaskScope, { title: string; description: string }> = {
+  All: { title: "Nenhuma tarefa por aqui", description: "Crie uma tarefa ou registre uma atividade com próxima ação." },
+  Overdue: { title: "Nada atrasado. Fila em dia.", description: "Todo follow-up vencido já foi feito ou reagendado." },
+  Today: { title: "Nada para hoje", description: "Nenhuma tarefa vence neste dia. Veja o que vem na semana." },
+  ThisWeek: { title: "Semana livre", description: "Nenhuma tarefa vence até domingo além das de hoje." },
+  Later: { title: "Nada mais adiante", description: "Nenhuma tarefa marcada para depois desta semana." },
+}
 
-function bucketOf(task: TaskItem): Bucket {
-  const due = new Date(task.dueDate)
+/** Tempo da transição da linha que sai do recorte, antes de a página ser recarregada. */
+const LEAVE_MS = 200
+
+/**
+ * A tela de Tarefas: "o que temos para fazer" com recortes de prazo calculados no servidor, KPIs
+ * contra a semana anterior, filtros, ordenação e paginação — e as ações na própria linha.
+ */
+export function TasksPage({ user, onOpenCompany }: Props) {
+  const canSeeOthers = user.role === "Admin" || user.role === "Closer"
+  const view = useTasksView(canSeeOthers)
+  const isDesktop = useMediaQuery("(min-width: 768px)")
+
+  const users = useAsyncResource((signal) => listUsers(signal), [])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set())
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
+  const [drawer, setDrawer] = useState<DealDrawerTarget>(null)
+  const tableTopRef = useRef<HTMLDivElement>(null)
+
   const now = new Date()
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+  const today = todayLocal()
+  const showOwner = canSeeOthers && view.owner.kind !== "mine"
+  const listData = view.list.data
+  const tasks = listData?.items ?? []
+  const summary = view.summary.data
+  const hasFilters = view.activeFilters > 0
 
-  if (due < now) return "overdue"
-  if (due <= endOfToday) return "today"
-  return "upcoming"
-}
-
-const bucketLabels: Record<Bucket, string> = {
-  overdue: "Atrasadas",
-  today: "Hoje",
-  upcoming: "Próximas",
-}
-
-const historyBucketLabels: Record<Bucket, string> = {
-  overdue: "Prazo passado",
-  today: "Prazo hoje",
-  upcoming: "Prazo futuro",
-}
-
-type StatusFilter =Extract<TaskStatus, "Pendente" | "Concluida">
-
-/** "Hoje você tem N contatos que precisam de follow-up" (seção 3.5 do CLAUDE.md). */
-export function TasksPage({ role, onOpenDeal }: Props) {
-  const initialUrlState = readUrlState()
-  const canFilterByOwner = role === "Admin" || role === "Closer"
-
-  const [tasks, setTasks] = useState<TaskItem[]>([])
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
-    initialUrlState.taskStatus === "Concluida" ? "Concluida" : "Pendente"
-  )
-  const [ownerUserId, setOwnerUserId] = useState(canFilterByOwner ? initialUrlState.ownerUserId : "")
-  const [dueFrom, setDueFrom] = useState(initialUrlState.dueFrom)
-  const [dueTo, setDueTo] = useState(initialUrlState.dueTo)
-  const [users, setUsers] = useState<UserSummary[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadVersion, setReloadVersion] = useState(0)
-
-  const reload = useCallback(() => setReloadVersion((v) => v + 1), [])
-
-  useEffect(() => {
-    if (!canFilterByOwner) return
-    const controller = new AbortController()
-    listUsers(controller.signal)
-      .then(setUsers)
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [canFilterByOwner])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setIsLoading(true)
-    setError(null)
-
-    listTasks(
-      {
-        status: statusFilter === "Pendente" ? "Pendente" : undefined,
-        ownerUserId: ownerUserId || undefined,
-        dueFrom: toIsoDayStart(dueFrom),
-        dueTo: toIsoDayEnd(dueTo),
-        pageSize: 200,
-      },
-      controller.signal
-    )
-      .then((result) => setTasks(result.items))
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return
-        setError(toMessage(err, "Não foi possível carregar as tarefas."))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
-      })
-
-    return () => controller.abort()
-  }, [statusFilter, ownerUserId, dueFrom, dueTo, reloadVersion])
-
-  useEffect(() => {
-    writeUrlState({
-      taskStatus: statusFilter === "Pendente" ? "" : statusFilter,
-      ownerUserId,
-      dueFrom,
-      dueTo,
-    })
-  }, [statusFilter, ownerUserId, dueFrom, dueTo])
-
-  function handleChanged(updated: TaskItem) {
-    setTasks((current) =>
-      statusFilter === "Pendente" && updated.status !== "Pendente"
-        ? current.filter((t) => t.id !== updated.id)
-        : current.map((t) => (t.id === updated.id ? updated : t))
-    )
+  function changeTab(tab: TaskScope) {
+    view.setTab(tab)
+    setSelectedIds(new Set())
   }
 
-  const buckets: Bucket[] = ["overdue", "today", "upcoming"]
-  const grouped = buckets.map((bucket) => ({
-    bucket,
-    items: tasks.filter((t) => bucketOf(t) === bucket),
-  }))
+  function changePage(page: number) {
+    view.setPage(page)
+    const top = tableTopRef.current
+    if (top && top.getBoundingClientRect().top < 0) top.scrollIntoView({ block: "start" })
+  }
 
-  const hasExtraFilters = Boolean(ownerUserId || dueFrom || dueTo)
-  const ownerName = users.find((u) => u.id === ownerUserId)?.name
-  const showOwner = canFilterByOwner && Boolean(ownerUserId)
+  /** A tarefa ainda pertence ao recorte? Fora de "Todas" só pendentes; em "Todas", o filtro de status manda. */
+  function staysInView(updated: TaskItem, original: TaskItem) {
+    if (updated.dueDate !== original.dueDate && view.tab !== "All") return false
+    if (view.tab !== "All") return updated.status === "Pendente"
+    return view.filters.statuses.length === 0 ? updated.status !== "Cancelada" : view.filters.statuses.includes(updated.status)
+  }
+
+  function handleChanged(updated: TaskItem) {
+    const original = tasks.find((t) => t.id === updated.id)
+    view.list.setData((current) =>
+      current ? { ...current, items: current.items.map((t) => (t.id === updated.id ? updated : t)) } : current
+    )
+
+    if (!original || staysInView(updated, original)) {
+      view.revalidate()
+      return
+    }
+
+    setLeavingIds((ids) => new Set(ids).add(updated.id))
+    setSelectedIds((ids) => {
+      const next = new Set(ids)
+      next.delete(updated.id)
+      return next
+    })
+    setTimeout(() => {
+      view.list.setData((current) =>
+        current
+          ? { ...current, items: current.items.filter((t) => t.id !== updated.id), totalCount: Math.max(0, current.totalCount - 1) }
+          : current
+      )
+      setLeavingIds((ids) => {
+        const next = new Set(ids)
+        next.delete(updated.id)
+        return next
+      })
+      view.revalidate()
+    }, LEAVE_MS)
+  }
+
+  function handleCreated(task: TaskItem) {
+    setIsCreating(false)
+    setHighlightId(task.id)
+    setAnnouncement(`Tarefa criada: ${taskTitle(task)}.`)
+    view.revalidate()
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((ids) => {
+      const next = new Set(ids)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    setSelectedIds((ids) => {
+      const allOnPage = tasks.length > 0 && tasks.every((t) => ids.has(t.id))
+      const next = new Set(ids)
+      for (const t of tasks) {
+        if (allOnPage) next.delete(t.id)
+        else next.add(t.id)
+      }
+      return next
+    })
+  }
+
+  const openDeal = (task: TaskItem) => setDrawer({ mode: "deal", id: task.dealId })
+
+  const rowProps = {
+    now,
+    showOwner,
+    onToggleSelected: toggleSelected,
+    onOpenDeal: openDeal,
+    onChanged: handleChanged,
+    selectedIds,
+    leavingIds,
+    highlightId,
+  }
+
+  const firstLoad = view.list.isLoading && !listData
+  const reloading = view.list.isLoading && listData !== null
+  const empty = !view.list.isLoading && listData !== null && tasks.length === 0
 
   return (
-    <Page width="narrow" className="max-w-4xl">
-      <PageHeader
-        eyebrow="Operação"
-        title={ownerName ? `Tarefas de ${ownerName.split(" ")[0]}` : "Minhas tarefas"}
-        description={
-          isLoading
-            ? "Carregando a fila…"
-            : statusFilter === "Pendente"
-              ? `${pluralize(tasks.length, "próxima ação pendente", "próximas ações pendentes")}. Conclua, reagende ou cancele sem sair da lista.`
-              : `${pluralize(tasks.length, "tarefa", "tarefas")} no histórico, incluindo concluídas e canceladas.`
+    <TooltipProvider>
+    <Page width="wide" className="gap-6">
+      <TasksHeader
+        referenceDate={view.referenceDate}
+        onReferenceDate={view.setReferenceDate}
+        today={today}
+        ownerPicker={
+          canSeeOthers ? (
+            <OwnerPicker
+              value={view.owner}
+              users={users.data ?? []}
+              currentUserId={user.userId}
+              onChange={view.setOwner}
+              className="w-full sm:w-auto sm:min-w-44"
+            />
+          ) : null
         }
-        actions={
-          <SegmentedControl<StatusFilter>
-            label="Status das tarefas"
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={[
-              { value: "Pendente", label: "Pendentes" },
-              { value: "Concluida", label: "Concluídas" },
-            ]}
-          />
-        }
+        onNewTask={() => setIsCreating(true)}
       />
 
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-end gap-3">
-          {canFilterByOwner && (
-            <div className="flex w-full flex-col gap-2 sm:w-52">
-              <Label htmlFor="tasks-filter-owner">Responsável</Label>
-              <Select id="tasks-filter-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)} className="h-9">
-                <option value="">Minhas tarefas</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </Select>
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+
+      {/* KPIs */}
+      <section aria-label="Resumo das tarefas" className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        {view.summary.error && !summary ? (
+          <Alert onRetry={() => view.summary.reload()} className="sm:col-span-3">
+            {toMessage(view.summary.error, "Não foi possível carregar o resumo das tarefas.")} A lista abaixo continua valendo.
+          </Alert>
+        ) : !summary ? (
+          [0, 1, 2].map((i) => (
+            <Panel key={i} className="gap-3 px-4 py-3.5" aria-hidden="true">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-16" />
+              <Skeleton className="h-3 w-32" />
+            </Panel>
+          ))
+        ) : (
+          <>
+            <KpiCard
+              icon={CircleAlert}
+              label="Atrasadas"
+              tone="danger"
+              value={numberFormatter.format(summary.counts.overdue)}
+              delta={countDelta(summary.counts.overdue, summary.previous?.overdue ?? null)}
+              polarity="higher-is-worse"
+              comparison="a mesma régua 7 dias antes"
+              caption="vs. semana anterior"
+              pressed={view.tab === "Overdue"}
+              onClick={() => changeTab("Overdue")}
+            />
+            <KpiCard
+              icon={Sun}
+              label="Hoje"
+              value={numberFormatter.format(summary.counts.today)}
+              delta={countDelta(summary.counts.today, summary.previous?.today ?? null)}
+              polarity="neutral"
+              comparison="o mesmo dia da semana anterior"
+              caption="vs. semana anterior"
+              pressed={view.tab === "Today"}
+              onClick={() => changeTab("Today")}
+            />
+            <KpiCard
+              icon={CalendarDays}
+              label="Esta semana"
+              value={numberFormatter.format(summary.counts.thisWeek)}
+              delta={countDelta(summary.counts.thisWeek, summary.previous?.thisWeek ?? null)}
+              polarity="neutral"
+              comparison="a mesma régua 7 dias antes"
+              caption="vs. semana anterior"
+              pressed={view.tab === "ThisWeek"}
+              onClick={() => changeTab("ThisWeek")}
+            />
+          </>
+        )}
+      </section>
+
+      <div ref={tableTopRef} className="scroll-mt-20">
+        <Panel aria-label="Lista de tarefas" className="overflow-clip">
+          <div className="flex flex-col gap-3 border-b border-line-soft px-2 pt-2 lg:flex-row lg:items-end lg:justify-between lg:gap-4 lg:pr-4">
+            <TaskTabs
+              tab={view.tab}
+              summary={summary}
+              filteredCount={hasFilters ? (listData?.totalCount ?? null) : null}
+              onChange={changeTab}
+            />
+            <div className="flex flex-wrap items-center gap-2 px-2 pb-2 lg:px-0">
+              {hasFilters && (
+                <Button type="button" size="sm" variant="ghost" className="h-9" onClick={view.clearFilters}>
+                  <X aria-hidden="true" />
+                  Limpar filtros
+                </Button>
+              )}
+              <TaskFiltersButton
+                tab={view.tab}
+                filters={view.filters}
+                activeCount={view.activeFilters}
+                onChange={view.setFilters}
+                onClear={view.clearFilters}
+              />
+              <TaskSortMenu value={view.sort} onChange={view.setSort} showOwner={showOwner} />
             </div>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="tasks-filter-due-from">Prazo de</Label>
-            <Input
-              id="tasks-filter-due-from"
-              type="date"
-              className="h-9 w-40"
-              value={dueFrom}
-              max={dueTo || undefined}
-              onChange={(e) => setDueFrom(e.target.value)}
-            />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="tasks-filter-due-to">Até</Label>
-            <Input
-              id="tasks-filter-due-to"
-              type="date"
-              className="h-9 w-40"
-              value={dueTo}
-              min={dueFrom || undefined}
-              onChange={(e) => setDueTo(e.target.value)}
-            />
-          </div>
-
-          {hasExtraFilters && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-9"
-              onClick={() => {
-                setOwnerUserId("")
-                setDueFrom("")
-                setDueTo("")
-              }}
-            >
-              <X aria-hidden="true" />
-              Limpar filtros
-            </Button>
-          )}
-        </div>
-
-        {error && <Alert onRetry={reload}>{error}</Alert>}
-
-        {!error && (
-          <Card className="overflow-clip">
-            {isLoading && tasks.length === 0 && <SkeletonRows rows={6} label="Carregando tarefas…" />}
-
-            {!isLoading && tasks.length === 0 && (
-              <EmptyState
-                icon={CheckCheck}
-                title={statusFilter === "Pendente" ? "Nenhum follow-up pendente" : "Nenhuma tarefa concluída"}
-                description={
-                  hasExtraFilters
-                    ? "Nada encontrado com esses filtros. Ajuste o período ou o responsável."
-                    : statusFilter === "Pendente"
-                      ? "A fila está em dia. Novas próximas ações aparecem aqui quando você registra uma atividade."
-                      : "Tarefas concluídas aparecem aqui assim que você marca uma próxima ação como feita."
-                }
-                action={
-                  hasExtraFilters ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setOwnerUserId("")
-                        setDueFrom("")
-                        setDueTo("")
-                      }}
-                    >
+          <div id="tasks-panel" role="tabpanel" aria-labelledby={`tasks-tab-${view.tab}`} aria-busy={view.list.isLoading}>
+            {view.list.error !== null && !listData ? (
+              <div className="p-4">
+                <Alert onRetry={() => view.list.reload()}>
+                  {toMessage(view.list.error, "Não foi possível carregar as tarefas.")}
+                </Alert>
+              </div>
+            ) : firstLoad ? (
+              <SkeletonRows rows={6} label="Carregando tarefas…" />
+            ) : empty ? (
+              hasFilters ? (
+                <EmptyState
+                  icon={SearchX}
+                  title="Nada com esses filtros"
+                  description="Ajuste ou limpe os filtros para ver as tarefas desta aba."
+                  action={
+                    <Button type="button" size="sm" variant="outline" onClick={view.clearFilters}>
                       Limpar filtros
                     </Button>
-                  ) : undefined
-                }
-              />
+                  }
+                />
+              ) : (
+                <EmptyState
+                  icon={view.tab === "Overdue" ? CheckCheck : CalendarClock}
+                  title={emptyByTab[view.tab].title}
+                  description={emptyByTab[view.tab].description}
+                />
+              )
+            ) : (
+              <div className={cn("transition-opacity", reloading && "opacity-60")}>
+                {view.list.error !== null && (
+                  <div className="p-4 pb-0">
+                    <Alert onRetry={() => view.list.reload()}>
+                      {toMessage(view.list.error, "Não foi possível atualizar as tarefas.")}
+                    </Alert>
+                  </div>
+                )}
+                {isDesktop ? (
+                  <TaskTable tasks={tasks} sort={view.sort} onSort={view.setSort} onToggleAll={toggleAll} {...rowProps} />
+                ) : (
+                  <TaskCards tasks={tasks} {...rowProps} />
+                )}
+              </div>
             )}
+          </div>
 
-            {tasks.length > 0 &&
-              grouped.map(({ bucket, items }) =>
-                items.length === 0 ? null : (
-                  <section key={bucket} aria-labelledby={`tasks-${bucket}-heading`} className={cn(isLoading && "opacity-60")}>
-                    <h2
-                      id={`tasks-${bucket}-heading`}
-                      className={cn(
-                        "label-mono sticky top-14 z-10 flex items-center justify-between border-y border-line-soft/60 bg-surface px-4 py-2 first:border-t-0 sm:px-5 lg:top-0",
-                        bucket === "overdue" && statusFilter === "Pendente" ? "text-danger" : "text-fg-muted"
-                      )}
-                    >
-                      {statusFilter === "Pendente" ? bucketLabels[bucket] : historyBucketLabels[bucket]}
-                      <span className="text-muted tabular">{items.length}</span>
-                    </h2>
-                    <ul className="divide-y divide-line-soft/60">
-                      {items.map((task) => (
-                        <TaskListItem
-                          key={task.id}
-                          task={task}
-                          overdue={bucket === "overdue"}
-                          showOwner={showOwner}
-                          onOpenDeal={onOpenDeal}
-                          onChanged={handleChanged}
-                        />
-                      ))}
-                    </ul>
-                  </section>
-                )
-              )}
-          </Card>
-        )}
+          {listData && listData.totalCount > 0 && (
+            <TaskPagination
+              page={view.page}
+              pageSize={view.pageSize}
+              totalCount={listData.totalCount}
+              totalPages={listData.totalPages}
+              onPage={changePage}
+              onPageSize={view.setPageSize}
+            />
+          )}
+        </Panel>
       </div>
+
+      <NewTaskSheet
+        open={isCreating}
+        onOpenChange={setIsCreating}
+        canAssign={canSeeOthers}
+        users={users.data ?? []}
+        currentUserId={user.userId}
+        onCreated={handleCreated}
+      />
+
+      <DealDrawer
+        target={drawer}
+        users={users.data ?? []}
+        onOpenChange={(open) => !open && setDrawer(null)}
+        onOpenCompany={onOpenCompany}
+        onSaved={view.revalidate}
+      />
     </Page>
+    </TooltipProvider>
+  )
+}
+
+/* ─── Cabeçalho ───────────────────────────────────────────────────────────── */
+
+function TasksHeader({
+  referenceDate,
+  onReferenceDate,
+  today,
+  ownerPicker,
+  onNewTask,
+}: {
+  referenceDate: string
+  onReferenceDate: (date: string) => void
+  today: string
+  ownerPicker: ReactNode
+  onNewTask: () => void
+}) {
+  const newTask = (
+    <Button type="button" onClick={onNewTask} className="h-10">
+      <Plus aria-hidden="true" />
+      Nova tarefa
+    </Button>
+  )
+
+  return (
+    <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <nav aria-label="Trilha de navegação">
+          <ol className="label-mono flex items-center gap-2 text-muted">
+            <li className="flex items-center gap-2">
+              <span aria-hidden="true" className="h-px w-5 shrink-0 bg-accent" />
+              Operação
+            </li>
+            <li aria-hidden="true">/</li>
+            <li aria-current="page" className="text-accent">
+              Tarefas
+            </li>
+          </ol>
+        </nav>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-fg">Tarefas</h1>
+          <div className="md:hidden">{newTask}</div>
+        </div>
+        <p className="max-w-2xl text-base text-fg-muted">Organize sua rotina, mantenha o foco e não perca nenhuma oportunidade.</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 max-md:*:flex-1 xl:shrink-0 xl:flex-nowrap">
+        <DatePicker
+          label="Data de referência"
+          value={referenceDate}
+          onChange={onReferenceDate}
+          shortcuts={[
+            { label: "Hoje", date: today },
+            { label: "Amanhã", date: addDays(today, 1) },
+          ]}
+          className="min-w-0"
+        />
+        {ownerPicker}
+        <div className="max-md:hidden">{newTask}</div>
+      </div>
+    </header>
+  )
+}
+
+/* ─── Abas ────────────────────────────────────────────────────────────────── */
+
+function TaskTabs({
+  tab,
+  summary,
+  filteredCount,
+  onChange,
+}: {
+  tab: TaskScope
+  summary: TaskSummary | null
+  /** Com filtro ativo: o total da lista, que vale só para a aba ativa. */
+  filteredCount: number | null
+  onChange: (tab: TaskScope) => void
+}) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const moves: Record<string, (i: number) => number> = {
+      ArrowRight: (i) => (i + 1) % TASK_TABS.length,
+      ArrowLeft: (i) => (i - 1 + TASK_TABS.length) % TASK_TABS.length,
+      Home: () => 0,
+      End: () => TASK_TABS.length - 1,
+    }
+    const move = moves[event.key]
+    if (!move) return
+    event.preventDefault()
+    const next = TASK_TABS[move(TASK_TABS.indexOf(tab))]
+    onChange(next)
+    event.currentTarget.querySelector<HTMLElement>(`#tasks-tab-${next}`)?.focus()
+  }
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Recortes de prazo"
+      onKeyDown={handleKeyDown}
+      className="-mb-px flex overflow-x-auto scrollbar-none"
+    >
+      {TASK_TABS.map((scope) => {
+        const active = scope === tab
+        const unfiltered = summary ? summary.counts[countKey[scope]] : null
+        const count = filteredCount !== null && active ? filteredCount : unfiltered
+        const dimmed = filteredCount !== null && !active
+        const danger = scope === "Overdue" && (unfiltered ?? 0) > 0
+
+        const badge =
+          count === null ? null : (
+            <span
+              className={cn(
+                "rounded-xs px-1.5 py-px text-2xs tabular",
+                danger && !dimmed ? "bg-danger/12 text-danger" : "bg-surface-3 text-fg-muted",
+                dimmed && "opacity-50"
+              )}
+            >
+              <span className="sr-only">{dimmed ? ", sem filtros: " : ": "}</span>
+              {numberFormatter.format(count)}
+            </span>
+          )
+
+        return (
+          <button
+            key={scope}
+            id={`tasks-tab-${scope}`}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls="tasks-panel"
+            tabIndex={active ? 0 : -1}
+            onClick={() => onChange(scope)}
+            className={cn(
+              "inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 border-b-2 px-3.5 text-sm whitespace-nowrap transition-colors focus-visible:focus-ring",
+              active ? "border-accent text-fg" : "border-transparent text-fg-muted hover:text-fg"
+            )}
+          >
+            {tabLabels[scope]}
+            {badge && dimmed ? (
+              <Hint content="Contagem sem filtros">
+                <span>{badge}</span>
+              </Hint>
+            ) : (
+              badge
+            )}
+          </button>
+        )
+      })}
+    </div>
   )
 }

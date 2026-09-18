@@ -163,8 +163,10 @@ public class ListTasksTests
     [Theory]
     [InlineData(100, true, true)]
     [InlineData(101, true, false)]
-    [InlineData(200, false, true)]
-    public async Task Validador_limita_a_pagina_a_100_no_modo_novo_e_200_no_legado(int pageSize, bool scoped, bool valid)
+    [InlineData(100, false, true)]
+    [InlineData(101, false, false)]
+    [InlineData(200, false, false)]
+    public async Task Validador_limita_a_pagina_a_100_com_e_sem_recorte(int pageSize, bool scoped, bool valid)
     {
         var query = new ListTasksQuery(PageSize: pageSize, Scope: scoped ? TaskScope.All : null);
         Assert.Equal(valid, (await new ListTasksQueryValidator().ValidateAsync(query, Ct)).IsValid);

@@ -281,7 +281,26 @@ export const notifications: AppNotification[] = [
 export const searchResult: SearchResult = {
   companies: [{ id: "company-1", name: "Padaria Aurora", segment: "Alimentação", city: "Curitiba" }],
   contacts: [],
-  deals: [{ id: "deal-1", companyId: "company-1", companyName: "Padaria Aurora", stage: "Negociacao", status: "Aberto", amount: 24_000 }],
+  deals: [
+    {
+      id: "deal-1",
+      companyId: "company-1",
+      companyName: "Padaria Aurora",
+      stage: "Negociacao",
+      status: "Aberto",
+      amount: 24_000,
+      ownerUserName: "Davi Maximo",
+    },
+    {
+      id: "deal-9",
+      companyId: "company-1",
+      companyName: "Padaria Aurora",
+      stage: "Ganho",
+      status: "Ganho",
+      amount: 8_000,
+      ownerUserName: "Davi Maximo",
+    },
+  ],
 }
 
 export const users: UserSummary[] = [

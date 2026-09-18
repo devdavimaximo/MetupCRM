@@ -121,6 +121,24 @@
       opacity: 1;
     }
   }
+
+  /* Linha recém-criada: um véu âmbar que some sozinho — aponta onde ela entrou sem piscar. */
+  --animate-row-highlight: row-highlight 2.4s var(--ease-out) both;
+  @keyframes row-highlight {
+    0%,
+    30% {
+      background-color: color-mix(in oklab, var(--color-accent) 14%, transparent);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-row-highlight {
+    animation-duration: 0.01ms;
+  }
 }
 
 :root {

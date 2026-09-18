@@ -74,7 +74,8 @@ public class SearchQueryHandler(
                 context.Companies.Where(co => co.Id == d.CompanyId).Select(co => co.Name).First(),
                 d.Stage,
                 d.Status,
-                d.Amount ?? d.Ticket))
+                d.Amount ?? d.Ticket,
+                context.Users.Where(u => u.Id == d.OwnerUserId).Select(u => u.Name).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
         return new SearchResultDto(companies, contacts, dealHits);

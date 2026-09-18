@@ -1,6 +1,7 @@
 import { test as base, expect, type Page, type Route } from "@playwright/test"
 
 import * as data from "./data"
+import { NOW, TaskStore } from "./tasks"
 
 /** O endereço da API que o front chama (o mesmo padrão de `src/lib/api.ts`). */
 const API = "http://localhost:5100"
@@ -29,6 +30,11 @@ export type ApiPath =
   | "dealActivities"
   | "company"
   | "completeTask"
+  | "tasks"
+  | "taskSummary"
+  | "createTask"
+  | "cancelTask"
+  | "rescheduleTask"
 
 const ROUTES: Record<ApiPath, string> = {
   overview: "**/api/dashboard/overview**",
@@ -42,6 +48,11 @@ const ROUTES: Record<ApiPath, string> = {
   dealActivities: "**/api/deals/*/activities",
   company: "**/api/companies/*",
   completeTask: "**/api/tasks/*/complete",
+  tasks: "**/api/tasks?**",
+  taskSummary: "**/api/tasks/summary**",
+  createTask: "**/api/tasks",
+  cancelTask: "**/api/tasks/*/cancel",
+  rescheduleTask: "**/api/tasks/*/reschedule",
 }
 
 /** Resposta de erro no formato que o `apiFetch` sabe traduzir. */
@@ -58,6 +69,7 @@ function feedByCursor(route: Route) {
 }
 
 function defaults(): Record<ApiPath, Handler | ResponseBody> {
+  const store = new TaskStore()
   return {
     overview: data.overview(),
     summary: data.summary(),
@@ -69,6 +81,8 @@ function defaults(): Record<ApiPath, Handler | ResponseBody> {
     deal: data.deal,
     dealActivities: data.dealActivities,
     company: data.company,
+    ...store.routes(),
+    // O dashboard conclui a tarefa-1 da própria fila (não da loja): a resposta fixa de antes continua.
     completeTask: data.task({ status: "Concluida", completedAt: "2026-09-15T17:05:00Z" }),
   }
 }
@@ -113,5 +127,15 @@ export async function gotoDashboard(page: Page, query = "") {
   await expect(page.getByRole("heading", { level: 1 })).toContainText(/Bom dia|Boa tarde|Boa noite/)
 }
 
+/**
+ * Abre a tela de Tarefas com o relógio do navegador congelado em `NOW` (terça, 15/09/2026, 15:00),
+ * o mesmo "agora" da `TaskStore`. `query` entra depois de `vista=tarefas` (ex.: `&aba=hoje`).
+ */
+export async function gotoTasks(page: Page, query = "") {
+  await page.clock.setFixedTime(new Date(NOW))
+  await page.goto(`/?vista=tarefas${query}`)
+  await expect(page.getByRole("heading", { level: 1, name: "Tarefas" })).toBeVisible()
+}
+
 export const test = base
-export { expect, data }
+export { expect, data, TaskStore }

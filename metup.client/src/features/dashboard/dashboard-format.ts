@@ -42,6 +42,34 @@ export type Delta =
   | { kind: "new" }
   | { kind: "idle" }
   | { kind: "no-history" }
+  /** A fonte não tem a janela anterior (resumo de tarefas com `previous = null`). */
+  | { kind: "no-base" }
+
+/**
+ * O que "subir" significa para o número. Receita subir é bom; atrasadas subir é ruim; volume de
+ * tarefas do dia não é bom nem ruim — a seta continua, a cor fica neutra.
+ */
+export type DeltaPolarity = "higher-is-better" | "higher-is-worse" | "neutral"
+
+export type DeltaTone = "positive" | "negative" | "neutral"
+
+export function deltaTone(direction: "up" | "down" | "flat", polarity: DeltaPolarity = "higher-is-better"): DeltaTone {
+  if (direction === "flat" || polarity === "neutral") return "neutral"
+  const good = polarity === "higher-is-better" ? direction === "up" : direction === "down"
+  return good ? "positive" : "negative"
+}
+
+/** Variação de contagem com absoluto e percentual ("+4 · +12%"); sem base → "no-base". */
+export function countDelta(current: number, previous: number | null): Delta {
+  if (previous === null) return { kind: "no-base" }
+  const diff = current - previous
+  if (diff === 0) return { kind: "change", direction: "flat", label: "0 · 0%" }
+  const sign = diff > 0 ? "+" : "−"
+  const absolute = `${sign}${numberFormatter.format(Math.abs(diff))}`
+  // Sem base (0) não há percentual honesto: fica só o absoluto.
+  const label = previous === 0 ? absolute : `${absolute} · ${sign}${percent.format(Math.abs(diff) / previous)}`
+  return { kind: "change", direction: diff > 0 ? "up" : "down", label }
+}
 
 /** Recorte das duas janelas e o início do histórico do escopo — vindos do overview. */
 export type DeltaContext = { historyStart: string | null; previousStart: string; periodStart: string }

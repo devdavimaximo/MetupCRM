@@ -22,6 +22,10 @@ export function readUrlState() {
     taskStatus: params.get("status") ?? "",
     dueFrom: params.get("prazoDe") ?? "",
     dueTo: params.get("prazoAte") ?? "",
+    tasksTab: params.get("aba") ?? "",
+    tasksPage: params.get("pagina") ?? "",
+    tasksPageSize: params.get("porPagina") ?? "",
+    tasksDate: params.get("data") ?? "",
     reportFrom: params.get("relatorioDe") ?? "",
     reportTo: params.get("relatorioAte") ?? "",
     reportTab: params.get("relatorioAba") ?? "",
@@ -48,6 +52,10 @@ type UrlStatePatch = {
   taskStatus?: string
   dueFrom?: string
   dueTo?: string
+  tasksTab?: string
+  tasksPage?: string
+  tasksPageSize?: string
+  tasksDate?: string
   reportFrom?: string
   reportTo?: string
   reportTab?: string
@@ -69,6 +77,10 @@ const STRING_KEYS = [
   ["taskStatus", "status"],
   ["dueFrom", "prazoDe"],
   ["dueTo", "prazoAte"],
+  ["tasksTab", "aba"],
+  ["tasksPage", "pagina"],
+  ["tasksPageSize", "porPagina"],
+  ["tasksDate", "data"],
   ["reportFrom", "relatorioDe"],
   ["reportTo", "relatorioAte"],
   ["reportTab", "relatorioAba"],
