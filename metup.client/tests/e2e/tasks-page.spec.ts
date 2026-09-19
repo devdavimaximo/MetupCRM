@@ -47,7 +47,7 @@ test.describe("abas e KPIs", () => {
 
   test("o KPI é um botão que ativa a aba e mostra a variação contra a semana anterior", async ({ page }) => {
     await openTasks(page)
-    const kpi = page.getByRole("button", { name: /^Atrasadas/ })
+    const kpi = page.getByRole("region", { name: "Resumo das tarefas" }).getByRole("button", { name: /^Atrasadas/ })
     await expect(kpi).toContainText("3")
     // 3 contra 2 na semana anterior: subir em Atrasadas é ruim → vermelho.
     await expect(kpi.getByText("+1 · +50%")).toHaveClass(/text-danger/)
@@ -146,7 +146,7 @@ test.describe("ações na linha", () => {
   test("concluir tira a linha do recorte e atualiza o KPI", async ({ page }) => {
     await openTasks(page, new TaskStore(), {}, "&aba=atrasadas")
     await expect(rows(page)).toHaveCount(3)
-    const kpi = page.getByRole("button", { name: /^Atrasadas/ })
+    const kpi = page.getByRole("region", { name: "Resumo das tarefas" }).getByRole("button", { name: /^Atrasadas/ })
     await expect(kpi).toContainText("3")
 
     await page.getByRole("button", { name: /^Concluir:/ }).first().click()
@@ -271,7 +271,7 @@ test.describe("layout", () => {
     await openTasks(page, new TaskStore(), {}, "&responsavel=todos")
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow).toBe(0)
-    const table = page.getByRole("table")
+    const table = page.getByRole("table", { name: "Tarefas", exact: true })
     const tableOverflow = await table.evaluate((el) => el.scrollWidth - el.clientWidth)
     expect(tableOverflow).toBeLessThanOrEqual(0)
   })
@@ -279,8 +279,8 @@ test.describe("layout", () => {
   test("390×844 renderiza cards, sem tabela", async ({ page }) => {
     test.skip(isDesktop(page), "Cards só abaixo de 768px.")
     await openTasks(page)
-    await expect(page.getByRole("table")).toHaveCount(0)
-    await expect(page.getByRole("list", { name: "Tarefas" }).getByRole("listitem")).toHaveCount(10)
+    await expect(page.getByRole("table", { name: "Tarefas", exact: true })).toHaveCount(0)
+    await expect(page.getByRole("list", { name: "Tarefas", exact: true }).getByRole("listitem")).toHaveCount(10)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow).toBe(0)
   })

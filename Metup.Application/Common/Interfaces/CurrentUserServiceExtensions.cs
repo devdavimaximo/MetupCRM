@@ -74,6 +74,29 @@ public static class CurrentUserServiceExtensions
             : new TaskOwnerFilter(organizationId, ownerUserId ?? userId);
     }
 
+    /// <summary>
+    /// Ponto único de decisão de "em quais tarefas este usuário pode agir" (concluir, cancelar,
+    /// reagendar, reatribuir, ações em massa, concluir ao registrar atividade). Admin e Closer agem em
+    /// qualquer tarefa da organização; o SDR só nas próprias. Quem chama decide o que fazer com a
+    /// tarefa fora do escopo: 403 na ação por linha, <c>NotFound</c> por item no lote.
+    /// </summary>
+    public static TaskOwnerFilter ResolveTaskActionScope(this ICurrentUserService currentUserService)
+    {
+        var organizationId = currentUserService.RequireOrganizationId();
+        var userId = currentUserService.RequireUserId();
+
+        return new TaskOwnerFilter(organizationId, currentUserService.ReachesOrganization() ? null : userId);
+    }
+
+    /// <summary>Reatribuir tarefa: só Admin/Closer. Mesmo critério de "alcança a organização".</summary>
+    public static void RequireTaskReassign(this ICurrentUserService currentUserService)
+    {
+        if (!currentUserService.ReachesOrganization())
+        {
+            throw new ForbiddenAccessException("Sem permissão para reatribuir tarefas.");
+        }
+    }
+
     /// <summary>Admin e Closer alcançam a organização inteira; SDR e papel desconhecido, não.</summary>
     private static bool ReachesOrganization(this ICurrentUserService currentUserService) =>
         Enum.TryParse<UserRole>(currentUserService.Role, out var role)

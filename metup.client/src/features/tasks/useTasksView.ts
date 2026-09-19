@@ -118,7 +118,21 @@ export function useTasksView(canSeeOthers: boolean) {
     owner,
     list,
     summary,
+    /** O mesmo escopo de responsável da lista e do resumo (o calendário também usa). */
+    owners,
     activeFilters: activeFilterCount(filters, tab),
+    /** Dia clicado no calendário: vira a data de referência e a aba Hoje. */
+    pickDay(date: LocalDate) {
+      setReferenceDateState(date)
+      setTabState("Today")
+      setPage(1)
+    },
+    /** Fatia do donut: a aba e, em Concluídas, o filtro de status da aba Todas. */
+    showSlice(next: TaskScope, statuses: TaskStatus[]) {
+      setTabState(next)
+      if (next === "All") setFiltersState((current) => ({ ...current, statuses }))
+      setPage(1)
+    },
     setTab(next: TaskScope) {
       setTabState(next)
       setPage(1)

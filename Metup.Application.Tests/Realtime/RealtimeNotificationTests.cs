@@ -54,9 +54,9 @@ public class RealtimeNotificationTests
         var publisher = new RecordingPublisher();
         var admin = context.As(context.AdminUserId, UserRole.Admin);
 
-        await new LogActivityCommandHandler(context.Db, admin, publisher).Handle(
+        await new LogActivityCommandHandler(context.Db, admin, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher).Handle(
             new LogActivityCommand(deal.Id, null, ActivityType.Note, null, "nota", null, null, null, null), TestContext.Current.CancellationToken);
-        await new CompleteTaskCommandHandler(context.Db, admin, publisher).Handle(new CompleteTaskCommand(task.Id), TestContext.Current.CancellationToken);
+        await new CompleteTaskCommandHandler(context.Db, admin, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher).Handle(new CompleteTaskCommand(task.Id), TestContext.Current.CancellationToken);
         await new CloseDealCommandHandler(context.Db, admin, publisher).Handle(new CloseDealCommand(deal.Id, true, 10_000m), TestContext.Current.CancellationToken);
 
         Assert.Collection(

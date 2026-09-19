@@ -16,13 +16,20 @@ import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
 import { addDays, todayLocal } from "@/lib/local-date"
 import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { LogActivityForm } from "@/features/activities/LogActivityForm"
 import { NewTaskSheet } from "./NewTaskSheet"
 import { OwnerPicker } from "./OwnerPicker"
+import { TaskBulkBar } from "./TaskBulkBar"
+import { TaskCalendar, TaskStatusCard, WeeklyHighlightsCard } from "./TaskSidebar"
 import { TaskCards, TaskTable } from "./TaskTable"
+import type { TaskActionsContext } from "./TaskActions"
 import { TaskFiltersButton, TaskPagination, TaskSortMenu } from "./TaskToolbar"
-import type { TaskItem, TaskScope, TaskSummary } from "./api"
+import type { BulkTaskAction, BulkTaskResult, TaskItem, TaskScope, TaskSummary } from "./api"
+import { bulkResultMessage, failureReasonLabels, type HighlightSubject } from "./task-insights"
 import { TASK_TABS } from "./task-format"
 import { taskTitle } from "./task-labels"
+import { toggleSelection } from "./task-selection"
 import { useTasksView } from "./useTasksView"
 
 type Props = {
@@ -57,6 +64,8 @@ const emptyByTab: Record<TaskScope, { title: string; description: string }> = {
 /** Tempo da transição da linha que sai do recorte, antes de a página ser recarregada. */
 const LEAVE_MS = 200
 
+const EMPTY_SELECTION: ReadonlySet<string> = new Set()
+
 /**
  * A tela de Tarefas: "o que temos para fazer" com recortes de prazo calculados no servidor, KPIs
  * contra a semana anterior, filtros, ordenação e paginação — e as ações na própria linha.
@@ -66,14 +75,31 @@ export function TasksPage({ user, onOpenCompany }: Props) {
   const view = useTasksView(canSeeOthers)
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
+  const isWide = useMediaQuery("(min-width: 1536px)")
+
   const users = useAsyncResource((signal) => listUsers(signal), [])
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [leavingIds, setLeavingIds] = useState<Set<string>>(() => new Set())
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [drawer, setDrawer] = useState<DealDrawerTarget>(null)
+  const [logTarget, setLogTarget] = useState<TaskItem | null>(null)
+  const [bulkOutcome, setBulkOutcome] = useState<{ message: string; failures: { title: string; reason: string }[] } | null>(null)
   const tableTopRef = useRef<HTMLDivElement>(null)
+  const selectionAnchor = useRef<string | null>(null)
+
+  // A seleção vale só para o recorte atual: trocar aba, página, filtro, data, responsável ou ordem a
+  // esvazia. Guardada junto da chave do recorte, sem efeito para "limpar depois".
+  const selectionScope = JSON.stringify([view.tab, view.page, view.pageSize, view.referenceDate, view.owner, view.filters, view.sort])
+  const [selection, setSelection] = useState<{ scope: string; ids: Set<string> }>(() => ({ scope: selectionScope, ids: new Set() }))
+  const selectedIds = selection.scope === selectionScope ? selection.ids : EMPTY_SELECTION
+
+  function setSelectedIds(update: (ids: Set<string>) => Set<string>) {
+    setSelection((current) => ({
+      scope: selectionScope,
+      ids: update(current.scope === selectionScope ? current.ids : new Set()),
+    }))
+  }
 
   const now = new Date()
   const today = todayLocal()
@@ -85,7 +111,6 @@ export function TasksPage({ user, onOpenCompany }: Props) {
 
   function changeTab(tab: TaskScope) {
     view.setTab(tab)
-    setSelectedIds(new Set())
   }
 
   function changePage(page: number) {
@@ -140,14 +165,51 @@ export function TasksPage({ user, onOpenCompany }: Props) {
     view.revalidate()
   }
 
-  function toggleSelected(id: string) {
-    setSelectedIds((ids) => {
-      const next = new Set(ids)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  function toggleSelected(id: string, shift: boolean) {
+    const anchor = selectionAnchor.current
+    selectionAnchor.current = id
+    setSelectedIds((ids) =>
+      toggleSelection(
+        ids,
+        tasks.map((t) => t.id),
+        id,
+        anchor,
+        shift
+      )
+    )
   }
+
+  /** Depois do lote: mensagem acessível, lista e resumo revalidados, e só as que falharam seguem marcadas. */
+  function handleBulkDone(action: BulkTaskAction, result: BulkTaskResult) {
+    const titleOf = (id: string) => {
+      const task = tasks.find((t) => t.id === id)
+      return task ? taskTitle(task) : "Tarefa"
+    }
+    setBulkOutcome({
+      message: bulkResultMessage(action, result),
+      failures: result.failed.map((f) => ({ title: titleOf(f.id), reason: failureReasonLabels[f.reason] })),
+    })
+    setSelectedIds(() => new Set(result.failed.map((f) => f.id)))
+    view.revalidate()
+  }
+
+  function handleActivityLogged() {
+    const task = logTarget
+    setLogTarget(null)
+    if (task) setAnnouncement(`Atividade registrada e tarefa concluída: ${taskTitle(task)}.`)
+    view.revalidate()
+  }
+
+  const highlightSubject: HighlightSubject =
+    !canSeeOthers || view.owner.kind === "mine"
+      ? { kind: "self" }
+      : view.owner.kind === "all"
+        ? { kind: "team" }
+        : (() => {
+            const userId = view.owner.userId
+            const name = users.data?.find((u) => u.id === userId)?.name
+            return userId === user.userId ? { kind: "self" } : name ? { kind: "user", name } : { kind: "team" }
+          })()
 
   function toggleAll() {
     setSelectedIds((ids) => {
@@ -163,12 +225,19 @@ export function TasksPage({ user, onOpenCompany }: Props) {
 
   const openDeal = (task: TaskItem) => setDrawer({ mode: "deal", id: task.dealId })
 
+  const actions: TaskActionsContext = {
+    canReassign: canSeeOthers,
+    users: users.data ?? [],
+    onOpenDeal: openDeal,
+    onLogActivity: setLogTarget,
+    onChanged: handleChanged,
+  }
+
   const rowProps = {
     now,
     showOwner,
     onToggleSelected: toggleSelected,
-    onOpenDeal: openDeal,
-    onChanged: handleChanged,
+    actions,
     selectedIds,
     leavingIds,
     highlightId,
@@ -203,6 +272,8 @@ export function TasksPage({ user, onOpenCompany }: Props) {
         {announcement}
       </p>
 
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="flex min-w-0 flex-col gap-6">
       {/* KPIs */}
       <section aria-label="Resumo das tarefas" className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         {view.summary.error && !summary ? (
@@ -330,6 +401,39 @@ export function TasksPage({ user, onOpenCompany }: Props) {
             )}
           </div>
 
+          {bulkOutcome && (
+            <div role="status" className="flex flex-col gap-1 border-t border-line-soft px-4 py-2.5 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-fg">{bulkOutcome.message}</p>
+                <Button type="button" size="icon-sm" variant="ghost" aria-label="Fechar aviso" onClick={() => setBulkOutcome(null)}>
+                  <X aria-hidden="true" />
+                </Button>
+              </div>
+              {bulkOutcome.failures.length > 0 && (
+                <details className="text-xs text-fg-muted">
+                  <summary className="cursor-pointer rounded-xs text-fg-muted hover:text-fg focus-visible:focus-ring">Ver motivos</summary>
+                  <ul className="mt-1 flex flex-col gap-0.5 pl-4">
+                    {bulkOutcome.failures.map((f, i) => (
+                      <li key={i} className="list-disc">
+                        {f.title}: {f.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <TaskBulkBar
+              ids={[...selectedIds]}
+              canReassign={canSeeOthers}
+              users={users.data ?? []}
+              onDone={handleBulkDone}
+              onClear={() => setSelectedIds(() => new Set())}
+            />
+          )}
+
           {listData && listData.totalCount > 0 && (
             <TaskPagination
               page={view.page}
@@ -342,6 +446,44 @@ export function TasksPage({ user, onOpenCompany }: Props) {
           )}
         </Panel>
       </div>
+      </div>
+
+      <aside aria-label="Calendário e resumo" className="grid grid-cols-1 content-start gap-4 md:grid-cols-2 2xl:grid-cols-1">
+        <TaskCalendar
+          referenceDate={view.referenceDate}
+          owners={view.owners}
+          onPick={view.pickDay}
+          collapsible={!isWide}
+        />
+        <TaskStatusCard summary={view.summary} wide={isWide} onSelect={(slice) => view.showSlice(slice.target.tab, slice.target.statuses)} />
+        <div className="md:col-span-2 2xl:col-span-1">
+          <WeeklyHighlightsCard summary={view.summary} subject={highlightSubject} />
+        </div>
+      </aside>
+      </div>
+
+      <Sheet open={logTarget !== null} onOpenChange={(open) => !open && setLogTarget(null)}>
+        <SheetContent size="md">
+          <SheetHeader>
+            <SheetTitle>Registrar atividade</SheetTitle>
+            <SheetDescription>
+              {logTarget ? `${taskTitle(logTarget)} · ${logTarget.companyName}. Ao salvar, a tarefa é concluída.` : ""}
+            </SheetDescription>
+          </SheetHeader>
+          <SheetBody className="p-6">
+            {logTarget && (
+              <LogActivityForm
+                key={logTarget.id}
+                dealId={logTarget.dealId}
+                contacts={[]}
+                initialType={logTarget.type}
+                completesTaskId={logTarget.id}
+                onLogged={handleActivityLogged}
+              />
+            )}
+          </SheetBody>
+        </SheetContent>
+      </Sheet>
 
       <NewTaskSheet
         open={isCreating}

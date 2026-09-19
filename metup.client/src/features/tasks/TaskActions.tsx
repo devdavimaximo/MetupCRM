@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { Ban, CalendarClock, Check, Ellipsis, Loader2, SquareArrowOutUpRight } from "lucide-react"
+import { Ban, CalendarClock, Check, ClipboardPen, Ellipsis, Loader2, SquareArrowOutUpRight, UserRoundCog } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -9,36 +9,55 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { toMessage } from "@/features/companies/form-errors"
-import { cancelTask, completeTask, rescheduleTask, type TaskItem } from "./api"
-import { dueShortcuts, toDateTimeInputValue } from "./task-format"
+import type { UserSummary } from "@/features/deals/api"
+import { cancelTask, completeTask, reassignTask, rescheduleTask, type TaskItem } from "./api"
+import { OwnerListbox } from "./OwnerPicker"
+import { focusOwnerListbox } from "./owner-listbox"
+import { RescheduleForm } from "./RescheduleForm"
 import { taskTitle } from "./task-labels"
 
-type Busy = "complete" | "cancel" | "reschedule" | null
+type Busy = "complete" | "cancel" | "reschedule" | "reassign" | null
+type Panel = "reschedule" | "cancel" | "reassign"
+
+export type TaskActionsContext = {
+  /** Admin/Closer: o `⋯` ganha "Reatribuir". O servidor recusa o SDR de qualquer jeito (403). */
+  canReassign: boolean
+  users: UserSummary[]
+  onOpenDeal: (task: TaskItem) => void
+  /** Abre o registro de atividade que conclui esta tarefa (a folha vive na página). */
+  onLogActivity: (task: TaskItem) => void
+  onChanged: (updated: TaskItem) => void
+}
+
+const panelLabel: Record<Panel, string> = {
+  reschedule: "Reagendar",
+  cancel: "Cancelar",
+  reassign: "Reatribuir",
+}
 
 /**
- * As ações de uma tarefa: "Concluir" num clique e o `⋯` com Reagendar (atalhos + data/hora livre),
- * Abrir negócio e Cancelar (com confirmação). Reagendar e cancelar abrem um popover ancorado no `⋯`,
- * então o foco volta para ele ao fechar.
+ * As ações de uma tarefa: "Concluir" num clique e o `⋯` completo — Concluir · Reagendar ·
+ * Registrar atividade · Reatribuir · Abrir negócio · Cancelar. Reagendar, reatribuir e cancelar abrem
+ * um popover ancorado no `⋯`, então o foco volta para ele ao fechar.
  */
 export function TaskActions({
   task,
+  canReassign,
+  users,
   onOpenDeal,
+  onLogActivity,
   onChanged,
   compact = false,
-}: {
+}: TaskActionsContext & {
   task: TaskItem
-  onOpenDeal: (task: TaskItem) => void
-  onChanged: (updated: TaskItem) => void
   /** Celular: "Concluir" vira só ícone para caber ao lado do `⋯`. */
   compact?: boolean
 }) {
   const [busy, setBusy] = useState<Busy>(null)
-  const [panel, setPanel] = useState<"reschedule" | "cancel" | null>(null)
+  const [panel, setPanel] = useState<Panel | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [freeDate, setFreeDate] = useState("")
   // Lido no fechamento do menu, que acontece antes de o novo estado chegar ao callback.
   const panelRequested = useRef(false)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -60,171 +79,161 @@ export function TaskActions({
     }
   }
 
-  function openPanel(next: "reschedule" | "cancel") {
+  function openPanel(next: Panel) {
     setError(null)
-    if (next === "reschedule") setFreeDate(toDateTimeInputValue(new Date(task.dueDate)))
     panelRequested.current = true
     setPanel(next)
   }
 
-  const now = new Date()
-  const shortcuts = dueShortcuts(now, "evening")
-  const freeDateValue = freeDate ? new Date(freeDate) : null
-  const freeDateInPast = freeDateValue !== null && freeDateValue <= now
-
-  const controls = (
-    <div className="flex items-center justify-end gap-1">
-      {isPending && (
-        <Button
-          type="button"
-          size={compact ? "icon-sm" : "sm"}
-          variant="outline"
-          aria-label={`Concluir: ${title}`}
-          disabled={busy !== null}
-          onClick={() => run("complete", () => completeTask(task.id))}
-          className="hover:border-success hover:bg-success/10 hover:text-success"
-        >
-          {busy === "complete" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
-          {!compact && "Concluir"}
-        </Button>
-      )}
-
-      <Popover open={panel !== null} onOpenChange={(open) => !open && setPanel(null)}>
-        <DropdownMenu>
-          <PopoverAnchor asChild>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" size="icon-sm" variant="ghost" aria-label={`Mais ações: ${title}`} disabled={busy !== null}>
-                {busy === "cancel" || busy === "reschedule" ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Ellipsis aria-hidden="true" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-          </PopoverAnchor>
-          <DropdownMenuContent
-            // O popover abre logo depois; devolver o foco ao ⋯ agora o fecharia na hora.
-            onCloseAutoFocus={(event) => {
-              if (!panelRequested.current) return
-              panelRequested.current = false
-              event.preventDefault()
-            }}
-          >
-            {isPending && (
-              <DropdownMenuItem onSelect={() => openPanel("reschedule")}>
-                <CalendarClock aria-hidden="true" />
-                Reagendar
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={() => onOpenDeal(task)}>
-              <SquareArrowOutUpRight aria-hidden="true" />
-              Abrir negócio
-            </DropdownMenuItem>
-            {isPending && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => openPanel("cancel")} className="data-highlighted:text-danger">
-                  <Ban aria-hidden="true" />
-                  Cancelar tarefa
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <PopoverContent
-          aria-label={panel === "cancel" ? `Cancelar: ${title}` : `Reagendar: ${title}`}
-          role="dialog"
-          className="w-72 p-3"
-          // O menu que abriu o popover se desmonta logo depois e o foco "sai" por um instante: não é
-          // o usuário saindo. Esc e clique fora continuam fechando.
-          onFocusOutside={(event) => event.preventDefault()}
-          ref={panelRef}
-          onOpenAutoFocus={(event) => {
-            // O foco automático do Radix acontece antes de o menu se desmontar e se perde; move no quadro seguinte.
-            event.preventDefault()
-            requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>("button:not(:disabled), input")?.focus())
-          }}
-        >
-          {panel === "reschedule" && (
-            <form
-              className="flex flex-col gap-3"
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (!freeDateValue || freeDateInPast) return
-                void run("reschedule", () => rescheduleTask(task.id, freeDateValue.toISOString()))
-              }}
-            >
-              <p className="text-sm font-medium text-fg">Reagendar para</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {shortcuts.map((shortcut) => (
-                  <Button
-                    key={shortcut.id}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy !== null}
-                    onClick={() => run("reschedule", () => rescheduleTask(task.id, shortcut.date.toISOString()))}
-                    className="normal-case tracking-normal font-sans text-sm"
-                  >
-                    {shortcut.label}
-                  </Button>
-                ))}
-              </div>
-              <label className="flex flex-col gap-1.5 text-xs text-fg-muted">
-                Data e hora
-                <Input
-                  type="datetime-local"
-                  value={freeDate}
-                  min={toDateTimeInputValue(now)}
-                  onChange={(e) => setFreeDate(e.target.value)}
-                  aria-invalid={freeDateInPast || undefined}
-                  className="h-9"
-                />
-              </label>
-              {freeDateInPast && <p className="text-xs text-danger">Escolha um horário no futuro.</p>}
-              <Button type="submit" size="sm" disabled={busy !== null || !freeDateValue || freeDateInPast}>
-                {busy === "reschedule" && <Loader2 className="animate-spin" aria-hidden="true" />}
-                Reagendar
-              </Button>
-            </form>
-          )}
-
-          {panel === "cancel" && (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm text-fg">Cancelar esta tarefa? Ela sai da fila e fica no histórico como cancelada.</p>
-              <div className="flex justify-end gap-2">
-                <Button type="button" size="sm" variant="ghost" onClick={() => setPanel(null)}>
-                  Voltar
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={busy !== null}
-                  onClick={() => run("cancel", () => cancelTask(task.id))}
-                >
-                  {busy === "cancel" && <Loader2 className="animate-spin" aria-hidden="true" />}
-                  Cancelar tarefa
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <p role="alert" className="mt-2 text-sm font-medium text-danger">
-              {error}
-            </p>
-          )}
-        </PopoverContent>
-      </Popover>
-
-    </div>
-  )
+  const complete = () => run("complete", () => completeTask(task.id))
 
   return (
     <div className="flex flex-col items-end gap-1">
-      {controls}
+      <div className="flex items-center justify-end gap-1">
+        {isPending && (
+          <Button
+            type="button"
+            size={compact ? "icon-sm" : "sm"}
+            variant="outline"
+            aria-label={`Concluir: ${title}`}
+            disabled={busy !== null}
+            onClick={complete}
+            className="hover:border-success hover:bg-success/10 hover:text-success"
+          >
+            {busy === "complete" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
+            {!compact && "Concluir"}
+          </Button>
+        )}
+
+        <Popover open={panel !== null} onOpenChange={(open) => !open && setPanel(null)}>
+          <DropdownMenu>
+            <PopoverAnchor asChild>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" size="icon-sm" variant="ghost" aria-label={`Mais ações: ${title}`} disabled={busy !== null}>
+                  {busy !== null && busy !== "complete" ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Ellipsis aria-hidden="true" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+            </PopoverAnchor>
+            <DropdownMenuContent
+              align="end"
+              // O popover abre logo depois; devolver o foco ao ⋯ agora o fecharia na hora.
+              onCloseAutoFocus={(event) => {
+                if (!panelRequested.current) return
+                panelRequested.current = false
+                event.preventDefault()
+              }}
+            >
+              {isPending && (
+                <>
+                  <DropdownMenuItem onSelect={complete}>
+                    <Check aria-hidden="true" />
+                    Concluir
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => openPanel("reschedule")}>
+                    <CalendarClock aria-hidden="true" />
+                    Reagendar
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => onLogActivity(task)}>
+                    <ClipboardPen aria-hidden="true" />
+                    Registrar atividade
+                  </DropdownMenuItem>
+                  {canReassign && (
+                    <DropdownMenuItem onSelect={() => openPanel("reassign")}>
+                      <UserRoundCog aria-hidden="true" />
+                      Reatribuir
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem onSelect={() => onOpenDeal(task)}>
+                <SquareArrowOutUpRight aria-hidden="true" />
+                Abrir negócio
+              </DropdownMenuItem>
+              {isPending && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => openPanel("cancel")} className="data-highlighted:text-danger">
+                    <Ban aria-hidden="true" />
+                    Cancelar tarefa
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <PopoverContent
+            aria-label={panel ? `${panelLabel[panel]}: ${title}` : undefined}
+            role="dialog"
+            className={panel === "reassign" ? "flex w-72 flex-col p-0" : "w-72 p-3"}
+            // O menu que abriu o popover se desmonta logo depois e o foco "sai" por um instante: não é
+            // o usuário saindo. Esc e clique fora continuam fechando.
+            onFocusOutside={(event) => event.preventDefault()}
+            ref={panelRef}
+            onOpenAutoFocus={(event) => {
+              if (panel === "reassign") return focusOwnerListbox(event, users.length)
+              // O foco automático do Radix acontece antes de o menu se desmontar e se perde; move no quadro seguinte.
+              event.preventDefault()
+              requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>("button:not(:disabled), input")?.focus())
+            }}
+          >
+            {panel === "reschedule" && (
+              <RescheduleForm
+                initial={new Date(task.dueDate)}
+                busy={busy !== null}
+                onSubmit={(dueDate) => run("reschedule", () => rescheduleTask(task.id, dueDate.toISOString()))}
+              />
+            )}
+
+            {panel === "reassign" && (
+              <>
+                <p className="border-b border-line-soft px-3 py-2.5 text-sm font-medium text-fg">Reatribuir para</p>
+                <OwnerListbox
+                  users={users}
+                  selectedKey={task.ownerUserId}
+                  label="Novo responsável"
+                  onChoose={(ownerUserId) => {
+                    if (ownerUserId === task.ownerUserId) return setPanel(null)
+                    void run("reassign", () => reassignTask(task.id, ownerUserId))
+                  }}
+                />
+              </>
+            )}
+
+            {panel === "cancel" && (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-fg">Cancelar esta tarefa? Ela sai da fila e fica no histórico como cancelada.</p>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setPanel(null)}>
+                    Voltar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy !== null}
+                    onClick={() => run("cancel", () => cancelTask(task.id))}
+                  >
+                    {busy === "cancel" && <Loader2 className="animate-spin" aria-hidden="true" />}
+                    Cancelar tarefa
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p role="alert" className="m-2 text-sm font-medium text-danger">
+                {error}
+              </p>
+            )}
+          </PopoverContent>
+        </Popover>
+      </div>
       {error && panel === null && (
         <p role="alert" className="max-w-48 text-right text-xs whitespace-normal text-danger">
           {error}

@@ -2,8 +2,11 @@ using Metup.Application.Common.Models;
 using Metup.Application.Tasks.Commands.CancelTask;
 using Metup.Application.Tasks.Commands.CompleteTask;
 using Metup.Application.Tasks.Commands.CreateTask;
+using Metup.Application.Tasks.Commands.BulkTask;
+using Metup.Application.Tasks.Commands.ReassignTask;
 using Metup.Application.Tasks.Commands.RescheduleTask;
 using Metup.Application.Tasks.Common;
+using Metup.Application.Tasks.Queries.GetTaskCalendar;
 using Metup.Application.Tasks.Queries.GetTaskSummary;
 using Metup.Application.Tasks.Queries.ListTasks;
 using Metup.Domain.Activities;
@@ -86,9 +89,36 @@ public class TasksController(ISender sender) : ControllerBase
         RescheduleTaskRequest request,
         CancellationToken cancellationToken) =>
         Ok(await sender.Send(new RescheduleTaskCommand(id, request.DueDate), cancellationToken));
+
+    /// <summary>Só Admin/Closer (403 para SDR); destino de outra organização = 404.</summary>
+    [HttpPost("{id:guid}/reassign")]
+    public async Task<ActionResult<TaskDto>> Reassign(
+        Guid id,
+        ReassignTaskRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await sender.Send(new ReassignTaskCommand(id, request.OwnerUserId), cancellationToken));
+
+    /// <remarks>
+    /// Até 100 tarefas numa transação. Falha por item (<c>NotFound</c>/<c>NotPending</c>) não derruba o
+    /// lote; repetir o pedido é seguro.
+    /// </remarks>
+    [HttpPost("bulk")]
+    public async Task<ActionResult<BulkTaskResultDto>> Bulk(BulkTaskCommand request, CancellationToken cancellationToken) =>
+        Ok(await sender.Send(request, cancellationToken));
+
+    /// <summary>Dias do mês (<c>YYYY-MM</c>, fuso da organização) com tarefa pendente; mesmo escopo da listagem.</summary>
+    [HttpGet("calendar")]
+    public async Task<ActionResult<IReadOnlyList<TaskCalendarDayDto>>> Calendar(
+        [FromQuery] string month,
+        [FromQuery] Guid? ownerUserId,
+        [FromQuery] bool allOwners = false,
+        CancellationToken cancellationToken = default) =>
+        Ok(await sender.Send(new GetTaskCalendarQuery(month, ownerUserId, allOwners), cancellationToken));
 }
 
 public record RescheduleTaskRequest(DateTime DueDate);
+
+public record ReassignTaskRequest(Guid OwnerUserId);
 
 /// <summary>Corpo do <c>POST /api/tasks</c>. Separado de <c>CreateTaskRequest</c> (ingestão), que não aceita responsável.</summary>
 public record CreateTaskBody(

@@ -35,6 +35,8 @@ export type LogActivityInput = {
   nextActionType: ActivityType | null
   nextActionDueDate: string | null
   nextActionNote: string | null
+  /** Conclui a tarefa de origem na mesma transação (aditivo). */
+  completesTaskId?: string
 }
 
 export type LogActivityResult = {

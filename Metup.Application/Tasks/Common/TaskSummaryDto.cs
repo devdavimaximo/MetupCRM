@@ -30,3 +30,6 @@ public record TaskScopeCountsDto(
 public record TaskPreviousCountsDto(int Overdue, int Today, int ThisWeek);
 
 public record DailyCountDto(DateOnly Date, int Count);
+
+/// <summary>Um dia do calendário lateral: pendentes com prazo nele e, delas, as já atrasadas.</summary>
+public record TaskCalendarDayDto(DateOnly Date, int Open, int Overdue);

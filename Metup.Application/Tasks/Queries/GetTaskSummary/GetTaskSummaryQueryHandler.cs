@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Models;
 using Metup.Application.Tasks.Common;
@@ -98,11 +97,7 @@ public class GetTaskSummaryQueryHandler(
             await openThen.CountAsync(t => t.DueDate >= windows.ReferenceDayEndUtc && t.DueDate < windows.WeekEndUtc, cancellationToken));
     }
 
-    /// <summary>
-    /// Agrupa no banco pelo dia local: a chave é a posição do dia na série, decidida pelas fronteiras
-    /// de dia (00:00 locais, em UTC) — certo mesmo em dia com troca de horário de verão, que um
-    /// deslocamento fixo erraria.
-    /// </summary>
+    /// <summary>Concluídas por dia local, agrupadas no banco (<see cref="LocalDayIndex"/>).</summary>
     private static async Task<IReadOnlyList<DailyCountDto>> CompletedPerDayAsync(
         IQueryable<TaskItem> tasks,
         OrganizationClockSnapshot clock,
@@ -110,39 +105,18 @@ public class GetTaskSummaryQueryHandler(
         CancellationToken cancellationToken)
     {
         var firstDay = referenceDate.AddDays(1 - SeriesDays);
-        var dayStarts = Enumerable.Range(0, SeriesDays + 1)
-            .Select(i => clock.StartOfDayUtc(firstDay.AddDays(i)))
-            .ToArray();
+        var dayStarts = LocalDayIndex.DayStarts(clock, firstDay, SeriesDays);
         var from = dayStarts[0];
         var to = dayStarts[^1];
 
         var perDay = await tasks
             .Where(t => t.Status == TaskItemStatus.Concluida && t.CompletedAt >= from && t.CompletedAt < to)
-            .GroupBy(DayIndexOf(dayStarts))
+            .GroupBy(LocalDayIndex.Of(t => t.CompletedAt, dayStarts))
             .Select(g => new { Day = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.Day, x => x.Count, cancellationToken);
 
         return Enumerable.Range(0, SeriesDays)
             .Select(i => new DailyCountDto(firstDay.AddDays(i), perDay.GetValueOrDefault(i)))
             .ToList();
-    }
-
-    /// <summary>
-    /// <c>CompletedAt &lt; início do dia 1 ? 0 : CompletedAt &lt; início do dia 2 ? 1 : …</c> — vira um
-    /// <c>CASE WHEN</c> no SQL. Só é chamado com a conclusão já dentro da janela.
-    /// </summary>
-    private static Expression<Func<TaskItem, int>> DayIndexOf(IReadOnlyList<DateTime> dayStarts)
-    {
-        var task = Expression.Parameter(typeof(TaskItem), "t");
-        var completedAt = Expression.Property(task, nameof(TaskItem.CompletedAt));
-
-        Expression index = Expression.Constant(dayStarts.Count - 2);
-        for (var day = dayStarts.Count - 3; day >= 0; day--)
-        {
-            var nextDayStart = Expression.Constant((DateTime?)dayStarts[day + 1], typeof(DateTime?));
-            index = Expression.Condition(Expression.LessThan(completedAt, nextDayStart), Expression.Constant(day), index);
-        }
-
-        return Expression.Lambda<Func<TaskItem, int>>(index, task);
     }
 }

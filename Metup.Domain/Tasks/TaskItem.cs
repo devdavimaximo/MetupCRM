@@ -89,6 +89,19 @@ public class TaskItem : BaseEntity
         return reschedule;
     }
 
+    /// <summary>
+    /// Passa a tarefa para outro responsável. Só tarefa pendente; o mesmo dono é no-op. Sem
+    /// histórico de responsável: nenhuma métrica depende dele por enquanto.
+    /// </summary>
+    public void Reassign(Guid newOwnerUserId)
+    {
+        EnsurePending();
+
+        OwnerUserId = newOwnerUserId;
+    }
+
+    public bool IsPending => Status == TaskItemStatus.Pendente;
+
     private void EnsurePending()
     {
         if (Status != TaskItemStatus.Pendente)

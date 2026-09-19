@@ -19,6 +19,10 @@ type Props = {
   dealId: string
   contacts: { id: string; name: string }[]
   onLogged: (result: LogActivityResult) => void
+  /** Tipo já marcado ao abrir (ex.: o tipo da tarefa de origem). */
+  initialType?: ActivityType
+  /** Conclui esta tarefa na mesma gravação da atividade (tela de Tarefas). */
+  completesTaskId?: string
 }
 
 function toLocalInputValue(date: Date): string {
@@ -45,8 +49,8 @@ const outcomeChoices = ALL_OUTCOMES.map((value) => ({ value, label: activityOutc
  * Formulário de "registrar é rápido" (seção 3 do CLAUDE.md): tipo + desfecho estruturado + nota
  * curta, em toques — chips em vez de selects. A próxima ação fica atrás de um toggle.
  */
-export function LogActivityForm({ dealId, contacts, onLogged }: Props) {
-  const [type, setType] = useState<ActivityType>("Call")
+export function LogActivityForm({ dealId, contacts, onLogged, initialType = "Call", completesTaskId }: Props) {
+  const [type, setType] = useState<ActivityType>(initialType)
   const [outcome, setOutcome] = useState<ActivityOutcome | "">("")
   const [contactId, setContactId] = useState("")
   const [note, setNote] = useState("")
@@ -85,6 +89,7 @@ export function LogActivityForm({ dealId, contacts, onLogged }: Props) {
         nextActionType: scheduleNext ? nextActionType : null,
         nextActionDueDate: scheduleNext ? new Date(nextActionDueDate).toISOString() : null,
         nextActionNote: scheduleNext ? nextActionNote || null : null,
+        ...(completesTaskId ? { completesTaskId } : {}),
       })
       onLogged(result)
       resetAfterSubmit()

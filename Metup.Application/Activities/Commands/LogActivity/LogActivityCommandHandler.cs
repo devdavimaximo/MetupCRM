@@ -4,6 +4,7 @@ using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Tasks.Common;
 using Metup.Domain.Activities;
+using Metup.Domain.Common.Exceptions;
 using Metup.Domain.Integrations;
 using Metup.Domain.Tasks;
 using Metup.Application.Common.Realtime;
@@ -15,6 +16,7 @@ namespace Metup.Application.Activities.Commands.LogActivity;
 public class LogActivityCommandHandler(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
+    IOrganizationClock organizationClock,
     IPublisher publisher) : IRequestHandler<LogActivityCommand, LogActivityResultDto>
 {
     public async Task<LogActivityResultDto> Handle(LogActivityCommand request, CancellationToken cancellationToken)
@@ -39,6 +41,10 @@ public class LogActivityCommandHandler(
                 throw new NotFoundException("Contato");
             }
         }
+
+        var completedTask = request.CompletesTaskId is { } completesTaskId
+            ? await CompleteOriginTaskAsync(completesTaskId, request.DealId, cancellationToken)
+            : null;
 
         var activity = Activity.Log(
             organizationId,
@@ -84,6 +90,10 @@ public class LogActivityCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
         await publisher.Publish(new ActivityLoggedNotification(organizationId, activity.DealId, dealOwnerUserId), cancellationToken);
+        if (completedTask is not null)
+        {
+            await publisher.Publish(new TaskCompletedNotification(organizationId, completedTask.DealId, completedTask.OwnerUserId), cancellationToken);
+        }
 
         var activityDto = await context.Activities
             .AsNoTracking()
@@ -100,5 +110,25 @@ public class LogActivityCommandHandler(
                 .FirstAsync(cancellationToken);
 
         return new LogActivityResultDto(activityDto, taskDto);
+    }
+
+    /// <summary>
+    /// A tarefa de origem passa pela mesma permissão das ações por linha (404/403), precisa ser do
+    /// negócio da atividade e estar pendente (o domínio recusa com 409). Só é gravada no
+    /// <c>SaveChanges</c> da atividade — tudo ou nada.
+    /// </summary>
+    private async Task<TaskItem> CompleteOriginTaskAsync(Guid taskId, Guid dealId, CancellationToken cancellationToken)
+    {
+        var task = await context.LoadForActionAsync(currentUserService, taskId, cancellationToken);
+
+        if (task.DealId != dealId)
+        {
+            throw new DomainRuleException("A tarefa não pertence a este negócio.");
+        }
+
+        var clock = await organizationClock.SnapshotAsync(cancellationToken);
+        task.Complete(clock.UtcNow);
+
+        return task;
     }
 }

@@ -9,7 +9,7 @@ import { stageLabels } from "@/features/deals/stage-labels"
 import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { TaskItem, TaskSort } from "./api"
-import { TaskActions } from "./TaskActions"
+import { TaskActions, type TaskActionsContext } from "./TaskActions"
 import { formatOverdueSince, formatTaskDue, isTaskOverdue, shortName } from "./task-format"
 import { taskTitle } from "./task-labels"
 
@@ -21,9 +21,9 @@ export type TaskRowProps = {
   /** Saiu do recorte depois de uma ação: esmaece antes de a página ser recarregada. */
   leaving: boolean
   highlighted: boolean
-  onToggleSelected: (id: string) => void
-  onOpenDeal: (task: TaskItem) => void
-  onChanged: (updated: TaskItem) => void
+  /** `shift`: Shift+clique seleciona o intervalo desde a última caixa clicada. */
+  onToggleSelected: (id: string, shift: boolean) => void
+  actions: TaskActionsContext
 }
 
 /* ─── Células compartilhadas (tabela e card) ─────────────────────────────── */
@@ -144,7 +144,17 @@ function OwnerCell({ name }: { name: string }) {
   )
 }
 
-function SelectBox({ label, checked, indeterminate, onChange }: { label: string; checked: boolean; indeterminate?: boolean; onChange: () => void }) {
+function SelectBox({
+  label,
+  checked,
+  indeterminate,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  indeterminate?: boolean
+  onChange: (shift: boolean) => void
+}) {
   return (
     <input
       type="checkbox"
@@ -153,7 +163,9 @@ function SelectBox({ label, checked, indeterminate, onChange }: { label: string;
       ref={(el) => {
         if (el) el.indeterminate = Boolean(indeterminate)
       }}
-      onChange={onChange}
+      // O change não diz se o Shift estava pressionado; o clique diz (teclado = Espaço, sem Shift).
+      onClick={(event) => onChange(event.shiftKey)}
+      onChange={() => undefined}
       className="size-4 cursor-pointer rounded-xs accent-accent focus-visible:focus-ring"
     />
   )
@@ -223,7 +235,7 @@ export function TaskTable({
   tasks: TaskItem[]
   sort: TaskSort
   onSort: (sort: TaskSort) => void
-  selectedIds: Set<string>
+  selectedIds: ReadonlySet<string>
   onToggleAll: () => void
   leavingIds: Set<string>
   highlightId: string | null
@@ -251,7 +263,7 @@ export function TaskTable({
               label="Selecionar todas as tarefas da página"
               checked={allSelected}
               indeterminate={selectedOnPage > 0 && !allSelected}
-              onChange={onToggleAll}
+              onChange={() => onToggleAll()}
             />
           </th>
           <th scope="col" className="label-mono h-10 px-3 text-left align-middle font-medium text-muted">
@@ -284,7 +296,7 @@ export function TaskTable({
   )
 }
 
-export function TaskRow({ task, now, showOwner, selected, leaving, highlighted, onToggleSelected, onOpenDeal, onChanged }: TaskRowProps) {
+export function TaskRow({ task, now, showOwner, selected, leaving, highlighted, onToggleSelected, actions }: TaskRowProps) {
   return (
     <tr
       data-task-id={task.id}
@@ -296,13 +308,13 @@ export function TaskRow({ task, now, showOwner, selected, leaving, highlighted, 
       )}
     >
       <td className="h-16 pl-5 align-middle">
-        <SelectBox label={`Selecionar: ${taskTitle(task)}`} checked={selected} onChange={() => onToggleSelected(task.id)} />
+        <SelectBox label={`Selecionar: ${taskTitle(task)}`} checked={selected} onChange={(shift) => onToggleSelected(task.id, shift)} />
       </td>
       <td className="px-3 align-middle">
         <TaskSummary task={task} />
       </td>
       <td className="px-3 align-middle">
-        <DealCell task={task} onOpenDeal={onOpenDeal} />
+        <DealCell task={task} onOpenDeal={actions.onOpenDeal} />
       </td>
       {showOwner && (
         <td className="px-3 align-middle">
@@ -316,7 +328,7 @@ export function TaskRow({ task, now, showOwner, selected, leaving, highlighted, 
         <TaskStatusBadge task={task} now={now} />
       </td>
       <td className="pr-5 pl-3 align-middle">
-        <TaskActions task={task} onOpenDeal={onOpenDeal} onChanged={onChanged} />
+        <TaskActions task={task} {...actions} />
       </td>
     </tr>
   )
@@ -332,7 +344,7 @@ export function TaskCards({
   ...shared
 }: Omit<TaskRowProps, "task" | "selected" | "leaving" | "highlighted"> & {
   tasks: TaskItem[]
-  selectedIds: Set<string>
+  selectedIds: ReadonlySet<string>
   leavingIds: Set<string>
   highlightId: string | null
 }) {
@@ -354,16 +366,16 @@ export function TaskCards({
               <SelectBox
                 label={`Selecionar: ${taskTitle(task)}`}
                 checked={selectedIds.has(task.id)}
-                onChange={() => shared.onToggleSelected(task.id)}
+                onChange={(shift) => shared.onToggleSelected(task.id, shift)}
               />
             </div>
             <div className="min-w-0 flex-1">
               <TaskSummary task={task} />
             </div>
-            <TaskActions task={task} onOpenDeal={shared.onOpenDeal} onChanged={shared.onChanged} compact />
+            <TaskActions task={task} {...shared.actions} compact />
           </div>
           <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 pl-7">
-            <DealCell task={task} onOpenDeal={shared.onOpenDeal} />
+            <DealCell task={task} onOpenDeal={shared.actions.onOpenDeal} />
             <div className="flex items-center gap-2">
               <DueCell task={task} now={shared.now} />
               <TaskStatusBadge task={task} now={shared.now} />

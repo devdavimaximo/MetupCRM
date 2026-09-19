@@ -32,7 +32,8 @@ public class ActivitiesController(ISender sender) : ControllerBase
             request.OccurredAt,
             request.NextActionType,
             request.NextActionDueDate,
-            request.NextActionNote);
+            request.NextActionNote,
+            request.CompletesTaskId);
 
         return Ok(await sender.Send(command, cancellationToken));
     }
@@ -52,4 +53,5 @@ public record LogActivityRequest(
     DateTime? OccurredAt,
     ActivityType? NextActionType,
     DateTime? NextActionDueDate,
-    string? NextActionNote);
+    string? NextActionNote,
+    Guid? CompletesTaskId = null);

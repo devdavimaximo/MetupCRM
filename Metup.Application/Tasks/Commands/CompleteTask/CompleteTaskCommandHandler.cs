@@ -1,34 +1,26 @@
-using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Tasks.Common;
 using Metup.Application.Common.Realtime;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace Metup.Application.Tasks.Commands.CompleteTask;
 
 public class CompleteTaskCommandHandler(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
+    IOrganizationClock organizationClock,
     IPublisher publisher) : IRequestHandler<CompleteTaskCommand, TaskDto>
 {
     public async Task<TaskDto> Handle(CompleteTaskCommand request, CancellationToken cancellationToken)
     {
-        var organizationId = currentUserService.RequireOrganizationId();
+        var task = await context.LoadForActionAsync(currentUserService, request.Id, cancellationToken);
+        var clock = await organizationClock.SnapshotAsync(cancellationToken);
 
-        var task = await context.Tasks
-            .FirstOrDefaultAsync(t => t.Id == request.Id && t.OrganizationId == organizationId, cancellationToken)
-            ?? throw new NotFoundException("Tarefa");
-
-        task.Complete(DateTime.UtcNow);
+        task.Complete(clock.UtcNow);
 
         await context.SaveChangesAsync(cancellationToken);
-        await publisher.Publish(new TaskCompletedNotification(organizationId, task.DealId, task.OwnerUserId), cancellationToken);
+        await publisher.Publish(new TaskCompletedNotification(task.OrganizationId, task.DealId, task.OwnerUserId), cancellationToken);
 
-        return await context.Tasks
-            .AsNoTracking()
-            .Where(t => t.Id == task.Id)
-            .ToTaskDto(context)
-            .FirstAsync(cancellationToken);
+        return await context.LoadTaskDtoAsync(task.Id, cancellationToken);
     }
 }

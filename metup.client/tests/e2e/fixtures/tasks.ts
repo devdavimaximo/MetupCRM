@@ -10,7 +10,7 @@
 import type { Route } from "@playwright/test"
 
 import type { ActivityType } from "@/features/activities/api"
-import type { PagedResult, TaskItem, TaskSummary } from "@/features/tasks/api"
+import type { BulkTaskResult, PagedResult, TaskCalendarDay, TaskItem, TaskSummary } from "@/features/tasks/api"
 import type { Handler } from "./app"
 import { task } from "./data"
 
@@ -87,6 +87,18 @@ export class TaskStore {
   listRequests: URLSearchParams[] = []
   summaryRequests: URLSearchParams[] = []
   created = 0
+  /** Corpos pedidos ao lote e ao registro de atividade, para o teste conferir. */
+  bulkRequests: { ids: string[]; action: string }[] = []
+  loggedActivities: { dealId: string; completesTaskId?: string; type: string }[] = []
+  /** Ids que o lote recusa como fora do alcance (`NotFound`), para simular falha parcial. */
+  outOfReach = new Set<string>()
+  /** Destaques: o que o resumo devolve na série e na comparação da semana. */
+  week: Pick<TaskSummary, "weeklyCompleted" | "completedThisWeek" | "completedPreviousWeek" | "completedChangePct"> = {
+    weeklyCompleted: Array.from({ length: 14 }, (_, i) => ({ date: `2026-09-${String(2 + i).padStart(2, "0")}`, count: i % 3 })),
+    completedThisWeek: 2,
+    completedPreviousWeek: 1,
+    completedChangePct: 100,
+  }
 
   private inScope(t: TaskItem, scope: Scope) {
     const due = new Date(t.dueDate).getTime()
@@ -153,10 +165,7 @@ export class TaskStore {
         cancelled30d: this.tasks.filter((t) => t.status === "Cancelada").length,
       },
       previous: { overdue: 2, today: 2, thisWeek: 6 },
-      weeklyCompleted: [],
-      completedThisWeek: 2,
-      completedPreviousWeek: 1,
-      completedChangePct: 100,
+      ...this.week,
     }
     return body
   }
@@ -177,6 +186,83 @@ export class TaskStore {
     return this.update(route, () => ({ dueDate }))
   }
 
+  reassign: Handler = (route) => {
+    const { ownerUserId } = route.request().postDataJSON() as { ownerUserId: string }
+    const owner = OWNERS.find((o) => o.id === ownerUserId) ?? { id: ownerUserId, name: "Ana Prado" }
+    return this.update(route, () => ({ ownerUserId: owner.id, ownerUserName: owner.name }))
+  }
+
+  /** Pendentes do mês agrupadas pelo dia local (fuso fixo −03:00). */
+  calendar: Handler = (route) => {
+    const month = new URL(route.request().url()).searchParams.get("month") ?? ""
+    const days = new Map<string, TaskCalendarDay>()
+    for (const t of this.tasks) {
+      if (t.status !== "Pendente") continue
+      const local = new Date(new Date(t.dueDate).getTime() - 3 * 3600_000).toISOString().slice(0, 10)
+      if (!local.startsWith(month)) continue
+      const day = days.get(local) ?? { date: local, open: 0, overdue: 0 }
+      day.open += 1
+      if (new Date(t.dueDate).getTime() < NOW_MS) day.overdue += 1
+      days.set(local, day)
+    }
+    return [...days.values()].sort((a, b) => a.date.localeCompare(b.date))
+  }
+
+  bulk: Handler = (route) => {
+    const input = route.request().postDataJSON() as { ids: string[]; action: string; dueDate?: string; ownerUserId?: string }
+    this.bulkRequests.push(input)
+    const result: BulkTaskResult = { succeeded: [], failed: [] }
+    for (const id of input.ids) {
+      const index = this.tasks.findIndex((t) => t.id === id)
+      if (index === -1 || this.outOfReach.has(id)) {
+        result.failed.push({ id, reason: "NotFound" })
+        continue
+      }
+      const current = this.tasks[index]
+      if (current.status !== "Pendente") {
+        result.failed.push({ id, reason: "NotPending" })
+        continue
+      }
+      const patch: Partial<TaskItem> =
+        input.action === "Complete"
+          ? { status: "Concluida", completedAt: new Date(NOW).toISOString() }
+          : input.action === "Cancel"
+            ? { status: "Cancelada" }
+            : input.action === "Reschedule"
+              ? { dueDate: input.dueDate }
+              : { ownerUserId: input.ownerUserId, ownerUserName: OWNERS.find((o) => o.id === input.ownerUserId)?.name ?? "Ana Prado" }
+      this.tasks[index] = { ...current, ...patch }
+      result.succeeded.push(this.tasks[index])
+    }
+    return result
+  }
+
+  /** POST de atividade: com `completesTaskId`, conclui a tarefa junto (o GET segue a timeline fixa). */
+  logActivity: Handler = (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    const dealId = new URL(route.request().url()).pathname.split("/")[3]
+    const input = route.request().postDataJSON() as { type: string; completesTaskId?: string }
+    this.loggedActivities.push({ dealId, type: input.type, completesTaskId: input.completesTaskId })
+    const index = this.tasks.findIndex((t) => t.id === input.completesTaskId)
+    if (index !== -1) this.tasks[index] = { ...this.tasks[index], status: "Concluida", completedAt: new Date(NOW).toISOString() }
+    return {
+      activity: {
+        id: `activity-new-${this.loggedActivities.length}`,
+        dealId,
+        contactId: null,
+        contactName: null,
+        type: input.type,
+        outcome: null,
+        note: null,
+        authorUserId: OWNERS[0].id,
+        authorUserName: OWNERS[0].name,
+        occurredAt: new Date(NOW).toISOString(),
+        createdAt: new Date(NOW).toISOString(),
+      },
+      nextAction: null,
+    }
+  }
+
   /** As rotas de tarefa ligadas a esta loja — espalhe em `installApi(page, { ...store.routes() })`. */
   routes() {
     return {
@@ -186,6 +272,10 @@ export class TaskStore {
       cancelTask: this.cancel,
       rescheduleTask: this.reschedule,
       createTask: this.create,
+      reassignTask: this.reassign,
+      taskCalendar: this.calendar,
+      bulkTasks: this.bulk,
+      logActivity: this.logActivity,
     } satisfies Record<string, Handler>
   }
 

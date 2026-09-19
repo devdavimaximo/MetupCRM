@@ -35,6 +35,10 @@ export type ApiPath =
   | "createTask"
   | "cancelTask"
   | "rescheduleTask"
+  | "reassignTask"
+  | "taskCalendar"
+  | "bulkTasks"
+  | "logActivity"
 
 const ROUTES: Record<ApiPath, string> = {
   overview: "**/api/dashboard/overview**",
@@ -53,6 +57,11 @@ const ROUTES: Record<ApiPath, string> = {
   createTask: "**/api/tasks",
   cancelTask: "**/api/tasks/*/cancel",
   rescheduleTask: "**/api/tasks/*/reschedule",
+  reassignTask: "**/api/tasks/*/reassign",
+  taskCalendar: "**/api/tasks/calendar**",
+  bulkTasks: "**/api/tasks/bulk",
+  // Registrada depois de `dealActivities`: o POST cai aqui; o GET volta (fallback) para a timeline fixa.
+  logActivity: "**/api/deals/*/activities",
 }
 
 /** Resposta de erro no formato que o `apiFetch` sabe traduzir. */

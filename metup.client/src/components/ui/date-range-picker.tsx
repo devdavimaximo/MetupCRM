@@ -253,6 +253,8 @@ export function MonthButton({
   )
 }
 
+export type DayAnnotation = { dot: "open" | "overdue" | null; description?: string }
+
 export function MonthGrid({
   month,
   preview,
@@ -264,6 +266,7 @@ export function MonthGrid({
   className,
   onSelect,
   onHover,
+  annotate,
 }: {
   month: LocalDate
   preview: DateRange | null
@@ -276,6 +279,11 @@ export function MonthGrid({
   className?: string
   onSelect: (date: LocalDate) => void
   onHover: (date: LocalDate | null) => void
+  /**
+   * Marcador opcional por dia (ex.: tarefas no calendário lateral): um ponto sob o número e um
+   * complemento no nome acessível. Com ele, "hoje" vira anel para não disputar o ponto.
+   */
+  annotate?: (date: LocalDate) => DayAnnotation | null
 }) {
   const first = parseLocalDate(month)
   const leading = first.getDay()
@@ -315,6 +323,9 @@ export function MonthGrid({
               const isEnd = preview?.to === date
               const inRange = preview !== null && date >= preview.from && date <= preview.to
               const edge = isStart || isEnd
+              const note = annotate?.(date) ?? null
+              const isToday = date === today
+              const dayName = fullDate.format(parseLocalDate(date))
               return (
                 <div
                   key={date}
@@ -327,8 +338,8 @@ export function MonthGrid({
                     data-date={date}
                     tabIndex={date === tabbable ? 0 : -1}
                     disabled={disabled}
-                    aria-label={fullDate.format(parseLocalDate(date))}
-                    aria-current={date === today ? "date" : undefined}
+                    aria-label={note?.description ? `${dayName}, ${note.description}` : dayName}
+                    aria-current={isToday ? "date" : undefined}
                     onClick={() => onSelect(date)}
                     onMouseEnter={() => onHover(disabled ? null : date)}
                     onKeyDown={(event) => {
@@ -340,12 +351,23 @@ export function MonthGrid({
                     className={cn(
                       "relative mx-auto flex size-9 cursor-pointer items-center justify-center rounded-sm text-sm tabular transition-colors focus-visible:focus-ring",
                       edge ? "bg-accent font-medium text-on-accent" : inRange ? "text-fg hover:bg-surface-3" : "text-fg-muted hover:bg-surface-3 hover:text-fg",
-                      disabled && "cursor-default text-faint hover:bg-transparent hover:text-faint"
+                      disabled && "cursor-default text-faint hover:bg-transparent hover:text-faint",
+                      annotate && isToday && !edge && "ring-1 ring-accent ring-inset"
                     )}
                   >
                     {Number(date.slice(8))}
-                    {date === today && !edge && (
+                    {!annotate && isToday && !edge && (
                       <span aria-hidden="true" className="absolute bottom-1 size-1 rounded-full bg-fg-muted" />
+                    )}
+                    {note?.dot && (
+                      <span
+                        aria-hidden="true"
+                        data-dot={note.dot}
+                        className={cn(
+                          "absolute bottom-1 size-1 rounded-full",
+                          note.dot === "overdue" ? "bg-danger" : edge ? "bg-on-accent" : "bg-accent"
+                        )}
+                      />
                     )}
                   </button>
                 </div>

@@ -142,3 +142,44 @@ export function rescheduleTask(id: string, dueDate: string) {
     body: JSON.stringify({ dueDate }),
   })
 }
+
+/** Só Admin/Closer (403 para SDR). */
+export function reassignTask(id: string, ownerUserId: string) {
+  return apiFetch<TaskItem>(`/api/tasks/${id}/reassign`, {
+    method: "POST",
+    body: JSON.stringify({ ownerUserId }),
+  })
+}
+
+export type BulkTaskAction = "Complete" | "Cancel" | "Reschedule" | "Reassign"
+
+/** `NotFound` também cobre tarefa fora do escopo do usuário (o servidor não revela a existência). */
+export type BulkTaskFailureReason = "NotFound" | "NotPending"
+
+export type BulkTaskResult = {
+  succeeded: TaskItem[]
+  failed: { id: string; reason: BulkTaskFailureReason }[]
+}
+
+export const BULK_TASK_LIMIT = 100
+
+export function bulkTasks(input: { ids: string[]; action: BulkTaskAction; dueDate?: string; ownerUserId?: string }) {
+  return apiFetch<BulkTaskResult>("/api/tasks/bulk", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+/** Um dia do mês com tarefa pendente; `overdue` ≤ `open`. */
+export type TaskCalendarDay = { date: string; open: number; overdue: number }
+
+export function getTaskCalendar(
+  params: { month: string; ownerUserId?: string; allOwners?: boolean },
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams({ month: params.month })
+  if (params.ownerUserId) query.set("ownerUserId", params.ownerUserId)
+  if (params.allOwners) query.set("allOwners", "true")
+
+  return apiFetch<TaskCalendarDay[]>(`/api/tasks/calendar?${query}`, { signal })
+}
