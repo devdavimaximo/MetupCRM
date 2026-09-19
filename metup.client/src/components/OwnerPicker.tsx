@@ -6,11 +6,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { UserSummary } from "@/features/deals/api"
 import { cn } from "@/lib/utils"
 import { SEARCH_THRESHOLD, focusOwnerListbox } from "./owner-listbox"
-import type { OwnerFilter } from "./task-format"
 
+/** De quem é o recorte: eu (padrão), todos os responsáveis ou uma pessoa. */
+export type OwnerFilter = { kind: "mine" } | { kind: "all" } | { kind: "user"; userId: string }
 
-function ownerLabel(owner: OwnerFilter, users: UserSummary[]) {
-  if (owner.kind === "mine") return "Minhas tarefas"
+function ownerLabel(owner: OwnerFilter, users: UserSummary[], mineLabel: string) {
+  if (owner.kind === "mine") return mineLabel
   if (owner.kind === "all") return "Todos os responsáveis"
   return users.find((u) => u.id === owner.userId)?.name ?? "Responsável"
 }
@@ -108,7 +109,7 @@ export function OwnerListbox({
 }
 
 /**
- * "De quem são as tarefas": Minhas · Todos · um usuário. Listbox num popover — setas movem, Enter
+ * "De quem é o recorte": Meu · Todos · um usuário (Tarefas e Pipeline). Listbox num popover — setas movem, Enter
  * escolhe, Esc fecha — com busca quando a equipe passa de 8 pessoas. Só existe para Admin/Closer.
  */
 export function OwnerPicker({
@@ -116,12 +117,15 @@ export function OwnerPicker({
   users,
   currentUserId,
   onChange,
+  mineLabel = "Minhas tarefas",
   className,
 }: {
   value: OwnerFilter
   users: UserSummary[]
   currentUserId: string
   onChange: (owner: OwnerFilter) => void
+  /** O "meu" da tela: "Minhas tarefas", "Meus negócios". */
+  mineLabel?: string
   className?: string
 }) {
   const [open, setOpen] = useState(false)
@@ -138,14 +142,14 @@ export function OwnerPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Responsável: ${ownerLabel(value, users)}`}
+          aria-label={`Responsável: ${ownerLabel(value, users, mineLabel)}`}
           className={cn(
             "inline-flex h-10 min-w-0 cursor-pointer items-center gap-3 rounded-md border border-line-soft bg-surface px-4 text-sm text-fg transition-colors hover:border-line-strong focus-visible:focus-ring data-[state=open]:border-line-strong",
             className
           )}
         >
           <Users className="size-4 shrink-0 text-fg-muted" aria-hidden="true" />
-          <span className="truncate">{ownerLabel(value, users)}</span>
+          <span className="truncate">{ownerLabel(value, users, mineLabel)}</span>
           <ChevronDown className="ml-auto size-4 shrink-0 text-fg-muted" aria-hidden="true" />
         </button>
       </PopoverTrigger>
@@ -153,7 +157,7 @@ export function OwnerPicker({
         {open && (
           <OwnerListbox
             fixed={[
-              { key: "mine", label: "Minhas tarefas" },
+              { key: "mine", label: mineLabel },
               { key: "all", label: "Todos os responsáveis" },
             ]}
             users={others}

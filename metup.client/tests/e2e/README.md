@@ -83,6 +83,19 @@ await gotoTasks(page)
 expect(store.listRequests.at(-1)?.get("scope")).toBe("All") // o que a tela pediu
 ```
 
+## Pipeline (`pipeline-page.spec.ts`)
+
+O quadro é dublado **com estado** por `BoardStore` (`fixtures/pipeline.ts`): mover, fechar e o 409
+mudam a loja, e o quadro e as colunas seguintes refletem isso (contagem e soma da coluna inteira,
+20 por página, Fechados só no período). `gotoPipeline(page, "&etapa=Proposta")` congela o relógio em
+`NOW`. Para simular concorrência: `store.movedByOther.set("q-2", "Proposta")` (o próximo pedido dá
+409) e `store.failNextStage = true` (500).
+
+- **Arrasto com mouse:** `page.mouse` (apertar, passar dos 6px, mover, soltar). As zonas de Fechados
+  só existem **durante** o arrasto, então o alvo é resolvido depois de começar (`dragWithMouse`).
+- **Teclado:** foco no cartão, `Space`, `ArrowRight`, `Space`. Os anúncios saem no
+  `[id^="DndLiveRegion"]` do `@dnd-kit`.
+
 ## OneDrive: specs que "somem"
 
 Com o repositório no OneDrive, arquivos só na nuvem viram *reparse points*. O Node os vê como
@@ -101,6 +114,9 @@ Nada aqui é silenciado: todo `test.skip` diz por que existe.
 | `tasks-page` › 1366×768 sem rolagem | ≠ 1366px | Faixa mais estreita com tabela. |
 | `tasks-page` › 390×844 cards | ≥ 768px | Cards só abaixo de `md`. |
 | `dashboard-mobile` › o arquivo inteiro | ≥ 768px | Abaixo de `md` o dashboard monta **outra árvore** (item 26); as asserções de ordem não valem no desktop. |
+| `pipeline-page` › arrastar com mouse, mesma coluna, teclado (2) | < 768px | No celular é uma coluna por vez: não há coluna vizinha na tela, e o arrasto por toque (pressionar 250 ms) não é dublável com fidelidade. O menu `⋮ > Mover para…` é testado em todas as larguras. |
+| `pipeline-page` › soltar em Fechados (4) | < 768px | As zonas Ganho/Perdido aparecem durante o arrasto com mouse. |
+| `pipeline-page` › + Adicionar da coluna | < 768px | No celular o CTA é o FAB (testado em "Novo negócio"). |
 
 > O pulo do tooltip do nó Ganhos saiu na onda 3B: o item 26 deu ao `Hint` a abertura por toque
 > (`openOnTap`), e o cenário passou a valer em todas as larguras.

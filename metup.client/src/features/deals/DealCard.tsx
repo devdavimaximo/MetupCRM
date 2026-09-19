@@ -1,111 +1,251 @@
-import { ArrowRightLeft, Loader2 } from "lucide-react"
+import { useRef, useState, type PointerEvent } from "react"
+import { useDraggable } from "@dnd-kit/core"
+import { ArrowRightLeft, ClockAlert, EllipsisVertical, Loader2, PanelRightOpen } from "lucide-react"
 
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Monogram } from "@/components/ui/monogram"
-import { formatShortDate } from "@/lib/format"
+import { activityTypeLabels } from "@/features/activities/activity-labels"
+import { formatDue, formatShortDate } from "@/lib/format"
 import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
-import type { DealListItem, DealStage } from "./api"
-import { ACTIVE_STAGES, sourceLabels, stageLabels } from "./stage-labels"
+import type { DealBoardCard, DealStage } from "./api"
+import { ageTitle, formatAge, lastTouchOf, stalledLabel } from "./board-format"
+import { ACTIVE_STAGES, lostReasonLabels, sourceLabels, stageLabels } from "./stage-labels"
 
-type Props = {
-  deal: DealListItem
-  isMoving: boolean
-  onOpen: () => void
-  onMoveStage: (stage: DealStage) => void
+/** Id da dica lida pelo leitor de tela nos cartões fechados. */
+export const CLOSED_CARD_HINT_ID = "deal-card-closed-hint"
+
+/** Dados que o cartão arrastado leva para o `DndContext`. */
+export type DraggedCardData = { card: DealBoardCard }
+
+/**
+ * O miolo do cartão, sem comportamento: o mesmo no quadro e na sobreposição do arrasto.
+ * Hierarquia: com quem (empresa), quanto vale, que tipo de conta é, quem cuida e há quanto tempo.
+ */
+export function DealCardContent({ card, now }: { card: DealBoardCard; now: Date }) {
+  const isOpen = card.status === "Aberto"
+  const isWon = card.status === "Ganho"
+  const touch = lastTouchOf(card)
+
+  return (
+    <span className="flex min-w-0 flex-col gap-2.5">
+      <span className="block truncate pr-7 text-base font-medium text-fg">{card.companyName}</span>
+
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className={cn("text-base font-medium tabular", card.value === null ? "text-faint" : isWon ? "text-success" : "text-fg")}>
+          {formatMoney(card.value)}
+        </span>
+        {card.valueIsEstimated && (
+          <span className="label-mono text-muted" title="Valor estimado (ticket), ainda sem valor em negociação">
+            est.
+          </span>
+        )}
+        {isOpen && card.isStalled && (
+          <Badge variant="accent" dot className="ml-auto">
+            {stalledLabel(card.daysInStage)}
+          </Badge>
+        )}
+      </span>
+
+      <span className="flex min-w-0 flex-wrap gap-1">
+        {card.companySegment && (
+          <Badge variant="default" className="max-w-full truncate normal-case tracking-normal">
+            {card.companySegment}
+          </Badge>
+        )}
+        <Badge variant="outline" className="normal-case tracking-normal">
+          {sourceLabels[card.source]}
+        </Badge>
+      </span>
+
+      {!isOpen && card.closedAt && (
+        <span className="label-mono text-muted">
+          {isWon ? "Ganho em" : "Perdido em"} <span className="tabular">{formatShortDate(card.closedAt)}</span>
+          {card.status === "Perdido" && card.lostReason && <span className="text-fg-muted"> · {lostReasonLabels[card.lostReason]}</span>}
+        </span>
+      )}
+
+      <span className="flex min-w-0 items-center gap-2 border-t border-line-soft pt-2">
+        <Monogram name={card.ownerUserName} size="xs" />
+        <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">
+          <span className="sr-only">Responsável: </span>
+          {card.ownerUserName}
+        </span>
+        {isOpen && card.nextTask?.isOverdue && (
+          <span title={`Próxima ação atrasada: ${activityTypeLabels[card.nextTask.type]} · ${formatDue(card.nextTask.dueDate)}`} className="inline-flex">
+            <ClockAlert className="size-4 text-danger" aria-hidden="true" />
+            <span className="sr-only">
+              Próxima ação atrasada: {activityTypeLabels[card.nextTask.type]}, {formatDue(card.nextTask.dueDate)}.
+            </span>
+          </span>
+        )}
+        <time dateTime={touch.iso} title={ageTitle(card)} className="shrink-0 text-xs text-muted tabular">
+          {formatAge(touch.iso, now)}
+        </time>
+      </span>
+
+      {isOpen && !card.nextTask && <span className="-mt-1 text-xs text-faint">Sem próxima ação</span>}
+    </span>
+  )
 }
 
 /**
- * Cartão do kanban. Hierarquia de decisão: com quem (empresa), quanto vale, quem cuida.
- * Mover de estágio é um controle no canto — some da leitura no desktop até o hover/foco,
- * e fica sempre visível em tela de toque, onde não existe hover.
+ * Cartão do quadro. O cartão inteiro abre o negócio (clique ou Enter) e é a alça do arrasto
+ * (arrastar 6px com o mouse, pressionar 250ms no toque, Espaço no teclado). O `⋮` é a alternativa
+ * sem arrasto: Abrir negócio e Mover para….
+ *
+ * Fechado não volta ao funil (o domínio não reabre): não arrasta; tentar mostra o cursor de
+ * proibido e a dica.
  */
-export function DealCard({ deal, isMoving, onOpen, onMoveStage }: Props) {
-  const isOpen = deal.status === "Aberto"
-  const value = deal.amount ?? deal.ticket
+export function DealCard({
+  card,
+  now,
+  isPending,
+  isReturned,
+  onOpen,
+  onMove,
+}: {
+  card: DealBoardCard
+  now: Date
+  /** Chamada em voo: não arrasta de novo até responder. */
+  isPending: boolean
+  /** Voltou ao lugar (erro/409): realce breve. */
+  isReturned: boolean
+  onOpen: () => void
+  onMove: (stage: DealStage) => void
+}) {
+  const isOpen = card.status === "Aberto"
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+    id: card.id,
+    data: { card } satisfies DraggedCardData,
+    disabled: !isOpen || isPending,
+  })
+  const [blocked, setBlocked] = useState(false)
+  const pressStart = useRef<{ x: number; y: number } | null>(null)
+
+  // Tentativa de arrastar um fechado: o gesto é reconhecido (6px) e respondido com a dica.
+  const closedGesture = isOpen
+    ? {}
+    : {
+        onPointerDown: (event: PointerEvent) => {
+          pressStart.current = { x: event.clientX, y: event.clientY }
+        },
+        onPointerMove: (event: PointerEvent) => {
+          const start = pressStart.current
+          if (!start || blocked) return
+          if (Math.hypot(event.clientX - start.x, event.clientY - start.y) >= 6) setBlocked(true)
+        },
+        onPointerUp: () => {
+          pressStart.current = null
+          if (blocked) window.setTimeout(() => setBlocked(false), 1600)
+        },
+        onPointerCancel: () => {
+          pressStart.current = null
+          setBlocked(false)
+        },
+      }
 
   return (
     <article
+      ref={setNodeRef}
       data-deal-card
+      data-deal-id={card.id}
+      data-status={card.status}
+      aria-busy={isPending || undefined}
       className={cn(
-        "group/card relative rounded-sm border border-line-soft bg-surface shadow-hairline transition-colors hover:border-line-strong/70",
-        isMoving && "opacity-60"
+        "group/card relative rounded-sm border border-line-soft bg-surface shadow-hairline transition-[border-color,opacity] hover:border-line-strong/70",
+        card.status === "Perdido" && "opacity-60 hover:opacity-90",
+        isDragging && "border-dashed border-line-strong opacity-40",
+        isPending && "opacity-70",
+        isReturned && "animate-in fade-in-0 zoom-in-95 border-danger/60 duration-300 motion-reduce:animate-none"
       )}
     >
       <button
+        ref={setActivatorNodeRef}
         type="button"
+        {...attributes}
+        {...listeners}
+        {...closedGesture}
+        aria-disabled={undefined}
+        aria-roledescription={isOpen ? "negócio arrastável" : "negócio"}
+        aria-describedby={isOpen ? attributes["aria-describedby"] : CLOSED_CARD_HINT_ID}
+        title={isOpen ? undefined : "Negócio fechado não volta ao funil."}
         onClick={onOpen}
-        className="flex w-full cursor-pointer flex-col gap-3 rounded-sm p-3 text-left focus-visible:focus-ring"
-      >
-        <span className={cn("min-w-0", isOpen && "pr-8")}>
-          <span className="block truncate text-base font-medium text-fg">{deal.companyName}</span>
-          <span className="block truncate text-sm text-muted">{deal.contactName ?? "Sem contato definido"}</span>
-        </span>
-
-        <span className="flex items-center justify-between gap-2">
-          <span
-            className={cn(
-              "text-base font-medium tabular",
-              value === null ? "text-faint" : deal.status === "Ganho" ? "text-success" : "text-fg"
-            )}
-          >
-            {formatMoney(value)}
-          </span>
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="label-mono truncate text-faint">{sourceLabels[deal.source]}</span>
-            <span title={deal.ownerUserName} className="inline-flex">
-              <Monogram name={deal.ownerUserName} size="xs" />
-              <span className="sr-only">Responsável: {deal.ownerUserName}</span>
-            </span>
-          </span>
-        </span>
-
-        {!isOpen && deal.closedAt && (
-          <span className="label-mono text-faint">
-            Fechado em <span className="tabular">{formatShortDate(deal.closedAt)}</span>
-          </span>
+        className={cn(
+          "flex w-full touch-manipulation flex-col rounded-sm p-3 text-left select-none focus-visible:focus-ring",
+          isOpen ? (isPending ? "cursor-progress" : "cursor-grab active:cursor-grabbing") : blocked ? "cursor-not-allowed" : "cursor-pointer"
         )}
+      >
+        <DealCardContent card={card} now={now} />
       </button>
 
-      {isOpen && (
-        <div
-          className={cn(
-            "absolute top-2 right-2 size-7 transition-opacity",
-            "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 [@media(hover:hover)]:focus-within:opacity-100",
-            isMoving && "opacity-100"
-          )}
-        >
-          <label htmlFor={`stage-${deal.id}`} className="sr-only">
-            Mover {deal.companyName} para outro estágio
-          </label>
-          {/* Select nativo transparente sobre o ícone: menu do sistema (rápido e acessível), sem popover próprio. */}
-          <select
-            id={`stage-${deal.id}`}
-            value=""
-            disabled={isMoving}
-            title="Mover de estágio"
-            onChange={(e) => {
-              if (e.target.value) onMoveStage(e.target.value as DealStage)
-            }}
-            className="size-7 cursor-pointer appearance-none rounded-xs border border-line-soft bg-surface-2 text-transparent transition-colors outline-none hover:border-line-strong focus-visible:focus-ring disabled:cursor-wait [&>option]:text-fg"
-          >
-            <option value="" disabled>
-              Mover para…
-            </option>
-            {ACTIVE_STAGES.map((stage) => (
-              <option key={stage} value={stage} disabled={stage === deal.stage}>
-                {stageLabels[stage]}
-                {stage === deal.stage ? " (atual)" : ""}
-              </option>
-            ))}
-          </select>
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted"
-          >
-            {isMoving ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRightLeft className="size-3.5" />}
-          </span>
-        </div>
+      {blocked && (
+        <p role="status" className="absolute inset-x-2 bottom-2 rounded-xs border border-line-strong bg-surface-3 px-2 py-1.5 text-xs text-fg shadow-raised">
+          Negócio fechado não volta ao funil.
+        </p>
       )}
+
+      <div className="absolute top-2 right-2">
+        {isPending ? (
+          <span className="inline-flex size-8 items-center justify-center text-muted" aria-hidden="true">
+            <Loader2 className="size-4 animate-spin" />
+          </span>
+        ) : (
+          <CardMenu card={card} onOpen={onOpen} onMove={onMove} />
+        )}
+      </div>
     </article>
+  )
+}
+
+function CardMenu({ card, onOpen, onMove }: { card: DealBoardCard; onOpen: () => void; onMove: (stage: DealStage) => void }) {
+  const isOpen = card.status === "Aberto"
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Ações de ${card.companyName}`}
+          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-xs text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring data-[state=open]:bg-surface-3 data-[state=open]:text-fg max-md:size-10"
+        >
+          <EllipsisVertical className="size-4" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem onSelect={onOpen}>
+          <PanelRightOpen aria-hidden="true" />
+          Abrir negócio
+        </DropdownMenuItem>
+        {isOpen && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ArrowRightLeft aria-hidden="true" />
+                Mover para…
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent aria-label="Etapas">
+                {ACTIVE_STAGES.map((stage) => (
+                  <DropdownMenuItem key={stage} disabled={stage === card.stage} onSelect={() => onMove(stage)}>
+                    {stageLabels[stage]}
+                    {stage === card.stage && <span className="ml-auto text-xs text-faint">atual</span>}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

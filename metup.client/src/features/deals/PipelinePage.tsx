@@ -1,98 +1,58 @@
-import { useCallback, useEffect, useState } from "react"
-import { X } from "lucide-react"
+import { useState } from "react"
+import { Plus } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { PageHeader } from "@/components/ui/page"
-import { Select } from "@/components/ui/select"
+import { OwnerPicker } from "@/components/OwnerPicker"
 import { Alert, Skeleton } from "@/components/ui/states"
+import { Toaster } from "@/components/ui/toast"
 import { toMessage } from "@/features/companies/form-errors"
-import { numberFormatter, pluralize } from "@/lib/format"
-import { formatMoney } from "@/lib/money"
+import { listCompanyFilterOptions } from "@/features/companies/api"
+import { NewTaskSheet } from "@/features/tasks/NewTaskSheet"
+import type { AuthenticatedUser } from "@/lib/auth"
+import { useAsyncResource } from "@/lib/hooks"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
+import { cn } from "@/lib/utils"
+import { CloseDealDialog } from "./CloseDealForm"
+import type { CloseOutcome } from "./close-deal"
 import { DealBoard } from "./DealBoard"
 import { DealDrawer, type DealDrawerTarget } from "./DealDrawer"
 import { dealSectionFromUrl } from "./deal-section"
-import {
-  changeDealStage,
-  listDeals,
-  listUsers,
-  type DealListItem,
-  type DealSource,
-  type DealStage,
-  type UserSummary,
-} from "./api"
-import { ALL_STAGES, sourceLabels } from "./stage-labels"
+import { listUsers, type DealBoardCard, type DealStage } from "./api"
+import { PipelineFilters, PipelineHeader } from "./PipelineToolbar"
+import { ACTIVE_STAGES } from "./stage-labels"
+import { useDealBoard } from "./useDealBoard"
 
 type Props = {
+  user: AuthenticatedUser
   onOpenCompany: (companyId: string) => void
   newDealIntent?: { companyId: string; companyName: string } | null
 }
 
-export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
-  const initialUrlState = readUrlState()
+type CloseRequest = { card: DealBoardCard; outcome: CloseOutcome }
 
-  const [deals, setDeals] = useState<DealListItem[]>([])
-  const [totalCount, setTotalCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadVersion, setReloadVersion] = useState(0)
+/**
+ * Pipeline Comercial: cabeçalho, filtros e o quadro com arrastar e soltar. A PL3 acrescenta KPIs,
+ * funil e a faixa inferior entre os filtros e o quadro (ver "Layout" no plano) — o quadro tem altura
+ * própria justamente para a página poder crescer em volta dele.
+ */
+export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
+  const canSeeOthers = user.role === "Admin" || user.role === "Closer"
+  const view = useDealBoard(canSeeOthers)
+  const users = useAsyncResource((signal) => listUsers(signal), [])
+  const filterOptions = useAsyncResource((signal) => listCompanyFilterOptions(signal), [])
 
-  const [ownerUserId, setOwnerUserId] = useState(initialUrlState.ownerUserId)
-  const [source, setSource] = useState<DealSource | "">(initialUrlState.source as DealSource | "")
-
-  const [users, setUsers] = useState<UserSummary[]>([])
   // Chegada vinda do dashboard (?etapa=Proposta): a coluna é rolada e destacada, sem filtrar as outras.
-  const [highlightStage] = useState<DealStage | null>(() =>
-    ALL_STAGES.includes(initialUrlState.pipelineStage as DealStage) ? (initialUrlState.pipelineStage as DealStage) : null
-  )
+  const [highlightStage] = useState<DealStage | null>(() => {
+    const stage = readUrlState().pipelineStage as DealStage
+    return ACTIVE_STAGES.includes(stage) ? stage : null
+  })
 
   const [target, setTarget] = useState<DealDrawerTarget>(() => {
     if (newDealIntent) return { mode: "new", ...newDealIntent }
     const { dealId, dealSection } = readUrlState()
     return dealId ? { mode: "deal", id: dealId, section: dealSectionFromUrl(dealSection) } : null
   })
-
-  const [movingDealId, setMovingDealId] = useState<string | null>(null)
-  const [boardError, setBoardError] = useState<string | null>(null)
-
-  const reload = useCallback(() => setReloadVersion((v) => v + 1), [])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setIsLoading(true)
-    setError(null)
-
-    listDeals(
-      { pageSize: 200, ownerUserId: ownerUserId || undefined, source: source || undefined },
-      controller.signal
-    )
-      .then((result) => {
-        setDeals(result.items)
-        setTotalCount(result.totalCount)
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return
-        setError(toMessage(err, "Não foi possível carregar o pipeline."))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false)
-      })
-
-    return () => controller.abort()
-  }, [ownerUserId, source, reloadVersion])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    listUsers(controller.signal)
-      .then(setUsers)
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    writeUrlState({ ownerUserId, source })
-  }, [ownerUserId, source])
+  const [taskStage, setTaskStage] = useState<DealStage | null>(null)
+  const [closeRequest, setCloseRequest] = useState<CloseRequest | null>(null)
 
   function openDeal(dealId: string) {
     writeUrlState({ dealId, dealSection: "" })
@@ -104,129 +64,126 @@ export function PipelinePage({ onOpenCompany, newDealIntent }: Props) {
     setTarget(null)
   }
 
-  async function handleMoveStage(dealId: string, stage: DealStage) {
-    setMovingDealId(dealId)
-    setBoardError(null)
+  const newDeal = (stage?: DealStage) => setTarget({ mode: "new", stage })
 
-    try {
-      await changeDealStage(dealId, stage)
-      reload()
-    } catch (err) {
-      setBoardError(toMessage(err, "Não foi possível mover o negócio de estágio."))
-    } finally {
-      setMovingDealId(null)
-    }
-  }
-
-  const openDeals = deals.filter((d) => d.status === "Aberto")
-  const openValue = openDeals.reduce((sum, d) => sum + (d.amount ?? d.ticket ?? 0), 0)
-  const hasFilters = Boolean(ownerUserId || source)
+  const board = view.board
+  const boardError = board.error !== null ? toMessage(board.error, "Não foi possível carregar o pipeline.") : null
 
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] min-h-128 flex-col lg:h-svh">
-      <div className="flex shrink-0 flex-col gap-5 px-4 pt-6 pb-5 sm:px-6 lg:px-10 lg:pt-10">
-        <PageHeader
-          eyebrow="Comercial"
-          title="Pipeline"
-          description={
-            isLoading && deals.length === 0 ? (
-              "Carregando o funil…"
-            ) : (
-              <>
-                {pluralize(openDeals.length, "negócio em aberto", "negócios em aberto")}
-                <span className="mx-2 text-faint">·</span>
-                <span className="text-fg tabular">{formatMoney(openValue)}</span> em negociação
-                {totalCount > deals.length && (
-                  <>
-                    <span className="mx-2 text-faint">·</span>
-                    <span className="text-muted">
-                      exibindo {numberFormatter.format(deals.length)} de {numberFormatter.format(totalCount)}
-                    </span>
-                  </>
-                )}
-              </>
-            )
-          }
-          actions={
-            <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:w-auto">
-              <Label htmlFor="pipeline-filter-owner" className="sr-only">
-                Filtrar por responsável
-              </Label>
-              <Select
-                id="pipeline-filter-owner"
-                value={ownerUserId}
-                onChange={(e) => setOwnerUserId(e.target.value)}
-                className="h-9 w-full sm:w-56"
-              >
-                <option value="">Todos os responsáveis</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </Select>
-
-              <Label htmlFor="pipeline-filter-source" className="sr-only">
-                Filtrar por origem
-              </Label>
-              <Select
-                id="pipeline-filter-source"
-                value={source}
-                onChange={(e) => setSource(e.target.value as DealSource | "")}
-                className="h-9 w-full sm:w-44"
-              >
-                <option value="">Todas as origens</option>
-                {Object.entries(sourceLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-
-              {hasFilters && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Limpar filtros"
-                  title="Limpar filtros"
-                  onClick={() => {
-                    setOwnerUserId("")
-                    setSource("")
-                  }}
-                >
-                  <X aria-hidden="true" />
-                </Button>
-              )}
-            </div>
+    <div className="flex min-h-[calc(100svh-3.5rem)] flex-col max-md:pb-24 lg:min-h-svh">
+      <div className="flex shrink-0 flex-col gap-5 px-4 pt-6 pb-4 sm:px-6 lg:px-10 lg:pt-10">
+        <PipelineHeader
+          view={view}
+          onNewDeal={() => newDeal()}
+          ownerPicker={
+            canSeeOthers ? (
+              <OwnerPicker
+                value={view.owner}
+                users={users.data ?? []}
+                currentUserId={user.userId}
+                onChange={view.setOwner}
+                mineLabel="Meus negócios"
+                className="w-full sm:w-auto sm:min-w-44"
+              />
+            ) : null
           }
         />
 
-        {error && <Alert onRetry={reload}>{error}</Alert>}
-        {boardError && <Alert>{boardError}</Alert>}
+        <PipelineFilters
+          filters={view.filters}
+          sort={view.sort}
+          segments={filterOptions.data?.segments ?? null}
+          segmentsFailed={filterOptions.error !== null}
+          activeCount={view.activeFilters}
+          onChange={view.setFilters}
+          onSort={view.setSort}
+          onClear={view.clearFilters}
+        />
+
+        {/* PL3: KPIs (item 9) e funil (item 10) entram aqui, acima do quadro. */}
+
+        {boardError && view.columns && (
+          <Alert onRetry={() => board.reload()}>{boardError} O quadro mostra os dados anteriores.</Alert>
+        )}
       </div>
 
-      {isLoading && deals.length === 0 && !error && <BoardSkeleton />}
+      {/* O quadro tem altura própria: nunca empurra a página para rolar na horizontal. */}
+      <section
+        aria-label="Quadro"
+        aria-busy={board.isLoading}
+        className="flex h-[max(30rem,calc(100svh-17rem))] min-h-0 shrink-0 flex-col max-md:h-[max(28rem,calc(100svh-15rem))]"
+      >
+        {view.isFirstLoad ? (
+          <BoardSkeleton />
+        ) : boardError && !view.columns ? (
+          <div className="px-4 sm:px-6 lg:px-10">
+            <Alert onRetry={() => board.reload()}>{boardError}</Alert>
+          </div>
+        ) : view.columns ? (
+          <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity", view.isReloading && "opacity-60")}>
+            <DealBoard
+              view={view}
+              highlightStage={highlightStage}
+              onOpenDeal={(card) => openDeal(card.id)}
+              onAddDeal={(stage) => newDeal(stage)}
+              onAddTask={setTaskStage}
+              onCloseRequest={(card, won) => setCloseRequest({ card, outcome: won ? "won" : "lost" })}
+            />
+          </div>
+        ) : null}
+      </section>
 
-      {!error && (isLoading === false || deals.length > 0) && (
-        <DealBoard
-          deals={deals}
-          movingDealId={movingDealId}
-          highlightStage={highlightStage}
-          onOpenDeal={openDeal}
-          onMoveStage={handleMoveStage}
-        />
-      )}
+      {/* FAB do celular: o CTA do cabeçalho some abaixo de md. */}
+      <button
+        type="button"
+        onClick={() => newDeal()}
+        className="fixed right-4 bottom-4 z-40 inline-flex h-14 cursor-pointer items-center gap-2 rounded-full bg-accent px-5 font-medium text-on-accent shadow-panel transition-colors hover:bg-accent-hover focus-visible:focus-ring md:hidden"
+      >
+        <Plus className="size-5" aria-hidden="true" />
+        Novo negócio
+      </button>
+
+      <CloseDealDialog
+        target={
+          closeRequest && {
+            dealId: closeRequest.card.id,
+            companyName: closeRequest.card.companyName,
+            outcome: closeRequest.outcome,
+            defaultAmount: closeRequest.card.value,
+          }
+        }
+        onCancel={() => setCloseRequest(null)}
+        onClosed={(deal) => {
+          if (closeRequest) view.applyClosed(closeRequest.card, deal)
+          setCloseRequest(null)
+        }}
+      />
+
+      <NewTaskSheet
+        open={taskStage !== null}
+        onOpenChange={(open) => !open && setTaskStage(null)}
+        canAssign={canSeeOthers}
+        users={users.data ?? []}
+        currentUserId={user.userId}
+        stageFilter={taskStage ?? undefined}
+        onCreated={() => {
+          setTaskStage(null)
+          view.toasts.show({ message: "Tarefa criada." })
+          view.revalidate()
+        }}
+      />
 
       <DealDrawer
         target={target}
-        users={users}
+        users={users.data ?? []}
         onOpenChange={(open) => {
           if (!open) closeDrawer()
         }}
         onOpenCompany={onOpenCompany}
-        onSaved={reload}
+        onSaved={view.revalidate}
       />
+
+      <Toaster toasts={view.toasts.toasts} onDismiss={view.toasts.dismiss} />
     </div>
   )
 }
@@ -235,12 +192,12 @@ function BoardSkeleton() {
   return (
     <div role="status" className="flex min-h-0 flex-1 gap-3 overflow-hidden px-4 pb-4 sm:px-6 lg:px-10">
       <span className="sr-only">Carregando pipeline…</span>
-      {ALL_STAGES.slice(0, 6).map((stage, i) => (
-        <div key={stage} className="flex w-[18rem] shrink-0 flex-col gap-2 rounded-sm border border-line-soft bg-sunken/60 p-3">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="flex w-68 shrink-0 flex-col gap-2 rounded-sm border border-line-soft bg-sunken/60 p-3 max-md:w-full max-md:not-first:hidden">
           <Skeleton className="h-3 w-24" />
-          <Skeleton className="mb-2 h-2.5 w-16" />
+          <Skeleton className="mb-2 h-2.5 w-32" />
           {Array.from({ length: 4 - (i % 3) }, (_, j) => (
-            <Skeleton key={j} className="h-20 w-full" />
+            <Skeleton key={j} className="h-24 w-full" />
           ))}
         </div>
       ))}

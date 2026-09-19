@@ -36,6 +36,14 @@ export function readUrlState() {
     pipelineStage: params.get("etapa") ?? "",
     activityFeed: params.get("feed") ?? "",
     dealSection: params.get("acao") ?? "",
+    pipelinePeriod: params.get("quadroPeriodo") ?? "",
+    pipelineFrom: params.get("quadroDe") ?? "",
+    pipelineTo: params.get("quadroAte") ?? "",
+    pipelineSearch: params.get("quadroBusca") ?? "",
+    pipelineSources: params.get("origens") ?? "",
+    pipelineSegments: params.get("segmentos") ?? "",
+    pipelineSort: params.get("ordem") ?? "",
+    pipelineClosed: params.get("fechados") ?? "",
   }
 }
 
@@ -66,6 +74,14 @@ type UrlStatePatch = {
   pipelineStage?: string
   activityFeed?: string
   dealSection?: string
+  pipelinePeriod?: string
+  pipelineFrom?: string
+  pipelineTo?: string
+  pipelineSearch?: string
+  pipelineSources?: string
+  pipelineSegments?: string
+  pipelineSort?: string
+  pipelineClosed?: string
 }
 
 const STRING_KEYS = [
@@ -91,6 +107,14 @@ const STRING_KEYS = [
   ["pipelineStage", "etapa"],
   ["activityFeed", "feed"],
   ["dealSection", "acao"],
+  ["pipelinePeriod", "quadroPeriodo"],
+  ["pipelineFrom", "quadroDe"],
+  ["pipelineTo", "quadroAte"],
+  ["pipelineSearch", "quadroBusca"],
+  ["pipelineSources", "origens"],
+  ["pipelineSegments", "segmentos"],
+  ["pipelineSort", "ordem"],
+  ["pipelineClosed", "fechados"],
 ] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */

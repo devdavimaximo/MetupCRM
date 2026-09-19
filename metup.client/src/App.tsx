@@ -111,6 +111,7 @@ function App() {
       {view === "pipeline" && (
         <PipelinePage
           key={`pipeline-${navSeed}`}
+          user={session.user}
           onOpenCompany={openCompany}
           newDealIntent={newDealIntent}
         />

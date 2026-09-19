@@ -1,41 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react"
-import { ArrowUpRight, CalendarCheck, Loader2 } from "lucide-react"
+import { ArrowUpRight, Building2, CalendarCheck, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ChoiceChips } from "@/components/ui/choice-chips"
-import { Field } from "@/components/ui/field"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Eyebrow, SectionTitle } from "@/components/ui/page"
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Alert, InlineError, Skeleton } from "@/components/ui/states"
+import { Alert, Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
 import { getCompany } from "@/features/companies/api"
 import { activityTypeLabels } from "@/features/activities/activity-labels"
 import { ActivityTimeline } from "@/features/activities/ActivityTimeline"
 import { LogActivityForm } from "@/features/activities/LogActivityForm"
 import { listActivitiesByDeal, type Activity, type LogActivityResult } from "@/features/activities/api"
+import { MIN_SEARCH_LENGTH, search } from "@/features/search/api"
 import { formatDue } from "@/lib/format"
+import { useAsyncResource, useDebouncedValue } from "@/lib/hooks"
 import { formatLocalDate, todayLocal } from "@/lib/local-date"
-import { formatMoney, parseMoney } from "@/lib/money"
+import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { DealDrawerSection } from "./deal-section"
 import { DealForm } from "./DealForm"
 import { StageHistory } from "./StageHistory"
-import { closeDeal, getDeal, type Deal, type LostReason, type UserSummary } from "./api"
-import {
-  LOST_NOTE_MAX_LENGTH,
-  LOST_REASONS,
-  lostReasonLabels,
-  sourceLabels,
-  stageLabels,
-  statusLabels,
-} from "./stage-labels"
+import { CloseDealForm } from "./CloseDealForm"
+import type { CloseOutcome } from "./close-deal"
+import { getDeal, type Deal, type DealStage, type UserSummary } from "./api"
+import { lostReasonLabels, sourceLabels, stageLabels, statusLabels } from "./stage-labels"
 
 export type DealDrawerTarget =
   | { mode: "deal"; id: string; section?: DealDrawerSection }
-  | { mode: "new"; companyId: string; companyName: string }
+  /** Sem empresa (o "+ Novo negócio" do Pipeline), o drawer pede a empresa primeiro. */
+  | { mode: "new"; companyId?: string; companyName?: string; stage?: DealStage }
   | null
 
 type Props = {
@@ -52,7 +46,11 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [closingAs, setClosingAs] = useState<"won" | "lost" | null>(null)
+  const [closingAs, setClosingAs] = useState<CloseOutcome | null>(null)
+  // Empresa escolhida no próprio drawer, quando ele abre em "novo" sem empresa. Vale só para o alvo atual.
+  const [picked, setPicked] = useState<{ target: DealDrawerTarget; id: string; name: string } | null>(null)
+  const pickedCompany = picked && picked.target === target ? picked : null
+  const pickedCompanyId = pickedCompany?.id ?? null
 
   const [activities, setActivities] = useState<Activity[]>([])
   const [activitiesError, setActivitiesError] = useState<string | null>(null)
@@ -72,7 +70,14 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
     setIsLoading(true)
     setLoadError(null)
 
-    const companyId = target.mode === "deal" ? null : target.companyId
+    const companyId = target.mode === "deal" ? null : (target.companyId ?? pickedCompanyId)
+    if (target.mode === "new" && !companyId) {
+      setDeal(null)
+      setCompanyName("")
+      setContacts([])
+      setIsLoading(false)
+      return
+    }
 
     async function load() {
       try {
@@ -100,7 +105,7 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
 
     load()
     return () => controller.abort()
-  }, [target])
+  }, [target, pickedCompanyId])
 
   async function loadActivities(dealId: string, signal?: AbortSignal) {
     setActivitiesError(null)
@@ -123,9 +128,12 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
     setLastNextAction(result.nextAction)
   }
 
-  const openCompanyId = target?.mode === "deal" ? (deal?.companyId ?? null) : (target?.companyId ?? null)
+  const newCompanyId = target?.mode === "new" ? (target.companyId ?? pickedCompanyId) : null
+  const openCompanyId = target?.mode === "deal" ? (deal?.companyId ?? null) : newCompanyId
   const isNew = target?.mode === "new"
-  const isReady = !isLoading && !loadError && (isNew || deal !== null)
+  const needsCompany = isNew && newCompanyId === null
+  const initialStage = target?.mode === "new" ? target.stage : undefined
+  const isReady = !isLoading && !loadError && !needsCompany && (isNew || deal !== null)
   const value = deal ? (deal.amount ?? deal.ticket) : null
 
   // Chegada em "Registrar atividade": quando o formulário existe, leva a rolagem e o foco ao primeiro campo.
@@ -148,6 +156,11 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
           <SheetTitle>{isNew ? companyName || "Novo negócio" : companyName || "Negócio"}</SheetTitle>
           <SheetDescription asChild>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              {isNew && initialStage && (
+                <Badge variant="accent" dot>
+                  Nasce em {stageLabels[initialStage]}
+                </Badge>
+              )}
               {deal && (
                 <>
                   {deal.status === "Aberto" ? (
@@ -199,11 +212,25 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
                   <span className="text-faint">—</span>
                 )}
               </Stat>
+              {deal.status === "Perdido" && (
+                <Stat label="Motivo da perda" className="col-span-2 sm:col-span-4">
+                  {deal.lostReason ? (
+                    <span className="whitespace-normal">
+                      {lostReasonLabels[deal.lostReason]}
+                      {deal.lostNote && <span className="text-fg-muted"> · {deal.lostNote}</span>}
+                    </span>
+                  ) : (
+                    <span className="text-faint">Não registrado</span>
+                  )}
+                </Stat>
+              )}
             </dl>
           )}
         </SheetHeader>
 
         <SheetBody>
+          {needsCompany && <CompanyPicker onPick={(company) => setPicked({ target, ...company })} />}
+
           {isLoading && <DrawerSkeleton />}
 
           {loadError && (
@@ -236,10 +263,11 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
               <DrawerSection id="deal-data-heading" title="Dados do negócio">
                 <DealForm
                   key={deal?.id ?? "new"}
-                  companyId={target?.mode === "new" ? target.companyId : deal!.companyId}
+                  companyId={newCompanyId ?? deal!.companyId}
                   contacts={contacts}
                   users={users}
                   deal={deal}
+                  initialStage={initialStage}
                   onSaved={handleSaved}
                 />
               </DrawerSection>
@@ -320,44 +348,10 @@ function CloseSection({
   onClosed,
 }: {
   deal: Deal
-  closingAs: "won" | "lost" | null
-  onStartClosing: (value: "won" | "lost" | null) => void
+  closingAs: CloseOutcome | null
+  onStartClosing: (value: CloseOutcome | null) => void
   onClosed: (deal: Deal) => void
 }) {
-  const [amount, setAmount] = useState(() => String(deal.amount ?? deal.ticket ?? ""))
-  const [lostReason, setLostReason] = useState<LostReason | "">("")
-  const [lostNote, setLostNote] = useState("")
-  const [reasonError, setReasonError] = useState<string | null>(null)
-  const reasonRef = useRef<HTMLDivElement>(null)
-  const [isClosing, setIsClosing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function confirmClose() {
-    if (!closingAs) return
-    const won = closingAs === "won"
-
-    if (!won && lostReason === "") {
-      setReasonError("Escolha o motivo da perda.")
-      reasonRef.current?.querySelector<HTMLButtonElement>("[role=radio]")?.focus()
-      return
-    }
-
-    setIsClosing(true)
-    setError(null)
-
-    try {
-      const closed = won
-        ? await closeDeal(deal.id, true, parseMoney(amount))
-        : await closeDeal(deal.id, false, parseMoney(amount), lostReason || undefined, lostNote)
-      onClosed(closed)
-      onStartClosing(null)
-    } catch (err) {
-      setError(toMessage(err, "Não foi possível fechar o negócio."))
-    } finally {
-      setIsClosing(false)
-    }
-  }
-
   return (
     <DrawerSection id="deal-close-heading" title="Fechar negócio">
       {closingAs === null && (
@@ -381,94 +375,81 @@ function CloseSection({
       )}
 
       {closingAs !== null && (
-        <div
-          className={cn(
-            "flex flex-col gap-4 border-l-2 py-1 pl-4",
-            closingAs === "won" ? "border-success" : "border-danger"
-          )}
-        >
+        <div className={cn("flex flex-col gap-4 border-l-2 py-1 pl-4", closingAs === "won" ? "border-success" : "border-danger")}>
           <p className="text-base text-fg">
             {closingAs === "won" ? "Confirmar o negócio como ganho." : "Confirmar o negócio como perdido."}
           </p>
-          <Field
-            id="deal-closed-amount"
-            label={closingAs === "won" ? "Valor fechado" : "Valor final"}
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0,00"
-            hint={amount ? formatMoney(parseMoney(amount)) : "Sem valor definido."}
-            className="sm:max-w-xs"
+          <CloseDealForm
+            key={closingAs}
+            dealId={deal.id}
+            outcome={closingAs}
+            defaultAmount={deal.amount ?? deal.ticket}
+            onClosed={(closed) => {
+              onClosed(closed)
+              onStartClosing(null)
+            }}
+            onCancel={() => onStartClosing(null)}
           />
-
-          {closingAs === "lost" && (
-            <>
-              <div className="flex flex-col gap-2">
-                <p id="deal-lost-reason-label" className="text-sm font-medium text-fg">
-                  Motivo da perda
-                </p>
-                <div ref={reasonRef}>
-                  <ChoiceChips<LostReason>
-                    id="deal-lost-reason"
-                    label="Motivo da perda"
-                    value={lostReason}
-                    onChange={(value) => {
-                      setLostReason(value)
-                      setReasonError(null)
-                    }}
-                    invalid={Boolean(reasonError)}
-                    describedBy={reasonError ? "deal-lost-reason-error" : undefined}
-                    options={LOST_REASONS.map((reason) => ({ value: reason, label: lostReasonLabels[reason] }))}
-                  />
-                </div>
-                {reasonError && (
-                  <p id="deal-lost-reason-error" className="text-xs font-medium text-danger">
-                    {reasonError}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2 sm:max-w-md">
-                <div className="flex items-baseline justify-between gap-3">
-                  <Label htmlFor="deal-lost-note">Observação (opcional)</Label>
-                  <span
-                    className={cn("text-xs tabular", lostNote.length > LOST_NOTE_MAX_LENGTH - 50 ? "text-fg-muted" : "text-muted")}
-                    aria-live="polite"
-                  >
-                    {lostNote.length}/{LOST_NOTE_MAX_LENGTH}
-                  </span>
-                </div>
-                <Textarea
-                  id="deal-lost-note"
-                  rows={2}
-                  maxLength={LOST_NOTE_MAX_LENGTH}
-                  value={lostNote}
-                  onChange={(e) => setLostNote(e.target.value)}
-                  placeholder="Em uma linha: o que pesou na decisão."
-                />
-              </div>
-            </>
-          )}
-
-          {error && <InlineError>{error}</InlineError>}
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={closingAs === "won" ? "default" : "destructive"}
-              disabled={isClosing}
-              onClick={confirmClose}
-            >
-              {isClosing && <Loader2 className="animate-spin" aria-hidden="true" />}
-              Confirmar {closingAs === "won" ? "ganho" : "perda"}
-            </Button>
-            <Button type="button" size="sm" variant="ghost" disabled={isClosing} onClick={() => onStartClosing(null)}>
-              Cancelar
-            </Button>
-          </div>
         </div>
       )}
+    </DrawerSection>
+  )
+}
+
+/** Primeiro passo do "Novo negócio" sem empresa: a busca global, só empresas. */
+function CompanyPicker({ onPick }: { onPick: (company: { id: string; name: string }) => void }) {
+  const [query, setQuery] = useState("")
+  const term = useDebouncedValue(query.trim(), 250)
+  const results = useAsyncResource((signal) => search(term, signal), [term], { enabled: term.length >= MIN_SEARCH_LENGTH })
+  const companies = results.data?.companies ?? []
+
+  return (
+    <DrawerSection id="deal-company-heading" title="Empresa">
+      <label className="flex items-center gap-2 rounded-sm border border-line-soft bg-surface px-3 focus-within:border-line-strong">
+        <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
+        <span className="sr-only">Buscar empresa</span>
+        <input
+          type="search"
+          name="empresa-busca"
+          autoFocus
+          autoComplete="off"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Nome da empresa…"
+          className="h-10 min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-muted"
+        />
+      </label>
+      <div aria-live="polite" className="flex flex-col gap-1">
+        {term.length < MIN_SEARCH_LENGTH ? (
+          <p className="text-sm text-muted">Digite ao menos {MIN_SEARCH_LENGTH} letras. O negócio nasce ligado a uma empresa já cadastrada.</p>
+        ) : results.isLoading ? (
+          <p className="text-sm text-muted">Buscando…</p>
+        ) : results.error ? (
+          <p className="text-sm text-danger">Não foi possível buscar agora. Tente de novo.</p>
+        ) : companies.length === 0 ? (
+          <p className="text-sm text-muted">Nenhuma empresa com esse nome. Cadastre-a em Empresas primeiro.</p>
+        ) : (
+          <ul aria-label="Empresas encontradas" className="flex flex-col gap-1">
+            {companies.map((company) => (
+              <li key={company.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick({ id: company.id, name: company.name })}
+                  className="flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus-visible:focus-ring"
+                >
+                  <Building2 className="size-4 shrink-0 text-muted" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-base text-fg">{company.name}</span>
+                    <span className="block truncate text-sm text-muted">
+                      {[company.segment, company.city].filter(Boolean).join(" · ") || "Sem segmento"}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </DrawerSection>
   )
 }

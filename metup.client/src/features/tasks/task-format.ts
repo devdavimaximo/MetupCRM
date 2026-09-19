@@ -139,7 +139,8 @@ export type PageSize = (typeof PAGE_SIZES)[number]
 /** "todos" na chave `responsavel` = todos os responsáveis; um id = aquele usuário; vazio = eu. */
 export const ALL_OWNERS_URL = "todos"
 
-export type OwnerFilter = { kind: "mine" } | { kind: "all" } | { kind: "user"; userId: string }
+export type { OwnerFilter } from "@/components/OwnerPicker"
+import type { OwnerFilter } from "@/components/OwnerPicker"
 
 export type TasksUrlState = {
   tab: TaskScope

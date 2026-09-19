@@ -6,7 +6,7 @@ import { Field, SelectField } from "@/components/ui/field"
 import { InlineError } from "@/components/ui/states"
 import { toFieldErrors, toMessage } from "@/features/companies/form-errors"
 import { formatMoney, parseMoney } from "@/lib/money"
-import { createDeal, updateDeal, type Deal, type DealInput, type DealSource, type UserSummary } from "./api"
+import { createDeal, updateDeal, type Deal, type DealInput, type DealSource, type DealStage, type UserSummary } from "./api"
 import { sourceLabels } from "./stage-labels"
 
 type Props = {
@@ -17,6 +17,8 @@ type Props = {
   deal: Deal | null
   onSaved: (deal: Deal) => void
   onCancel?: () => void
+  /** Só no cadastro: a etapa em que o negócio nasce. */
+  initialStage?: DealStage
 }
 
 type FormState = {
@@ -50,7 +52,7 @@ function toInput(form: FormState): DealInput {
   }
 }
 
-export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }: Props) {
+export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel, initialStage }: Props) {
   const [form, setForm] = useState<FormState>(() => toFormState(deal))
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +70,7 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel }
 
     try {
       const input = toInput(form)
-      const saved = deal ? await updateDeal(deal.id, input) : await createDeal({ ...input, companyId })
+      const saved = deal ? await updateDeal(deal.id, input) : await createDeal({ ...input, companyId, initialStage })
       onSaved(saved)
     } catch (err) {
       const errors = toFieldErrors(err)

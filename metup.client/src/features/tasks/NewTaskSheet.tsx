@@ -46,6 +46,7 @@ export function NewTaskSheet({
   users,
   currentUserId,
   initialDeal = null,
+  stageFilter,
   onCreated,
 }: {
   open: boolean
@@ -55,6 +56,8 @@ export function NewTaskSheet({
   users: UserSummary[]
   currentUserId: string
   initialDeal?: NewTaskDeal | null
+  /** Só negócios nesta etapa na busca (o "Nova tarefa em negócio desta etapa" do Pipeline). */
+  stageFilter?: DealStage
   onCreated: (task: TaskItem) => void
 }) {
   return (
@@ -65,6 +68,7 @@ export function NewTaskSheet({
           users={users}
           currentUserId={currentUserId}
           initialDeal={initialDeal}
+          stageFilter={stageFilter}
           onClose={() => onOpenChange(false)}
           onCreated={onCreated}
         />
@@ -79,6 +83,7 @@ function NewTaskForm({
   users,
   currentUserId,
   initialDeal,
+  stageFilter,
   onClose,
   onCreated,
 }: {
@@ -86,6 +91,7 @@ function NewTaskForm({
   users: UserSummary[]
   currentUserId: string
   initialDeal: NewTaskDeal | null
+  stageFilter?: DealStage
   onClose: () => void
   onCreated: (task: TaskItem) => void
 }) {
@@ -108,8 +114,10 @@ function NewTaskForm({
     enabled: deal === null && term.length >= MIN_SEARCH_LENGTH,
   })
   // A busca global devolve negócios de qualquer status; tarefa só entra em negócio aberto.
-  const openDeals = (results.data?.deals ?? []).filter((hit) => hit.status === "Aberto")
-  const closedCount = (results.data?.deals.length ?? 0) - openDeals.length
+  const openDeals = (results.data?.deals ?? []).filter(
+    (hit) => hit.status === "Aberto" && (stageFilter === undefined || hit.stage === stageFilter)
+  )
+  const closedCount = (results.data?.deals ?? []).filter((hit) => hit.status !== "Aberto").length
 
   const [now] = useState(() => new Date())
   const shortcuts = dueShortcuts(now, "next-hour")
@@ -266,6 +274,9 @@ function NewTaskForm({
                     }}
                   />
                 </div>
+                {stageFilter && (
+                  <p className="text-xs text-muted">Só negócios em aberto na etapa {stageLabels[stageFilter]}.</p>
+                )}
                 <DealResults
                   term={term}
                   isLoading={results.isLoading}

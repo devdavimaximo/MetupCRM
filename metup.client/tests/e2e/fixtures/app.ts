@@ -1,6 +1,7 @@
 import { test as base, expect, type Page, type Route } from "@playwright/test"
 
 import * as data from "./data"
+import { BoardStore } from "./pipeline"
 import { NOW, TaskStore } from "./tasks"
 
 /** O endereço da API que o front chama (o mesmo padrão de `src/lib/api.ts`). */
@@ -39,6 +40,11 @@ export type ApiPath =
   | "taskCalendar"
   | "bulkTasks"
   | "logActivity"
+  | "board"
+  | "boardColumn"
+  | "changeStage"
+  | "closeDeal"
+  | "companyFilterOptions"
 
 const ROUTES: Record<ApiPath, string> = {
   overview: "**/api/dashboard/overview**",
@@ -62,6 +68,12 @@ const ROUTES: Record<ApiPath, string> = {
   bulkTasks: "**/api/tasks/bulk",
   // Registrada depois de `dealActivities`: o POST cai aqui; o GET volta (fallback) para a timeline fixa.
   logActivity: "**/api/deals/*/activities",
+  // Depois de `deal`/`company`: o último registrado vence, e `*` também casaria "board?…".
+  board: "**/api/deals/board?**",
+  boardColumn: "**/api/deals/board/column?**",
+  changeStage: "**/api/deals/*/stage**",
+  closeDeal: "**/api/deals/*/close",
+  companyFilterOptions: "**/api/companies/filter-options",
 }
 
 /** Resposta de erro no formato que o `apiFetch` sabe traduzir. */
@@ -91,6 +103,7 @@ function defaults(): Record<ApiPath, Handler | ResponseBody> {
     dealActivities: data.dealActivities,
     company: data.company,
     ...store.routes(),
+    ...new BoardStore().routes(),
     // O dashboard conclui a tarefa-1 da própria fila (não da loja): a resposta fixa de antes continua.
     completeTask: data.task({ status: "Concluida", completedAt: "2026-09-15T17:05:00Z" }),
   }
@@ -146,5 +159,15 @@ export async function gotoTasks(page: Page, query = "") {
   await expect(page.getByRole("heading", { level: 1, name: "Tarefas" })).toBeVisible()
 }
 
+/**
+ * Abre o Pipeline com o relógio em `NOW` (o mesmo "hoje" da `BoardStore`). `query` entra depois de
+ * `vista=pipeline` (ex.: `&etapa=Proposta`).
+ */
+export async function gotoPipeline(page: Page, query = "") {
+  await page.clock.setFixedTime(new Date(NOW))
+  await page.goto(`/?vista=pipeline${query}`)
+  await expect(page.getByRole("heading", { level: 1, name: "Pipeline Comercial" })).toBeVisible()
+}
+
 export const test = base
-export { expect, data, TaskStore }
+export { expect, data, TaskStore, BoardStore }

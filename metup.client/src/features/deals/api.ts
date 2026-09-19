@@ -262,6 +262,8 @@ export type DealInput = {
 
 export type CreateDealInput = DealInput & {
   companyId: string
+  /** Etapa em que o negócio nasce (o `+ Adicionar` da coluna). Sem ela, Prospect. */
+  initialStage?: DealStage
 }
 
 /** A organização nunca é enviada: o servidor a resolve pelo token. */
