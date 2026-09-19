@@ -35,7 +35,7 @@ public class RealtimeNotificationTests
         var deal = context.AddOpenDeal(context.SdrUserId, null, null, NowUtc.AddDays(-1));
         var publisher = new RecordingPublisher();
 
-        await new ChangeDealStageCommandHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), publisher)
+        await new ChangeDealStageCommandHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin), new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher)
             .Handle(new ChangeDealStageCommand(deal.Id, DealStage.Reuniao), TestContext.Current.CancellationToken);
 
         var notification = Assert.IsType<DealStageChangedNotification>(Assert.Single(publisher.Published));
@@ -57,7 +57,7 @@ public class RealtimeNotificationTests
         await new LogActivityCommandHandler(context.Db, admin, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher).Handle(
             new LogActivityCommand(deal.Id, null, ActivityType.Note, null, "nota", null, null, null, null), TestContext.Current.CancellationToken);
         await new CompleteTaskCommandHandler(context.Db, admin, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher).Handle(new CompleteTaskCommand(task.Id), TestContext.Current.CancellationToken);
-        await new CloseDealCommandHandler(context.Db, admin, publisher).Handle(new CloseDealCommand(deal.Id, true, 10_000m), TestContext.Current.CancellationToken);
+        await new CloseDealCommandHandler(context.Db, admin, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher).Handle(new CloseDealCommand(deal.Id, true, 10_000m), TestContext.Current.CancellationToken);
 
         Assert.Collection(
             publisher.Published,
@@ -89,7 +89,7 @@ public class RealtimeNotificationTests
         var publisher = new RecordingPublisher();
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
-            new ChangeDealStageCommandHandler(failing, seed.As(seed.AdminUserId, UserRole.Admin), publisher)
+            new ChangeDealStageCommandHandler(failing, seed.As(seed.AdminUserId, UserRole.Admin), new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc), publisher)
                 .Handle(new ChangeDealStageCommand(deal.Id, DealStage.Reuniao), TestContext.Current.CancellationToken));
 
         Assert.Empty(publisher.Published);

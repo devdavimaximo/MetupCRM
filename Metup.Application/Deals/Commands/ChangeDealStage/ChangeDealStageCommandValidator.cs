@@ -7,5 +7,9 @@ public class ChangeDealStageCommandValidator : AbstractValidator<ChangeDealStage
     public ChangeDealStageCommandValidator()
     {
         RuleFor(x => x.Stage).IsInEnum().WithMessage("Estágio inválido.");
+
+        RuleFor(x => x.ExpectedFromStage)
+            .IsInEnum().WithMessage("Estágio de origem inválido.")
+            .When(x => x.ExpectedFromStage.HasValue);
     }
 }

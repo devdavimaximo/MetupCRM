@@ -2,6 +2,7 @@ using FluentValidation;
 using Metup.Application.Activities.Common;
 using Metup.Application.Common.Behaviors;
 using Metup.Application.Deals.Analytics;
+using Metup.Application.Deals.Common;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         services.AddScoped<ActivityFeedReader>();
+        services.AddScoped<DealBoardReader>();
 
         // A leitura histórica do funil é a parte cara do dashboard e envelhece devagar: o cálculo
         // fica no provider, e o cache por escopo entra como decorador por cima dele.

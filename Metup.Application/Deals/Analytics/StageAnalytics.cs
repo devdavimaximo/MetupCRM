@@ -17,6 +17,22 @@ public readonly record struct StageAdvanceStats(
     decimal? AdvanceRate,
     double? AverageDaysInStage);
 
+/// <summary>Quantos negócios da coorte alcançaram a etapa (ou foram além) e a soma do valor deles.</summary>
+public readonly record struct CohortStageReach(DealStage Stage, int Reached, decimal Value);
+
+/// <summary>
+/// Funil de uma coorte de negócios (os criados num período). <see cref="Top"/> é o tamanho da
+/// coorte; <see cref="Won"/>, quantos dela chegaram a Ganho. <see cref="ConversionRate"/> é a
+/// conversão em coorte do pipeline — <c>null</c> com coorte vazia.
+/// </summary>
+public sealed record CohortFunnel(IReadOnlyList<CohortStageReach> Stages, int Top, int Won)
+{
+    public decimal? ConversionRate => Top == 0 ? null : (decimal)Won / Top;
+}
+
+/// <summary>Um negócio da coorte e o valor que ele soma no funil.</summary>
+public readonly record struct CohortDeal(Guid DealId, decimal Value);
+
 /// <summary>
 /// Leitura estatística do funil a partir do histórico de estágios, compartilhada entre o relatório
 /// de funil, o forecast e o dashboard — uma regra só, calculada num lugar só (seção 7 do CLAUDE.md).
@@ -114,6 +130,51 @@ public static class StageAnalytics
             })
             .OrderBy(s => s.Stage)
             .ToList();
+    }
+
+    /// <summary>As etapas do funil em coorte, na ordem: as sete ativas e Ganho.</summary>
+    public static readonly IReadOnlyList<DealStage> CohortFunnelStages =
+    [
+        DealStage.Prospect,
+        DealStage.PrimeiroContato,
+        DealStage.ContatoRealizado,
+        DealStage.Qualificacao,
+        DealStage.Reuniao,
+        DealStage.Proposta,
+        DealStage.Negociacao,
+        DealStage.Ganho,
+    ];
+
+    /// <summary>
+    /// Funil em coorte: para cada etapa, quantos negócios da coorte a alcançaram. "Alcançar" conta quem
+    /// passou por ela <b>ou além</b> — a etapa pulada conta, porque o negócio que foi direto para
+    /// Reunião também passou pelo topo do funil. Ganho alcança todas as etapas. Perdido não é etapa do
+    /// funil: o perdido conta até a etapa mais adiantada em que esteve. Todo negócio da coorte está no
+    /// topo, mesmo sem transição registrada.
+    /// </summary>
+    /// <param name="reaches">Transições dos negócios da coorte, já cortadas no instante da leitura.</param>
+    public static CohortFunnel CalculateCohortFunnel(IReadOnlyCollection<CohortDeal> cohort, IEnumerable<StageReach> reaches)
+    {
+        var reachesByDeal = reaches.ToLookup(r => r.DealId);
+        var furthestByDeal = cohort.ToDictionary(
+            d => d.DealId,
+            d =>
+            {
+                var stages = reachesByDeal[d.DealId].Select(r => r.ToStage).ToList();
+                return stages.Contains(DealStage.Ganho)
+                    ? DealStage.Ganho
+                    : stages.Where(s => !IsTerminal(s)).DefaultIfEmpty(DealStage.Prospect).Max();
+            });
+
+        var stages = CohortFunnelStages
+            .Select(stage =>
+            {
+                var reached = cohort.Where(d => furthestByDeal[d.DealId] >= stage).ToList();
+                return new CohortStageReach(stage, reached.Count, reached.Sum(d => d.Value));
+            })
+            .ToList();
+
+        return new CohortFunnel(stages, cohort.Count, stages[^1].Reached);
     }
 
     /// <summary>Tempo médio, em dias, entre entrar num estágio e sair dele.</summary>

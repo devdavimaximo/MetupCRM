@@ -25,6 +25,8 @@ public interface IApplicationDbContext
 
     DbSet<StageChange> StageChanges { get; }
 
+    DbSet<DealValueChange> DealValueChanges { get; }
+
     DbSet<Activity> Activities { get; }
 
     DbSet<TaskItem> Tasks { get; }

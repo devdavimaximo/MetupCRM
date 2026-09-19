@@ -35,7 +35,7 @@ public static class TaskProjections
             t.CreatedAt,
             t.CompletedAt,
             d.Stage,
-            d.Status == DealStatus.Aberto ? DealValue.EffectiveAmount(d.Amount, d.Ticket) : d.Amount,
-            d.Status == DealStatus.Aberto && DealValue.IsEstimated(d.Amount, d.Ticket),
+            DealValue.ForStatus(d.Status, d.Amount, d.Ticket),
+            DealValue.IsEstimatedForStatus(d.Status, d.Amount, d.Ticket),
             ct != null ? ct.Name : null);
 }

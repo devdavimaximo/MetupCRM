@@ -1,4 +1,4 @@
-import type { DealSource, DealStage, DealStatus } from "./api"
+import type { DealSource, DealStage, DealStatus, LostReason } from "./api"
 
 /** Estágios ativos do funil, na ordem em que o negócio percorre (seção 4.2 do CLAUDE.md). */
 export const ACTIVE_STAGES: DealStage[] = [
@@ -46,3 +46,19 @@ export const statusLabels: Record<DealStatus, string> = {
   Ganho: "Ganho",
   Perdido: "Perdido",
 }
+
+/** Motivo da perda — um novo valor no servidor sem rótulo aqui não compila. */
+export const lostReasonLabels: Record<LostReason, string> = {
+  Preco: "Preço",
+  SemInteresse: "Sem interesse",
+  Concorrente: "Concorrente",
+  SemResposta: "Sem resposta",
+  Timing: "Timing",
+  Outro: "Outro",
+}
+
+/** A ordem em que os motivos aparecem para escolha. */
+export const LOST_REASONS = Object.keys(lostReasonLabels) as LostReason[]
+
+/** Mesmo limite da observação da perda no servidor (`Deal.LostNoteMaxLength`). */
+export const LOST_NOTE_MAX_LENGTH = 280

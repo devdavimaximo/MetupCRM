@@ -3,10 +3,15 @@ using Metup.Application.Common.Exceptions;
 using Metup.Domain.Common.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Metup.Server.Middleware;
 
-public class GlobalExceptionHandler : IExceptionHandler
+/// <remarks>
+/// Serializa com as mesmas opções dos controllers (enum como texto): o corpo do 409 de
+/// <see cref="StaleStateException"/> carrega um DTO que o front lê com os mesmos tipos da resposta 200.
+/// </remarks>
+public class GlobalExceptionHandler(IOptions<JsonOptions> jsonOptions) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -40,6 +45,10 @@ public class GlobalExceptionHandler : IExceptionHandler
                 StatusCodes.Status409Conflict,
                 exception.Message,
                 null),
+            StaleStateException => (
+                StatusCodes.Status409Conflict,
+                exception.Message,
+                null),
             _ => (StatusCodes.Status500InternalServerError, "Erro interno do servidor", null),
         };
 
@@ -54,8 +63,13 @@ public class GlobalExceptionHandler : IExceptionHandler
             problemDetails.Extensions["errors"] = errors;
         }
 
+        if (exception is StaleStateException stale)
+        {
+            problemDetails.Extensions["current"] = stale.CurrentState;
+        }
+
         httpContext.Response.StatusCode = statusCode;
-        await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
+        await httpContext.Response.WriteAsJsonAsync(problemDetails, jsonOptions.Value.JsonSerializerOptions, cancellationToken);
 
         return true;
     }

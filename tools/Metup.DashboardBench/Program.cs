@@ -105,6 +105,7 @@ static async Task SeedAsync(string connectionString)
         await db.StageChanges.Where(s => s.OrganizationId == id).ExecuteDeleteAsync();
         await db.TaskReschedules.Where(r => r.OrganizationId == id).ExecuteDeleteAsync();
         await db.Tasks.Where(t => t.OrganizationId == id).ExecuteDeleteAsync();
+        await db.DealValueChanges.Where(v => v.OrganizationId == id).ExecuteDeleteAsync();
         await db.Deals.Where(d => d.OrganizationId == id).ExecuteDeleteAsync();
         await db.Contacts.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
         await db.Companies.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();

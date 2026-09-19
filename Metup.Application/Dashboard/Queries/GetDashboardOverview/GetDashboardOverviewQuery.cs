@@ -20,7 +20,7 @@ public record GetDashboardOverviewQuery(
 
 public class GetDashboardOverviewQueryValidator : AbstractValidator<GetDashboardOverviewQuery>
 {
-    public const int MaxDays = 366;
+    public const int MaxDays = LocalPeriod.MaxDays;
 
     public GetDashboardOverviewQueryValidator(IOrganizationClock organizationClock)
     {

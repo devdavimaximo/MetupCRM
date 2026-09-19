@@ -108,7 +108,8 @@ public sealed class DashboardOverviewTestContext : IDisposable
     public Deal AddClosedDeal(Guid ownerUserId, bool won, decimal? amount, DateTime createdAtUtc, DateTime closedAtUtc)
     {
         var deal = Build(ownerUserId, amount, null, createdAtUtc);
-        deal.Close(won, amount, ownerUserId, closedAtUtc);
+        // O valor já nasce igual ao fechado: nenhum histórico de valor extra no cenário.
+        deal.Close(won, amount, won ? null : LostReason.Outro, null, ownerUserId, closedAtUtc);
         return Persist(deal);
     }
 
@@ -116,33 +117,21 @@ public sealed class DashboardOverviewTestContext : IDisposable
         AddClosedDeal(ownerUserId, won: true, amount, createdAtUtc, closedAtUtc);
 
     /// <summary>
-    /// Mesmo estado inicial de <c>Deal.Create</c> — inclusive a transição de entrada no funil, sem a
-    /// qual não existiria histórico de estágio — mas com o <c>CreatedAt</c> escolhido pelo teste.
+    /// Pelo próprio <c>Deal.Create</c> — inclusive a transição de entrada no funil, sem a qual não
+    /// existiria histórico de estágio —, nascido no instante escolhido pelo teste.
     /// </summary>
-    private Deal Build(Guid ownerUserId, decimal? amount, decimal? ticket, DateTime createdAtUtc)
-    {
-        var deal = new Deal
-        {
-            OrganizationId = OrganizationId,
-            CompanyId = CompanyId,
-            OwnerUserId = ownerUserId,
-            Amount = amount,
-            Ticket = ticket,
-            CreatedAt = createdAtUtc,
-        };
-
-        deal.StageChanges.Add(new StageChange
-        {
-            OrganizationId = OrganizationId,
-            DealId = deal.Id,
-            FromStage = null,
-            ToStage = DealStage.Prospect,
-            ChangedAt = createdAtUtc,
-            ChangedByUserId = ownerUserId,
-        });
-
-        return deal;
-    }
+    private Deal Build(Guid ownerUserId, decimal? amount, decimal? ticket, DateTime createdAtUtc) =>
+        Deal.Create(
+            OrganizationId,
+            CompanyId,
+            contactId: null,
+            DealStage.Prospect,
+            DealSource.Sdr,
+            ownerUserId,
+            ticket,
+            amount,
+            ownerUserId,
+            createdAtUtc);
 
     /// <summary>O grafo inteiro é gravado de uma vez: com o negócio novo, o EF insere as transições junto.</summary>
     private Deal Persist(Deal deal)

@@ -43,6 +43,7 @@ if (previousOrg is not null)
     await db.Tasks.Where(t => t.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Activities.Where(a => a.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.StageChanges.Where(s => s.OrganizationId == orgId).ExecuteDeleteAsync();
+    await db.DealValueChanges.Where(v => v.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Deals.Where(d => d.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Contacts.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Companies.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
@@ -250,9 +251,16 @@ StageChange ChangeStage(Deal deal, DealStage stage, Guid byUserId, DateTime at)
 
 StageChange CloseDeal(Deal deal, bool won, decimal? amount, Guid byUserId, DateTime at)
 {
-    var change = deal.Close(won, amount, byUserId, at);
-    db.StageChanges.Add(change);
-    return change;
+    // Perdido sempre tem motivo; o sorteio espalha os motivos para a métrica "por que perdemos".
+    LostReason? lostReason = won ? null : Enum.GetValues<LostReason>()[rng.Next(Enum.GetValues<LostReason>().Length)];
+    var closure = deal.Close(won, amount, lostReason, null, byUserId, at);
+    db.StageChanges.Add(closure.StageChange);
+    if (closure.ValueChange is { } valueChange)
+    {
+        db.DealValueChanges.Add(valueChange);
+    }
+
+    return closure.StageChange;
 }
 
 Activity LogActivity(Deal deal, Guid contactId, ActivityType type, ActivityOutcome? outcome, string note, Guid authorId, DateTime at)

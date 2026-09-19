@@ -75,6 +75,15 @@ public class DealConfiguration : IEntityTypeConfiguration<Deal>
         builder.Property(d => d.ClosedAt)
             .HasColumnName("closed_at");
 
+        builder.Property(d => d.LostReason)
+            .HasColumnName("lost_reason")
+            .HasConversion<string>()
+            .HasMaxLength(20);
+
+        builder.Property(d => d.LostNote)
+            .HasColumnName("lost_note")
+            .HasMaxLength(Deal.LostNoteMaxLength);
+
         // Pipeline por estágio e carteira por responsável são as duas consultas mais frequentes.
         builder.HasIndex(d => new { d.OrganizationId, d.Stage });
         builder.HasIndex(d => new { d.OrganizationId, d.OwnerUserId });

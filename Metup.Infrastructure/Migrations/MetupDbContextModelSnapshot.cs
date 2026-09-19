@@ -316,6 +316,16 @@ namespace Metup.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("external_lead_id");
 
+                    b.Property<string>("LostNote")
+                        .HasMaxLength(280)
+                        .HasColumnType("character varying(280)")
+                        .HasColumnName("lost_note");
+
+                    b.Property<string>("LostReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("lost_reason");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid")
                         .HasColumnName("organization_id");
@@ -363,6 +373,56 @@ namespace Metup.Infrastructure.Migrations
                     b.HasIndex("OrganizationId", "Stage");
 
                     b.ToTable("deals", (string)null);
+                });
+
+            modelBuilder.Entity("Metup.Domain.Deals.DealValueChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_user_id");
+
+                    b.Property<Guid>("DealId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deal_id");
+
+                    b.Property<decimal?>("FromAmount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("from_amount");
+
+                    b.Property<decimal?>("FromTicket")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("from_ticket");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.Property<decimal?>("ToAmount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("to_amount");
+
+                    b.Property<decimal?>("ToTicket")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("to_ticket");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("DealId");
+
+                    b.HasIndex("OrganizationId", "DealId", "ChangedAt");
+
+                    b.ToTable("deal_value_changes", (string)null);
                 });
 
             modelBuilder.Entity("Metup.Domain.Deals.StageChange", b =>
@@ -749,6 +809,27 @@ namespace Metup.Infrastructure.Migrations
                     b.HasOne("Metup.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Metup.Domain.Deals.DealValueChange", b =>
+                {
+                    b.HasOne("Metup.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Metup.Domain.Deals.Deal", null)
+                        .WithMany()
+                        .HasForeignKey("DealId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Metup.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

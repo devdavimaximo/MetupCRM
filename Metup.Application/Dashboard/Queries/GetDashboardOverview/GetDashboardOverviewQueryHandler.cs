@@ -39,7 +39,7 @@ public class GetDashboardOverviewQueryHandler(
 
         // Dias inteiros no fuso da organização: a janela termina no fim do último dia local, para que
         // a venda das 23h caia no dia certo e não no seguinte.
-        var window = PeriodWindow.Resolve(request, clock.Today);
+        var window = LocalPeriod.Resolve(request.From, request.To, clock.Today, request.Days);
         var periodStartLocal = window.StartLocal;
         var periodEndLocal = window.EndLocal;
 
@@ -105,15 +105,9 @@ public class GetDashboardOverviewQueryHandler(
 
         // Receita prevista: fotografia do pipeline aberto ponderada pela probabilidade histórica de
         // cada etapa (mesma regra do relatório de forecast). Sem histórico não há previsão honesta.
-        var weightedByStage = pipeline
-            .Select(p => analytics.WinProbabilityByStage.GetValueOrDefault(p.Stage) is { } probability
-                ? p.Amount * probability
-                : (decimal?)null)
-            .ToList();
-
-        var weightedForecast = weightedByStage.Any(w => w.HasValue)
-            ? weightedByStage.Sum(w => w ?? 0m)
-            : (decimal?)null;
+        var weightedForecast = WeightedForecast.FromStageTotals(
+            pipeline.Select(p => (p.Stage, p.Amount)),
+            analytics.WinProbabilityByStage);
 
         var expectedToClose = ExpectedCloseForecast.Calculate(open, clock.Today, window.Days);
 
@@ -252,7 +246,7 @@ public class GetDashboardOverviewQueryHandler(
         DateOnly periodEndLocal,
         int days)
     {
-        var bucketDays = days <= 31 ? 1 : 7;
+        var bucketDays = SeriesBuckets.DaysPerBucket(days);
         var points = new List<RevenuePointDto>();
 
         for (var start = periodStartLocal; start <= periodEndLocal; start = start.AddDays(bucketDays))
@@ -274,24 +268,7 @@ public class GetDashboardOverviewQueryHandler(
             points.Add(new RevenuePointDto(bucketStart, wonInBucket.Sum(d => d.Amount ?? 0m), wonInBucket.Count, lost.Count(InBucket)));
         }
 
-        return (points, bucketDays == 1 ? "day" : "week");
-    }
-
-    /// <summary>
-    /// Recorte do período em datas locais da organização: o intervalo pedido (From/To, inclusive) ou
-    /// os últimos <c>Days</c> dias terminando hoje. A janela anterior tem a mesma quantidade de dias e
-    /// termina no dia imediatamente antes do início.
-    /// </summary>
-    internal sealed record PeriodWindow(DateOnly StartLocal, DateOnly EndLocal)
-    {
-        public int Days => EndLocal.DayNumber - StartLocal.DayNumber + 1;
-
-        public DateOnly PreviousStartLocal => StartLocal.AddDays(-Days);
-
-        public static PeriodWindow Resolve(GetDashboardOverviewQuery request, DateOnly today) =>
-            request is { From: { } from, To: { } to }
-                ? new PeriodWindow(from, to)
-                : new PeriodWindow(today.AddDays(-(request.Days - 1)), today);
+        return (points, SeriesBuckets.Granularity(days));
     }
 
     /// <summary>

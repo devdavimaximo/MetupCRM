@@ -14,6 +14,7 @@ public class UpdateDealCommandHandler(
     public async Task<DealDto> Handle(UpdateDealCommand request, CancellationToken cancellationToken)
     {
         var organizationId = currentUserService.RequireOrganizationId();
+        var userId = currentUserService.RequireUserId();
 
         var deal = await context.Deals
             .FirstOrDefaultAsync(d => d.Id == request.Id && d.OrganizationId == organizationId, cancellationToken)
@@ -41,11 +42,15 @@ public class UpdateDealCommandHandler(
         deal.ContactId = request.ContactId;
         deal.Source = request.Source;
         deal.OwnerUserId = request.OwnerUserId;
-        deal.Ticket = request.Ticket;
-        deal.Amount = request.Amount;
 
         var clock = await organizationClock.SnapshotAsync(cancellationToken);
         deal.SetExpectedCloseDate(request.ExpectedCloseDate, clock.LocalDateOf(deal.CreatedAt));
+
+        // Valor muda pelo domínio, que devolve o histórico só quando algo mudou de fato.
+        if (deal.ChangeValue(request.Amount, request.Ticket, userId, clock.UtcNow) is { } valueChange)
+        {
+            context.DealValueChanges.Add(valueChange);
+        }
 
         await context.SaveChangesAsync(cancellationToken);
 

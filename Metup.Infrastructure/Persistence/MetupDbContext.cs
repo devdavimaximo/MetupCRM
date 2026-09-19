@@ -26,6 +26,8 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options) : DbContex
 
     public DbSet<StageChange> StageChanges => Set<StageChange>();
 
+    public DbSet<DealValueChange> DealValueChanges => Set<DealValueChange>();
+
     public DbSet<Activity> Activities => Set<Activity>();
 
     public DbSet<TaskItem> Tasks => Set<TaskItem>();

@@ -48,6 +48,29 @@ public static class CurrentUserServiceExtensions
     }
 
     /// <summary>
+    /// Escopo do pipeline (quadro, resumo, evolução): a mesma decisão de <see cref="ResolveDealScope"/>,
+    /// com os parâmetros da tela. Sem pedido = os negócios do próprio usuário. <paramref name="allOwners"/>
+    /// pede a organização; <paramref name="ownerUserId"/> pede a carteira de outra pessoa (e
+    /// <paramref name="allOwners"/> vence se vierem os dois). Admin e Closer são atendidos; o SDR é
+    /// <b>rebaixado em silêncio</b> para os próprios negócios, como no dashboard. O que valeu volta
+    /// em <see cref="DealScopeFilter.OwnerUserId"/> (nulo = todos).
+    /// </summary>
+    public static DealScopeFilter ResolveDealOwnerScope(
+        this ICurrentUserService currentUserService,
+        Guid? ownerUserId,
+        bool allOwners)
+    {
+        var userId = currentUserService.RequireUserId();
+        var asksForOthers = allOwners || (ownerUserId is { } requested && requested != userId);
+
+        var scope = currentUserService.ResolveDealScope(asksForOthers ? DealScope.Organization : DealScope.Mine);
+
+        return scope.AppliedScope == DealScope.Organization && !allOwners && ownerUserId is { } owner
+            ? scope with { OwnerUserId = owner }
+            : scope;
+    }
+
+    /// <summary>
     /// Ponto único de decisão de "de quem são as tarefas" — listagem, resumo, criação e, nas próximas
     /// ondas, calendário e ações em massa. Sem pedido = as do próprio usuário. Pedir outro responsável
     /// (<paramref name="ownerUserId"/>) ou todos (<paramref name="allOwners"/>) só vale para

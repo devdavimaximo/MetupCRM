@@ -3,7 +3,10 @@ import { ArrowUpRight, CalendarCheck, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ChoiceChips } from "@/components/ui/choice-chips"
 import { Field } from "@/components/ui/field"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Eyebrow, SectionTitle } from "@/components/ui/page"
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Alert, InlineError, Skeleton } from "@/components/ui/states"
@@ -20,8 +23,15 @@ import { cn } from "@/lib/utils"
 import type { DealDrawerSection } from "./deal-section"
 import { DealForm } from "./DealForm"
 import { StageHistory } from "./StageHistory"
-import { closeDeal, getDeal, type Deal, type UserSummary } from "./api"
-import { sourceLabels, stageLabels, statusLabels } from "./stage-labels"
+import { closeDeal, getDeal, type Deal, type LostReason, type UserSummary } from "./api"
+import {
+  LOST_NOTE_MAX_LENGTH,
+  LOST_REASONS,
+  lostReasonLabels,
+  sourceLabels,
+  stageLabels,
+  statusLabels,
+} from "./stage-labels"
 
 export type DealDrawerTarget =
   | { mode: "deal"; id: string; section?: DealDrawerSection }
@@ -315,16 +325,30 @@ function CloseSection({
   onClosed: (deal: Deal) => void
 }) {
   const [amount, setAmount] = useState(() => String(deal.amount ?? deal.ticket ?? ""))
+  const [lostReason, setLostReason] = useState<LostReason | "">("")
+  const [lostNote, setLostNote] = useState("")
+  const [reasonError, setReasonError] = useState<string | null>(null)
+  const reasonRef = useRef<HTMLDivElement>(null)
   const [isClosing, setIsClosing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function confirmClose() {
     if (!closingAs) return
+    const won = closingAs === "won"
+
+    if (!won && lostReason === "") {
+      setReasonError("Escolha o motivo da perda.")
+      reasonRef.current?.querySelector<HTMLButtonElement>("[role=radio]")?.focus()
+      return
+    }
+
     setIsClosing(true)
     setError(null)
 
     try {
-      const closed = await closeDeal(deal.id, closingAs === "won", parseMoney(amount))
+      const closed = won
+        ? await closeDeal(deal.id, true, parseMoney(amount))
+        : await closeDeal(deal.id, false, parseMoney(amount), lostReason || undefined, lostNote)
       onClosed(closed)
       onStartClosing(null)
     } catch (err) {
@@ -376,6 +400,55 @@ function CloseSection({
             hint={amount ? formatMoney(parseMoney(amount)) : "Sem valor definido."}
             className="sm:max-w-xs"
           />
+
+          {closingAs === "lost" && (
+            <>
+              <div className="flex flex-col gap-2">
+                <p id="deal-lost-reason-label" className="text-sm font-medium text-fg">
+                  Motivo da perda
+                </p>
+                <div ref={reasonRef}>
+                  <ChoiceChips<LostReason>
+                    id="deal-lost-reason"
+                    label="Motivo da perda"
+                    value={lostReason}
+                    onChange={(value) => {
+                      setLostReason(value)
+                      setReasonError(null)
+                    }}
+                    invalid={Boolean(reasonError)}
+                    describedBy={reasonError ? "deal-lost-reason-error" : undefined}
+                    options={LOST_REASONS.map((reason) => ({ value: reason, label: lostReasonLabels[reason] }))}
+                  />
+                </div>
+                {reasonError && (
+                  <p id="deal-lost-reason-error" className="text-xs font-medium text-danger">
+                    {reasonError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 sm:max-w-md">
+                <div className="flex items-baseline justify-between gap-3">
+                  <Label htmlFor="deal-lost-note">Observação (opcional)</Label>
+                  <span
+                    className={cn("text-xs tabular", lostNote.length > LOST_NOTE_MAX_LENGTH - 50 ? "text-fg-muted" : "text-muted")}
+                    aria-live="polite"
+                  >
+                    {lostNote.length}/{LOST_NOTE_MAX_LENGTH}
+                  </span>
+                </div>
+                <Textarea
+                  id="deal-lost-note"
+                  rows={2}
+                  maxLength={LOST_NOTE_MAX_LENGTH}
+                  value={lostNote}
+                  onChange={(e) => setLostNote(e.target.value)}
+                  placeholder="Em uma linha: o que pesou na decisão."
+                />
+              </div>
+            </>
+          )}
 
           {error && <InlineError>{error}</InlineError>}
 

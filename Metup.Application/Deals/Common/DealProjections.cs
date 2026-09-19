@@ -51,5 +51,7 @@ public static class DealProjections
             d.StageChanges
                 .OrderBy(sc => sc.ChangedAt)
                 .Select(sc => new StageChangeDto(sc.Id, sc.FromStage, sc.ToStage, sc.ChangedAt, sc.ChangedByUserId))
-                .ToList()));
+                .ToList(),
+            d.LostReason,
+            d.LostNote));
 }

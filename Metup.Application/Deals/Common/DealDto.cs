@@ -10,7 +10,10 @@ public record StageChangeDto(
     DateTime ChangedAt,
     Guid ChangedByUserId);
 
-/// <summary>Ficha completa do negócio, com o histórico de transições de estágio.</summary>
+/// <summary>
+/// Ficha completa do negócio, com o histórico de transições de estágio. <c>LostReason</c>/<c>LostNote</c>
+/// só existem em negócio perdido (nulos nos perdidos anteriores ao campo).
+/// </summary>
 public record DealDto(
     Guid Id,
     Guid CompanyId,
@@ -27,7 +30,9 @@ public record DealDto(
     DealStatus Status,
     DateTime CreatedAt,
     DateTime? ClosedAt,
-    IReadOnlyList<StageChangeDto> StageHistory);
+    IReadOnlyList<StageChangeDto> StageHistory,
+    LostReason? LostReason,
+    string? LostNote);
 
 /// <summary>Linha do pipeline (kanban) e da listagem/busca de negócios.</summary>
 public record DealListItemDto(
