@@ -203,6 +203,16 @@ public class Deal : BaseEntity
     }
 
     /// <summary>
+    /// Passa o negócio para outro responsável. Só negócio <b>aberto</b>: a carteira de quem fechou é
+    /// histórico comercial (quem ganhou a venda), e trocá-la reescreveria o passado.
+    /// </summary>
+    public void Reassign(Guid newOwnerUserId)
+    {
+        EnsureOpen("O negócio já está fechado — não é possível reatribuir.");
+        OwnerUserId = newOwnerUserId;
+    }
+
+    /// <summary>
     /// Define (ou limpa) a previsão de fechamento. <paramref name="createdOnLocal"/> é o dia local da
     /// organização em que o negócio foi criado — o domínio não conhece fuso, então quem chama converte
     /// <see cref="CreatedAt"/> antes; comparar com a data UTC recusaria a previsão "para hoje" de um
@@ -236,11 +246,11 @@ public class Deal : BaseEntity
         return stageChange;
     }
 
-    private void EnsureOpen()
+    private void EnsureOpen(string message = "O negócio já está fechado — não é possível mudar o estágio.")
     {
         if (Status != DealStatus.Aberto)
         {
-            throw new DomainRuleException("O negócio já está fechado — não é possível mudar o estágio.");
+            throw new DomainRuleException(message);
         }
     }
 

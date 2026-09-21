@@ -6,10 +6,16 @@ import { useAsyncResource, useDebouncedValue } from "@/lib/hooks"
 import { toLocalDate, todayLocal } from "@/lib/local-date"
 import { useToasts } from "@/lib/toasts"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
+import { listActivityFeed } from "@/features/dashboard/api"
 import {
   changeDealStageForBoard,
   getDealBoard,
+  getDealBoardCard,
   getDealBoardColumn,
+  getPipelineEvolution,
+  getPipelineInsights,
+  getPipelineSummary,
+  reassignDealForBoard,
   staleDealOf,
   type Deal,
   type DealBoardCard,
@@ -35,8 +41,10 @@ import {
 } from "./board-state"
 import {
   parsePipelineUrl,
+  pipelinePeriodLabel,
   resolvePipelinePeriod,
   serializePipelineUrl,
+  type EvolutionMonths,
   type PipelinePeriodChoice,
 } from "./pipeline-url"
 import { ACTIVE_STAGES, stageLabels } from "./stage-labels"
@@ -55,6 +63,12 @@ export function activeBoardFilterCount(filters: BoardFilters) {
 
 /** Tempo do realce do cartão que voltou ao lugar (erro, 409 ou desfazer). */
 const RETURN_HIGHLIGHT_MS = 900
+
+/** Folga antes de recarregar KPIs, funil, insights e evolução — arrastos vêm em rajada. */
+const METRICS_DEBOUNCE_MS = 800
+
+/** Quantos eventos a faixa de Atividades Recentes mostra (item 19). */
+export const ACTIVITY_COUNT = 5
 
 const isActiveStage = (key: ColumnKey): key is DealStage => (ACTIVE_STAGES as string[]).includes(key)
 
@@ -86,6 +100,8 @@ export function useDealBoard(canSeeOthers: boolean) {
         segments: url.pipelineSegments,
         sort: url.pipelineSort,
         closed: url.pipelineClosed,
+        stalled: url.pipelineStalled,
+        months: url.pipelineMonths,
         legacySource: url.source,
       },
       canSeeOthers
@@ -97,6 +113,8 @@ export function useDealBoard(canSeeOthers: boolean) {
   const [filters, setFilters] = useState<BoardFilters>({ search: initial.search, sources: initial.sources, segments: initial.segments })
   const [sort, setSort] = useState<DealBoardSort>(initial.sort)
   const [closedTab, setClosedTab] = useState<DealBoardClosedGroup>(initial.closedTab)
+  const [stalledOnly, setStalledOnly] = useState(initial.stalledOnly)
+  const [months, setMonths] = useState<EvolutionMonths>(initial.months)
   const [today] = useState(todayLocal)
 
   const search = useDebouncedValue(filters.search.trim(), 300)
@@ -106,6 +124,7 @@ export function useDealBoard(canSeeOthers: boolean) {
     sources: filters.sources,
     segments: filters.segments,
     search: search || undefined,
+    stalledOnly: stalledOnly || undefined,
     from: range.from,
     to: range.to,
     sort,
@@ -141,10 +160,30 @@ export function useDealBoard(canSeeOthers: boolean) {
     },
   })
 
+  /**
+   * Os números da tela (item 9, 10, 17, 18 e 19). Cada um é um recurso à parte: o quadro nunca
+   * espera por eles, e um erro aqui não derruba o quadro. Os insights e o resumo seguem os mesmos
+   * filtros; a evolução não leva período (ela tem os próprios meses) nem o filtro de parados.
+   */
+  const summaryParams = { ...params, sort: undefined }
+  const summaryKey = JSON.stringify(summaryParams)
+  const summary = useAsyncResource((signal) => getPipelineSummary(params, signal), [summaryKey], { keepPreviousData: true })
+  const insights = useAsyncResource((signal) => getPipelineInsights(params, signal), [summaryKey], { keepPreviousData: true })
+  const evolution = useAsyncResource(
+    (signal) => getPipelineEvolution({ ...params, stalledOnly: undefined, months }, signal),
+    [summaryKey, months],
+    { keepPreviousData: true }
+  )
+  const activities = useAsyncResource(
+    (signal) => listActivityFeed({ ownerUserId: params.ownerUserId, pageSize: ACTIVITY_COUNT }, signal),
+    [params.ownerUserId ?? ""],
+    { keepPreviousData: true }
+  )
+
   // A URL é um sistema externo: o efeito só a sincroniza.
   useEffect(() => {
-    writeUrlState(serializePipelineUrl({ period, owner, sort, closedTab, ...filters }))
-  }, [period, owner, sort, closedTab, filters])
+    writeUrlState(serializePipelineUrl({ period, owner, sort, closedTab, stalledOnly, months, ...filters }))
+  }, [period, owner, sort, closedTab, stalledOnly, months, filters])
 
   const columnRef = (key: ColumnKey) => (isActiveStage(key) ? { stage: key } : { closed: key as DealBoardClosedGroup })
 
@@ -159,6 +198,23 @@ export function useDealBoard(canSeeOthers: boolean) {
       .catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setColumns])
+
+  /**
+   * Os números da tela depois de mover ou fechar um cartão: em silêncio e com folga, porque um
+   * arrasto costuma vir atrás do outro. Nunca mexe no quadro nem no cartão em voo.
+   */
+  const metricsTimer = useRef<number | undefined>(undefined)
+  const revalidateMetrics = useCallback(() => {
+    window.clearTimeout(metricsTimer.current)
+    metricsTimer.current = window.setTimeout(() => {
+      summary.reload({ silent: true })
+      insights.reload({ silent: true })
+      evolution.reload({ silent: true })
+      activities.reload({ silent: true })
+    }, METRICS_DEBOUNCE_MS)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => () => window.clearTimeout(metricsTimer.current), [])
 
   const mutate = useCallback(
     (change: (current: BoardColumns) => TransferResult) => {
@@ -217,6 +273,7 @@ export function useDealBoard(canSeeOthers: boolean) {
     try {
       const updated = await changeDealStageForBoard(card.id, toStage, { expectedFromStage: fromStage })
       mutate((current) => ({ columns: replaceCard(current, updated), revalidate: [] }))
+      revalidateMetrics()
       if (options.isUndo) {
         toasts.show({ message: `Movimento desfeito. ${card.companyName} voltou para ${stageLabels[toStage]}.` })
       } else {
@@ -273,6 +330,7 @@ export function useDealBoard(canSeeOthers: boolean) {
     const closedDay = deal.closedAt ? toLocalDate(new Date(deal.closedAt)) : null
     const inPeriod = closedDay !== null && closedDay >= range.from && closedDay <= range.to
     const outcome = group === "won" ? "ganho" : "perdido"
+    revalidateMetrics()
 
     if (inPeriod) {
       mutate((columns) => transferCard(columns, card, columnKeyOf(card), group, closed))
@@ -310,24 +368,67 @@ export function useDealBoard(canSeeOthers: boolean) {
     }
   }
 
-  /** "Ver todos (N)": nesta onda, carrega o resto na própria coluna, página a página. */
-  async function loadAll(key: ColumnKey) {
-    // Teto de segurança: 50 páginas de 20 são 1.000 cartões numa coluna.
-    for (let i = 0; i < 50; i++) {
-      if (!(await loadMore(key))) return
+  /**
+   * Troca o responsável (item 15). Otimista: o cartão muda na hora e o servidor devolve o cartão
+   * atualizado. Se o novo dono sai do filtro de responsável, o cartão deixa o quadro.
+   */
+  async function reassignDeal(card: DealBoardCard, ownerUserId: string, ownerUserName: string) {
+    if (card.status !== "Aberto" || card.ownerUserId === ownerUserId || pendingIds.has(card.id)) return
+    const key = columnKeyOf(card)
+
+    mutate((current) => ({ columns: replaceCard(current, { ...card, ownerUserId, ownerUserName }), revalidate: [] }))
+    setPending(card.id, true)
+
+    try {
+      const updated = await reassignDealForBoard(card.id, ownerUserId)
+      const leavesFilter = owner.kind === "user" && owner.userId !== ownerUserId
+      if (leavesFilter) {
+        mutate((current) => removeCard(current, card, key))
+        toasts.show({ message: `${card.companyName} agora é de ${ownerUserName} e saiu deste filtro.` })
+      } else {
+        mutate((current) => ({ columns: replaceCard(current, updated), revalidate: [] }))
+        toasts.show({ message: `${card.companyName} agora é de ${ownerUserName}.` })
+      }
+      revalidateMetrics()
+    } catch (error) {
+      mutate((current) => ({ columns: replaceCard(current, card), revalidate: [] }))
+      toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível reatribuir o negócio.") })
+      flagReturned(card.id)
+    } finally {
+      setPending(card.id, false)
     }
+  }
+
+  /** Só o cartão, depois de registrar atividade ou criar tarefa — o quadro não recarrega. */
+  async function revalidateCard(id: string) {
+    try {
+      const card = await getDealBoardCard(id)
+      mutate((current) => ({ columns: replaceCard(current, card), revalidate: [] }))
+    } catch {
+      // O cartão fica como está: nada do que foi registrado se perde por isso.
+    }
+    revalidateMetrics()
   }
 
   return {
     period,
+    periodLabel: pipelinePeriodLabel(period),
     owner,
     filters,
     sort,
     closedTab,
+    stalledOnly,
+    months,
     range,
     today,
     columns,
     board,
+    /** Os parâmetros vigentes — a lista lateral do "Ver todos" usa os mesmos. */
+    params,
+    summary,
+    insights,
+    evolution,
+    activities,
     isFirstLoad: board.isLoading && columns === null,
     isReloading: board.isLoading && columns !== null,
     loadingMore,
@@ -342,12 +443,18 @@ export function useDealBoard(canSeeOthers: boolean) {
     clearFilters: () => setFilters(NO_FILTERS),
     setSort,
     setClosedTab,
+    setStalledOnly,
+    setMonths,
     moveDeal,
+    reassignDeal,
     applyClosed,
+    revalidateCard,
     loadMore,
-    loadAll,
     /** Depois de uma ação fora do quadro (drawer, novo negócio): recarrega sem esqueleto. */
-    revalidate: () => board.reload({ silent: true }),
+    revalidate: () => {
+      board.reload({ silent: true })
+      revalidateMetrics()
+    },
   }
 }
 

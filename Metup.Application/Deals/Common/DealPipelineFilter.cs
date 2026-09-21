@@ -8,13 +8,16 @@ namespace Metup.Application.Deals.Common;
 /// <see cref="AllOwners"/> são <b>pedidos</b>: quem decide o que o usuário enxerga é
 /// <c>ResolveDealOwnerScope</c>. <see cref="Segments"/> casa com <c>Company.Segment</c> exatamente;
 /// <see cref="Search"/> procura no nome da empresa e do contato, sem acento nem caixa.
+/// <see cref="StalledOnly"/> restringe aos negócios abertos parados (<c>StalledDealRule</c> com o
+/// limite da organização) — nenhuma definição nova de "parado".
 /// </summary>
 public sealed record DealPipelineFilter(
     Guid? OwnerUserId = null,
     bool AllOwners = false,
     IReadOnlyList<DealSource>? Sources = null,
     IReadOnlyList<string>? Segments = null,
-    string? Search = null);
+    string? Search = null,
+    bool StalledOnly = false);
 
 /// <summary>Ordenação dentro da coluna do quadro. Sempre com desempate por <c>Id</c>.</summary>
 public enum DealBoardSort

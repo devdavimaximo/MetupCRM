@@ -342,6 +342,8 @@ export const deal: Deal = {
     { id: "sc-1", fromStage: null, toStage: "Prospect", changedAt: "2026-08-20T12:00:00Z", changedByUserId: "u-1" },
     { id: "sc-2", fromStage: "Prospect", toStage: "Negociacao", changedAt: "2026-09-09T12:00:00Z", changedByUserId: "u-1" },
   ],
+  value: dealsPage.items[0].amount ?? dealsPage.items[0].ticket,
+  valueIsEstimated: dealsPage.items[0].amount === null && dealsPage.items[0].ticket !== null,
   lostReason: null,
   lostNote: null,
 }

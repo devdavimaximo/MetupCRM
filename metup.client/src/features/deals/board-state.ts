@@ -62,6 +62,15 @@ export function columnKeyOf(card: Pick<DealBoardCard, "status" | "stage">): Colu
   return card.stage
 }
 
+/**
+ * Teto de cartões numa coluna do quadro: acima disso a rolagem infinita para e o rodapé leva à
+ * lista lateral (item 16 da PL3). 100 é o ponto em que rolar deixa de ser mais rápido que buscar.
+ */
+export const COLUMN_CARD_CAP = 100
+
+/** A coluna só carrega mais uma página se o servidor tem mais e o teto ainda não foi alcançado. */
+export const canLoadMoreInColumn = (loaded: number, hasMore: boolean) => hasMore && loaded < COLUMN_CARD_CAP
+
 const valueOf = (card: DealBoardCard) => card.value ?? 0
 
 /** Evita "−0,00" e resto de ponto flutuante na soma de centavos. */

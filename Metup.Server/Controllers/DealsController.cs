@@ -2,6 +2,7 @@ using Metup.Application.Common.Models;
 using Metup.Application.Deals.Commands.ChangeDealStage;
 using Metup.Application.Deals.Commands.CloseDeal;
 using Metup.Application.Deals.Commands.CreateDeal;
+using Metup.Application.Deals.Commands.ReassignDeal;
 using Metup.Application.Deals.Commands.UpdateDeal;
 using Metup.Application.Deals.Common;
 using Metup.Application.Deals.Queries.GetDealBoard;
@@ -9,6 +10,7 @@ using Metup.Application.Deals.Queries.GetDealBoardCard;
 using Metup.Application.Deals.Queries.GetDealBoardColumn;
 using Metup.Application.Deals.Queries.GetDealById;
 using Metup.Application.Deals.Queries.GetPipelineEvolution;
+using Metup.Application.Deals.Queries.GetPipelineInsights;
 using Metup.Application.Deals.Queries.GetPipelineSummary;
 using Metup.Application.Deals.Queries.ListDeals;
 using Metup.Domain.Deals;
@@ -73,6 +75,25 @@ public class DealsController(ISender sender) : ControllerBase
             : Ok(deal);
     }
 
+    /// <summary>
+    /// Passa o negócio para outro responsável (só Admin/Closer, só negócio aberto).
+    /// <c>?view=card</c> devolve o cartão do quadro, como na mudança de etapa. Nenhum evento novo
+    /// para o n8n.
+    /// </summary>
+    [HttpPost("{id:guid}/reassign")]
+    public async Task<IActionResult> Reassign(
+        Guid id,
+        ReassignDealRequest request,
+        [FromQuery] DealResponseView view = DealResponseView.Full,
+        CancellationToken cancellationToken = default)
+    {
+        var deal = await sender.Send(new ReassignDealCommand(id, request.OwnerUserId), cancellationToken);
+
+        return view == DealResponseView.Card
+            ? Ok(await sender.Send(new GetDealBoardCardQuery(id), cancellationToken))
+            : Ok(deal);
+    }
+
     [HttpPost("{id:guid}/close")]
     public async Task<ActionResult<DealDto>> Close(
         Guid id,
@@ -96,11 +117,12 @@ public class DealsController(ISender sender) : ControllerBase
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
         [FromQuery] bool allOwners = false,
+        [FromQuery] bool stalledOnly = false,
         [FromQuery] DealBoardSort sort = DealBoardSort.Stalled,
         [FromQuery] int perColumn = DealBoardReader.DefaultPerColumn,
         CancellationToken cancellationToken = default)
     {
-        var filter = new DealPipelineFilter(ownerUserId, allOwners, sources, segments, search);
+        var filter = new DealPipelineFilter(ownerUserId, allOwners, sources, segments, search, stalledOnly);
         return Ok(await sender.Send(new GetDealBoardQuery(filter, from, to, sort, perColumn), cancellationToken));
     }
 
@@ -116,12 +138,13 @@ public class DealsController(ISender sender) : ControllerBase
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
         [FromQuery] bool allOwners = false,
+        [FromQuery] bool stalledOnly = false,
         [FromQuery] DealBoardSort sort = DealBoardSort.Stalled,
         [FromQuery] int page = 1,
         [FromQuery] int perColumn = DealBoardReader.DefaultPerColumn,
         CancellationToken cancellationToken = default)
     {
-        var filter = new DealPipelineFilter(ownerUserId, allOwners, sources, segments, search);
+        var filter = new DealPipelineFilter(ownerUserId, allOwners, sources, segments, search, stalledOnly);
         var query = new GetDealBoardColumnQuery(filter, stage, closed, from, to, sort, page, perColumn);
         return Ok(await sender.Send(query, cancellationToken));
     }
@@ -142,6 +165,25 @@ public class DealsController(ISender sender) : ControllerBase
         return Ok(await sender.Send(new GetPipelineSummaryQuery(filter, from, to), cancellationToken));
     }
 
+    /// <summary>
+    /// Diagnóstico dos últimos 30 dias terminando na referência do período: maior volume, melhor
+    /// passagem entre etapas e oportunidades em risco (parados de Qualificação em diante).
+    /// </summary>
+    [HttpGet("pipeline-insights")]
+    public async Task<ActionResult<PipelineInsightsDto>> PipelineInsights(
+        [FromQuery] Guid? ownerUserId,
+        [FromQuery] DealSource[]? sources,
+        [FromQuery] string[]? segments,
+        [FromQuery] string? search,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] bool allOwners = false,
+        CancellationToken cancellationToken = default)
+    {
+        var filter = new DealPipelineFilter(ownerUserId, allOwners, sources, segments, search);
+        return Ok(await sender.Send(new GetPipelineInsightsQuery(filter, from, to), cancellationToken));
+    }
+
     /// <summary>Pipeline total e receita prevista no fim de cada mês local (<c>months</c> = 3, 6 ou 12).</summary>
     [HttpGet("pipeline-evolution")]
     public async Task<ActionResult<PipelineEvolutionDto>> PipelineEvolution(
@@ -156,6 +198,14 @@ public class DealsController(ISender sender) : ControllerBase
         var filter = new DealPipelineFilter(ownerUserId, allOwners, sources, segments, search);
         return Ok(await sender.Send(new GetPipelineEvolutionQuery(filter, months), cancellationToken));
     }
+
+    /// <summary>
+    /// Um cartão do quadro. Serve para o quadro atualizar só aquele cartão depois de uma ação fora
+    /// dele (registrar atividade, criar tarefa), sem recarregar a coluna inteira.
+    /// </summary>
+    [HttpGet("{id:guid}/card")]
+    public async Task<ActionResult<DealBoardCardDto>> Card(Guid id, CancellationToken cancellationToken) =>
+        Ok(await sender.Send(new GetDealBoardCardQuery(id), cancellationToken));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<DealDto>> GetById(Guid id, CancellationToken cancellationToken) =>
@@ -186,6 +236,8 @@ public record UpdateDealRequest(
 
 /// <param name="ExpectedFromStage">Etapa em que o client viu o negócio (opcional) — protege o arrasto concorrente.</param>
 public record ChangeDealStageRequest(DealStage Stage, DealStage? ExpectedFromStage = null);
+
+public record ReassignDealRequest(Guid OwnerUserId);
 
 /// <param name="LostReason">Obrigatório ao fechar como perdido; proibido no ganho.</param>
 public record CloseDealRequest(bool Won, decimal? ClosedAmount, LostReason? LostReason = null, string? LostNote = null);

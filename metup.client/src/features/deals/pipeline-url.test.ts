@@ -19,6 +19,8 @@ const empty: RawPipelineUrl = {
   segments: "",
   sort: "",
   closed: "",
+  stalled: "",
+  months: "",
   legacySource: "",
 }
 const raw = (patch: Partial<RawPipelineUrl>) => ({ ...empty, ...patch })

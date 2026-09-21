@@ -76,15 +76,25 @@ test.describe("quadro", () => {
     await expect(page).toHaveURL(/fechados=perdidos/)
   })
 
-  test("carregar mais: 20 por coluna, e 'Ver todos' traz o resto na própria coluna", async ({ page }) => {
+  test("a coluna carrega 20 e 'Ver todos' abre a etapa inteira na lista lateral", async ({ page }) => {
     const store = await open(page)
     const prospect = column(page, "Prospect")
     await expect(prospect.locator("[data-deal-card]")).toHaveCount(20)
 
     await prospect.getByRole("button", { name: "Ver todos (30)" }).click()
-    await expect(prospect.locator("[data-deal-card]")).toHaveCount(30)
-    await expect(prospect.getByRole("button", { name: /Ver todos/ })).toHaveCount(0)
-    expect(store.columnRequests.some((p) => p.get("stage") === "Prospect" && p.get("page") === "2")).toBe(true)
+
+    // A lista é do servidor, paginada, e o quadro continua atrás dela.
+    const list = page.getByRole("dialog", { name: "Prospect" })
+    await expect(list).toContainText("30 negócios")
+    await expect(list.getByRole("row")).toHaveCount(26) // 25 da página + o cabeçalho
+    await expect(page).toHaveURL(/lista=Prospect/)
+    expect(store.columnRequests.some((p) => p.get("stage") === "Prospect" && p.get("perColumn") === "25")).toBe(true)
+
+    await list.getByRole("button", { name: "Próxima" }).click()
+    await expect.poll(() => store.columnRequests.at(-1)?.get("page")).toBe("2")
+
+    await page.keyboard.press("Escape")
+    await expect(page).not.toHaveURL(/lista=/)
   })
 
   test("rolagem infinita: chegar ao fim da coluna carrega a próxima página", async ({ page }) => {
@@ -207,6 +217,9 @@ test.describe("mover de etapa", () => {
     await cardButton(page, "Ótica Lumen").focus()
     await page.keyboard.press("Space")
     await expect(live).toContainText("Negócio Ótica Lumen pego. Coluna Qualificação, 4 de 8.")
+    // O sensor do dnd-kit só assina o teclado no tique seguinte ao Espaço: sem esta folga, a
+    // primeira seta se perde.
+    await page.waitForTimeout(100)
     await page.keyboard.press("ArrowRight")
     await expect(live).toContainText("Coluna Reunião, 5 de 8.")
     await page.keyboard.press("Space")
@@ -220,6 +233,10 @@ test.describe("mover de etapa", () => {
     const store = await open(page)
     await cardButton(page, "Ótica Lumen").focus()
     await page.keyboard.press("Space")
+    await expect(page.locator('[id^="DndLiveRegion"]')).toContainText("pego")
+    // O sensor do dnd-kit só assina o teclado no tique seguinte ao Espaço: sem esta folga, a
+    // primeira seta se perde.
+    await page.waitForTimeout(100)
     await page.keyboard.press("ArrowRight")
     await page.keyboard.press("Escape")
     await expect(page.locator('[id^="DndLiveRegion"]')).toContainText("Movimento cancelado")
@@ -358,5 +375,136 @@ test.describe("novo negócio", () => {
     await open(page)
     await page.getByRole("button", { name: "Novo negócio" }).click()
     await expect(page.getByRole("dialog").getByRole("searchbox", { name: "Buscar empresa" })).toBeVisible()
+  })
+})
+
+test.describe("KPIs e funil", () => {
+  test("cinco KPIs com valor compacto, variação e o valor inteiro no title", async ({ page }) => {
+    const store = await open(page)
+    const kpi = page.getByRole("button", { name: /Pipeline total/ }).first()
+
+    await expect(page.getByText("R$ 2,86 mi")).toBeVisible()
+    await expect(page.getByText("R$ 2,86 mi")).toHaveAttribute("title", /2\.860\.000/)
+    await expect(page.getByText("Negócios em aberto")).toBeVisible()
+    await expect(page.getByText("Taxa de conversão")).toBeVisible()
+    await expect(kpi).toBeVisible()
+
+    // O resumo segue os mesmos filtros do quadro.
+    expect(store.summaryRequests.length).toBeGreaterThan(0)
+  })
+
+  test("o × oculta o cartão e 'Restaurar cards' traz de volta", async ({ page }) => {
+    test.skip(isMobile(page), "No celular os KPIs são carrossel; o acabamento é da PL4.")
+    await open(page)
+
+    await page.getByRole("button", { name: "Ocultar o indicador Ticket médio" }).click()
+    await expect(page.getByText("Ticket médio")).toHaveCount(0)
+
+    await page.getByRole("button", { name: /Restaurar cards/ }).click()
+    await expect(page.getByText("Ticket médio")).toBeVisible()
+  })
+
+  test("clicar numa etapa do funil leva o quadro até a coluna", async ({ page }) => {
+    test.skip(isMobile(page), "No celular a coluna vira aba; o destaque é outro.")
+    await open(page)
+    const funnel = page.getByTestId("pipeline-funnel")
+    await expect(funnel).toContainText("Do total de 342 prospects")
+
+    await funnel.getByRole("button", { name: /^Proposta:/ }).click()
+    await expect(column(page, "Proposta")).toBeInViewport()
+  })
+})
+
+test.describe("menu ⋮ completo", () => {
+  /** No celular só uma coluna aparece: a aba da etapa vem antes do menu. */
+  async function openMenu(page: Page, company: string, stage = "Qualificação") {
+    if (isMobile(page)) await page.getByRole("tab", { name: new RegExp(stage) }).click()
+    await card(page, company).getByRole("button", { name: `Ações de ${company}` }).click()
+  }
+
+  test("registrar atividade abre o formulário e revalida só o cartão", async ({ page }) => {
+    const store = await open(page)
+    await openMenu(page, "Ótica Lumen")
+    await page.getByRole("menuitem", { name: "Registrar atividade" }).click()
+
+    await expect(page.getByRole("dialog", { name: "Registrar atividade" })).toContainText("Ótica Lumen")
+    // O quadro não recarrega por causa do registro: só o cartão é revalidado depois de salvar.
+    expect(store.boardRequests.length).toBeLessThanOrEqual(2)
+  })
+
+  test("nova tarefa abre a ficha já com o negócio escolhido", async ({ page }) => {
+    await open(page)
+    await openMenu(page, "Ótica Lumen")
+    await page.getByRole("menuitem", { name: "Nova tarefa" }).click()
+
+    await expect(page.getByRole("dialog")).toContainText("Ótica Lumen")
+  })
+
+  test("marcar como ganho abre o mesmo diálogo de fechamento", async ({ page }) => {
+    await open(page)
+    await openMenu(page, "Ótica Lumen")
+    await page.getByRole("menuitem", { name: "Marcar como ganho" }).click()
+
+    await expect(page.getByRole("dialog")).toContainText("Valor fechado")
+  })
+
+  test("reatribuir troca o responsável no cartão e chama o servidor", async ({ page }) => {
+    const store = await open(page)
+    await openMenu(page, "Ótica Lumen")
+    await page.getByRole("menuitem", { name: "Reatribuir responsável" }).click()
+    await page.getByRole("dialog", { name: "Reatribuir responsável" }).getByRole("button", { name: "Ana Prado" }).click()
+
+    await expect(card(page, "Ótica Lumen")).toContainText("Ana Prado")
+    await expect.poll(() => store.reassignRequests.at(-1)).toMatchObject({ id: "q-2", ownerUserId: "u-2" })
+  })
+
+  test("abrir empresa sai do quadro para a ficha da empresa", async ({ page }) => {
+    await open(page)
+    await openMenu(page, "Ótica Lumen")
+    await page.getByRole("menuitem", { name: "Abrir empresa" }).click()
+
+    await expect(page).toHaveURL(/empresa=/)
+  })
+})
+
+test.describe("faixa inferior", () => {
+  test("insights trazem as três frases e 'Ver lista' filtra por parados", async ({ page }) => {
+    const store = await open(page)
+    const insights = page.getByRole("region", { name: "Insights do Pipeline" })
+
+    await expect(insights).toContainText("Qualificação recebeu 18 negócios")
+    await expect(insights).toContainText("De Qualificação para Reunião, 80% avançam")
+    await expect(insights).toContainText("3 negócios parados há mais de 7 dias")
+
+    await insights.getByRole("button", { name: "Ver lista" }).click()
+    await expect(page).toHaveURL(/parados=1/)
+    await expect.poll(() => store.boardRequests.at(-1)?.get("stalledOnly")).toBe("true")
+    await expect(page.getByText("Só negócios parados")).toBeVisible()
+  })
+
+  test("'Ver detalhes' do maior volume leva à coluna da etapa", async ({ page }) => {
+    test.skip(isMobile(page), "No celular a coluna vira aba.")
+    await open(page)
+    await page.getByRole("region", { name: "Insights do Pipeline" }).getByRole("button", { name: "Ver detalhes" }).first().click()
+    await expect(column(page, "Qualificacao")).toBeInViewport()
+  })
+
+  test("o seletor de meses da evolução vai ao servidor e à URL", async ({ page }) => {
+    const store = await open(page)
+    const evolution = page.getByRole("region", { name: "Evolução do Pipeline" })
+    await expect.poll(() => store.evolutionRequests.at(-1)).toBe(6)
+
+    await evolution.getByRole("radio", { name: "Últimos 12 meses" }).click()
+    await expect.poll(() => store.evolutionRequests.at(-1)).toBe(12)
+    await expect(page).toHaveURL(/evolucao=12/)
+  })
+
+  test("atividades recentes mostram 5 eventos e 'Ver todas' abre o feed", async ({ page }) => {
+    await open(page)
+    const activities = page.getByRole("region", { name: "Atividades Recentes" })
+    await expect(activities.getByRole("listitem")).toHaveCount(5)
+
+    await activities.getByRole("button", { name: "Ver todas" }).click()
+    await expect(page.getByRole("dialog", { name: /Atividade/i })).toBeVisible()
   })
 })

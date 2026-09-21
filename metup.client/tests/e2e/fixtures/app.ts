@@ -44,6 +44,11 @@ export type ApiPath =
   | "boardColumn"
   | "changeStage"
   | "closeDeal"
+  | "reassignDeal"
+  | "dealCard"
+  | "pipelineSummary"
+  | "pipelineInsights"
+  | "pipelineEvolution"
   | "companyFilterOptions"
 
 const ROUTES: Record<ApiPath, string> = {
@@ -71,6 +76,11 @@ const ROUTES: Record<ApiPath, string> = {
   // Depois de `deal`/`company`: o último registrado vence, e `*` também casaria "board?…".
   board: "**/api/deals/board?**",
   boardColumn: "**/api/deals/board/column?**",
+  pipelineSummary: "**/api/deals/pipeline-summary**",
+  pipelineInsights: "**/api/deals/pipeline-insights**",
+  pipelineEvolution: "**/api/deals/pipeline-evolution**",
+  dealCard: "**/api/deals/*/card",
+  reassignDeal: "**/api/deals/*/reassign**",
   changeStage: "**/api/deals/*/stage**",
   closeDeal: "**/api/deals/*/close",
   companyFilterOptions: "**/api/companies/filter-options",

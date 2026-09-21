@@ -177,6 +177,60 @@ public static class StageAnalytics
         return new CohortFunnel(stages, cohort.Count, stages[^1].Reached);
     }
 
+    /// <summary>
+    /// Passagem entre duas etapas consecutivas: dos que entraram em <see cref="FromStage"/>, quantos
+    /// depois alcançaram <see cref="ToStage"/> ou além (etapa pulada conta, Ganho conta, Perdido não).
+    /// </summary>
+    public readonly record struct StagePassage(DealStage FromStage, DealStage ToStage, int Entered, int Advanced)
+    {
+        public decimal Rate => Entered == 0 ? 0m : (decimal)Advanced / Entered;
+    }
+
+    /// <summary>
+    /// A passagem de cada par de etapas consecutivas do funil ativo, a partir das transições dadas.
+    /// Mesma noção de "avançou" de <see cref="CalculateAdvanceStats"/> — nenhuma definição nova.
+    /// </summary>
+    public static IReadOnlyList<StagePassage> CalculateConsecutivePassages(
+        IReadOnlyList<DealStage> funnelStages,
+        IEnumerable<StageReach> reaches)
+    {
+        var byDeal = reaches
+            .GroupBy(r => r.DealId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(r => r.ChangedAt).ToList());
+
+        var passages = new List<StagePassage>(funnelStages.Count);
+
+        for (var i = 0; i + 1 < funnelStages.Count; i++)
+        {
+            var from = funnelStages[i];
+            var to = funnelStages[i + 1];
+            var entered = 0;
+            var advanced = 0;
+
+            foreach (var ordered in byDeal.Values)
+            {
+                var index = ordered.FindIndex(r => r.ToStage == from);
+                if (index < 0)
+                {
+                    continue;
+                }
+
+                entered++;
+                if (ordered.Skip(index + 1).Any(next => IsAdvanceFrom(from, next.ToStage) && ReachesAtLeast(next.ToStage, to)))
+                {
+                    advanced++;
+                }
+            }
+
+            passages.Add(new StagePassage(from, to, entered, advanced));
+        }
+
+        return passages;
+    }
+
+    private static bool ReachesAtLeast(DealStage reached, DealStage target) =>
+        reached == DealStage.Ganho || reached >= target;
+
     /// <summary>Tempo médio, em dias, entre entrar num estágio e sair dele.</summary>
     public static IReadOnlyDictionary<DealStage, double> CalculateAverageDaysInStage(IEnumerable<StageReach> reaches) =>
         CalculateAdvanceStats(reaches)

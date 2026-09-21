@@ -16,9 +16,7 @@ public class UpdateDealCommandHandler(
         var organizationId = currentUserService.RequireOrganizationId();
         var userId = currentUserService.RequireUserId();
 
-        var deal = await context.Deals
-            .FirstOrDefaultAsync(d => d.Id == request.Id && d.OrganizationId == organizationId, cancellationToken)
-            ?? throw new NotFoundException("Negócio");
+        var deal = await context.LoadDealForActionAsync(currentUserService, request.Id, cancellationToken);
 
         if (request.ContactId is { } contactId)
         {

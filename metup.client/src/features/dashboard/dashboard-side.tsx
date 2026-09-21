@@ -8,7 +8,7 @@ import { formatDue } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { RecentEvent } from "./api"
 import { ActivityEventButton } from "./activity-event"
-import { Panel, SeeAll } from "./dashboard-cards"
+import { Panel, SeeAll } from "@/components/metrics/panel"
 
 /** Saída da linha concluída; com movimento reduzido, a linha só some. */
 const TASK_EXIT_MS = 200

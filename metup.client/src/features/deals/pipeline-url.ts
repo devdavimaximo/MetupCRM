@@ -9,8 +9,8 @@ import {
   startOfMonth,
   type LocalDate,
 } from "@/lib/local-date"
-import type { DealBoardClosedGroup, DealBoardSort, DealSource } from "./api"
-import { sourceLabels } from "./stage-labels"
+import type { DealBoardClosedGroup, DealBoardSort, DealSource, DealStage } from "./api"
+import { ACTIVE_STAGES, sourceLabels } from "./stage-labels"
 
 /* ─── Período (só vale para Fechados) ─────────────────────────────────────── */
 
@@ -95,6 +95,32 @@ export type PipelineUrlState = {
   segments: string[]
   sort: DealBoardSort
   closedTab: DealBoardClosedGroup
+  /** `parados=1`: o quadro mostra só os negócios abertos e parados (item 17). */
+  stalledOnly: boolean
+  /** `evolucao=3|6|12`: a janela do gráfico de evolução (item 18). */
+  months: EvolutionMonths
+}
+
+export type EvolutionMonths = 3 | 6 | 12
+
+export const EVOLUTION_MONTHS: EvolutionMonths[] = [3, 6, 12]
+
+export const DEFAULT_EVOLUTION_MONTHS: EvolutionMonths = 6
+
+export const evolutionMonthsLabel = (months: EvolutionMonths) => `Últimos ${months} meses`
+
+/** A coluna aberta na lista lateral do "Ver todos" (`lista=<etapa|ganhos|perdidos>`, item 16). */
+export type PipelineListTarget = { kind: "stage"; stage: DealStage } | { kind: "closed"; group: DealBoardClosedGroup }
+
+export function parsePipelineList(value: string): PipelineListTarget | null {
+  if (value === CLOSED_URL.won) return { kind: "closed", group: "won" }
+  if (value === CLOSED_URL.lost) return { kind: "closed", group: "lost" }
+  return ACTIVE_STAGES.includes(value as DealStage) ? { kind: "stage", stage: value as DealStage } : null
+}
+
+export function serializePipelineList(target: PipelineListTarget | null): string {
+  if (!target) return ""
+  return target.kind === "stage" ? target.stage : CLOSED_URL[target.group]
 }
 
 export type RawPipelineUrl = {
@@ -107,6 +133,10 @@ export type RawPipelineUrl = {
   segments: string
   sort: string
   closed: string
+  /** `parados`: "1" liga o filtro de parados. */
+  stalled: string
+  /** `evolucao`: 3, 6 ou 12 meses. */
+  months: string
   /** `origem`, de antes da PL2: uma origem só. */
   legacySource: string
 }
@@ -159,6 +189,10 @@ export function parsePipelineUrl(raw: RawPipelineUrl, canSeeOthers: boolean): Pi
     segments: [...new Set(decodeList(raw.segments))].slice(0, 50),
     sort,
     closedTab,
+    stalledOnly: raw.stalled === "1",
+    months: EVOLUTION_MONTHS.includes(Number(raw.months) as EvolutionMonths)
+      ? (Number(raw.months) as EvolutionMonths)
+      : DEFAULT_EVOLUTION_MONTHS,
   }
 }
 
@@ -174,6 +208,8 @@ export function serializePipelineUrl(state: PipelineUrlState) {
     pipelineSegments: encodeList(state.segments),
     pipelineSort: state.sort === "Stalled" ? "" : SORT_URL[state.sort],
     pipelineClosed: state.closedTab === "won" ? "" : CLOSED_URL.lost,
+    pipelineStalled: state.stalledOnly ? "1" : "",
+    pipelineMonths: state.months === DEFAULT_EVOLUTION_MONTHS ? "" : String(state.months),
     source: "",
   }
 }

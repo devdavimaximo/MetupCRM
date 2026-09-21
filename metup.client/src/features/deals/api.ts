@@ -67,6 +67,9 @@ export type Deal = DealListItem & {
   /** Só em negócio perdido; nulo nos perdidos anteriores ao campo. */
   lostReason: LostReason | null
   lostNote: string | null
+  /** Valor efetivo pela regra do servidor (aberto = valor ou ticket; fechado = só o valor fechado). */
+  value: number | null
+  valueIsEstimated: boolean
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -136,6 +139,8 @@ export type PipelineFilters = {
   sources?: DealSource[]
   segments?: string[]
   search?: string
+  /** Só negócios abertos e parados (mesmo limite do quadro). Vale para o quadro e para a coluna. */
+  stalledOnly?: boolean
 }
 
 /** Datas locais da organização (yyyy-MM-dd, inclusive). Sem período = últimos 30 dias. */
@@ -195,6 +200,7 @@ function pipelineQuery(filters: PipelineFilters, period: PipelinePeriod = {}) {
   for (const source of filters.sources ?? []) query.append("sources", source)
   for (const segment of filters.segments ?? []) query.append("segments", segment)
   if (filters.search?.trim()) query.set("search", filters.search.trim())
+  if (filters.stalledOnly) query.set("stalledOnly", "true")
   if (period.from) query.set("from", period.from)
   if (period.to) query.set("to", period.to)
   return query
@@ -225,8 +231,38 @@ export function getDealBoardColumn(
   return apiFetch<DealBoardColumn>(`/api/deals/board/column?${query}`, { signal })
 }
 
+/** Um cartão do quadro, para trocar só ele depois de uma ação fora do quadro. */
+export function getDealBoardCard(id: string, signal?: AbortSignal) {
+  return apiFetch<DealBoardCard>(`/api/deals/${id}/card`, { signal })
+}
+
 export function getPipelineSummary(params: PipelineFilters & PipelinePeriod, signal?: AbortSignal) {
   return apiFetch<PipelineSummary>(`/api/deals/pipeline-summary?${pipelineQuery(params, params)}`, { signal })
+}
+
+/**
+ * Uma etapa com mais entradas, a melhor passagem entre etapas consecutivas (com amostra mínima) e
+ * os negócios parados de Qualificação em diante. Cada parte é `null` quando não há amostra.
+ */
+export type PipelineInsights = {
+  ownerUserId: string | null
+  windowStartLocal: string
+  windowEndLocal: string
+  volume: { stage: DealStage; entered: number; totalEntered: number; pctOfTotal: number | null; tied: DealStage[] } | null
+  bestPassage: {
+    fromStage: DealStage
+    toStage: DealStage
+    entered: number
+    advanced: number
+    /** 0–1. */
+    rate: number
+    tied: DealStage[]
+  } | null
+  risk: { count: number; value: number; stalledAfterDays: number }
+}
+
+export function getPipelineInsights(params: PipelineFilters & PipelinePeriod, signal?: AbortSignal) {
+  return apiFetch<PipelineInsights>(`/api/deals/pipeline-insights?${pipelineQuery(params, params)}`, { signal })
 }
 
 export function getPipelineEvolution(params: PipelineFilters & { months: 3 | 6 | 12 }, signal?: AbortSignal) {
@@ -323,6 +359,14 @@ export function changeDealStageForBoard(id: string, stage: DealStage, options: {
   return apiFetch<DealBoardCard>(`/api/deals/${id}/stage?view=card`, {
     method: "POST",
     body: JSON.stringify({ stage, expectedFromStage: options.expectedFromStage ?? null }),
+  })
+}
+
+/** Reatribuir o negócio (só Admin/Closer, só negócio aberto). Devolve o cartão do quadro. */
+export function reassignDealForBoard(id: string, ownerUserId: string) {
+  return apiFetch<DealBoardCard>(`/api/deals/${id}/reassign?view=card`, {
+    method: "POST",
+    body: JSON.stringify({ ownerUserId }),
   })
 }
 

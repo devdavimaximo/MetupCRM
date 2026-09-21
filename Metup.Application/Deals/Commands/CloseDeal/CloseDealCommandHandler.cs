@@ -1,4 +1,3 @@
-using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Deals.Common;
 using Metup.Application.Common.Realtime;
@@ -23,9 +22,7 @@ public class CloseDealCommandHandler(
         var organizationId = currentUserService.RequireOrganizationId();
         var userId = currentUserService.RequireUserId();
 
-        var deal = await context.Deals
-            .FirstOrDefaultAsync(d => d.Id == request.Id && d.OrganizationId == organizationId, cancellationToken)
-            ?? throw new NotFoundException("Negócio");
+        var deal = await context.LoadDealForActionAsync(currentUserService, request.Id, cancellationToken);
 
         var clock = await organizationClock.SnapshotAsync(cancellationToken);
         var closure = deal.Close(request.Won, request.ClosedAmount, request.LostReason, request.LostNote, userId, clock.UtcNow);

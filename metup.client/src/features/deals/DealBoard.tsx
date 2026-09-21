@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 import type { DealBoardCard, DealBoardClosedGroup, DealStage } from "./api"
 import { boardAnnouncements, boardScreenReaderInstructions, targetPosition, type DropTarget } from "./board-announcements"
 import type { ColumnKey } from "./board-state"
-import { DealCardContent, type DraggedCardData } from "./DealCard"
+import { DealCardContent, type DealCardActions, type DraggedCardData } from "./DealCard"
 import { ClosedColumn, StageColumn, type CardHandlers, type DropData } from "./DealColumn"
 import { stageIcons } from "./stage-icons"
 import { ACTIVE_STAGES, stageLabels } from "./stage-labels"
@@ -39,6 +39,10 @@ type Props = {
   onAddTask: (stage: DealStage) => void
   /** Soltou em Ganho/Perdido: o diálogo decide; o cartão não sai do lugar até confirmar. */
   onCloseRequest: (card: DealBoardCard, won: boolean) => void
+  /** Item 15: o resto do menu `⋮`, montado pela página (registrar, nova tarefa, reatribuir, empresa). */
+  cardMenu: (card: DealBoardCard) => Omit<DealCardActions, "onOpen" | "onMove">
+  /** "Ver todos (N)": abre a coluna inteira na lista lateral (item 16). */
+  onSeeAll: (key: ColumnKey) => void
 }
 
 const HIGHLIGHT_MS = 2800
@@ -79,6 +83,9 @@ const keyboardCoordinates: KeyboardCoordinateGetter = (event, { context }) => {
   const nextIndex = Math.max(0, Math.min(targets.length - 1, (index === -1 ? 0 : index) + (event.code === "ArrowRight" ? 1 : -1)))
   const rect = droppableRects.get(targets[nextIndex].id)
   if (!rect) return undefined
+
+  // Os retângulos das colunas já vêm em coordenadas da janela, como o do cartão — nada de somar
+  // nem descontar a rolagem da página aqui.
   return { x: rect.left + (rect.width - collisionRect.width) / 2, y: rect.top + 8 }
 }
 
@@ -88,7 +95,7 @@ const order = (target: DropTarget) => targetPosition(target) + (target.kind === 
  * O quadro: 7 etapas + Fechados. Só o quadro rola na horizontal (sombras nas bordas avisam que há
  * mais colunas); cada coluna rola na vertical. Abaixo de 768px, uma coluna por vez com abas.
  */
-export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTask, onCloseRequest }: Props) {
+export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTask, onCloseRequest, cardMenu, onSeeAll }: Props) {
   const columns = view.columns!
   const isMobile = useMediaQuery("(max-width: 767px)")
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
@@ -162,18 +169,21 @@ export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTa
     now,
     pendingIds: view.pendingIds,
     returnedIds: view.returnedIds,
-    // O clique que termina um arrasto não abre a ficha.
-    onOpenDeal: (card) => {
-      if (Date.now() - lastDragEnd.current > 300) onOpenDeal(card)
-    },
-    onMove: (card, stage) => void view.moveDeal(card, stage),
+    actionsFor: (card) => ({
+      ...cardMenu(card),
+      // O clique que termina um arrasto não abre a ficha.
+      onOpen: () => {
+        if (Date.now() - lastDragEnd.current > 300) onOpenDeal(card)
+      },
+      onMove: (stage) => void view.moveDeal(card, stage),
+    }),
   }
 
   const loadFor = (key: ColumnKey) => ({
     isLoadingMore: Boolean(view.loadingMore[key]),
     loadError: view.loadMoreErrors[key],
     onLoadMore: () => void view.loadMore(key),
-    onLoadAll: () => void view.loadAll(key),
+    onSeeAll: () => onSeeAll(key),
   })
 
   const dragOpen = activeCard !== null && activeCard.status === "Aberto"

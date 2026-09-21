@@ -31,9 +31,7 @@ public class ChangeDealStageCommandHandler(
         var organizationId = currentUserService.RequireOrganizationId();
         var userId = currentUserService.RequireUserId();
 
-        var deal = await context.Deals
-            .FirstOrDefaultAsync(d => d.Id == request.Id && d.OrganizationId == organizationId, cancellationToken)
-            ?? throw new NotFoundException("Negócio");
+        var deal = await context.LoadDealForActionAsync(currentUserService, request.Id, cancellationToken);
 
         // Já está onde o client quer: nada a gravar. Vale também para o reenvio de um arrasto que já
         // foi aplicado — por isso vem antes da checagem da etapa esperada.

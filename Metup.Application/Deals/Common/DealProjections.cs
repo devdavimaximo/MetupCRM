@@ -30,7 +30,7 @@ public static class DealProjections
             d.ClosedAt));
 
     public static IQueryable<DealDto> ToDealDto(this IQueryable<Deal> deals, IApplicationDbContext context) =>
-        deals.Select(d => new DealDto(
+        deals.Select(DealValue.Project((Deal d, decimal? value, bool estimated) => new DealDto(
             d.Id,
             d.CompanyId,
             context.Companies.Where(c => c.Id == d.CompanyId).Select(c => c.Name).First(),
@@ -53,5 +53,7 @@ public static class DealProjections
                 .Select(sc => new StageChangeDto(sc.Id, sc.FromStage, sc.ToStage, sc.ChangedAt, sc.ChangedByUserId))
                 .ToList(),
             d.LostReason,
-            d.LostNote));
+            d.LostNote,
+            d.Status == DealStatus.Aberto ? value : d.Amount,
+            d.Status == DealStatus.Aberto && estimated)));
 }

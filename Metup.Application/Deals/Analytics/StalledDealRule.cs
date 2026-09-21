@@ -13,6 +13,13 @@ public static class StalledDealRule
     public static bool IsStalled(DateTime lastStageChangeUtc, DateTime nowUtc, int stalledDealDays) =>
         DaysInStage(lastStageChangeUtc, nowUtc) > stalledDealDays;
 
+    /// <summary>
+    /// A mesma regra em forma de corte para o banco: o negócio está parado quando entrou na etapa
+    /// <b>em ou antes</b> deste instante (<c>DaysInStage &gt; stalledDealDays</c>).
+    /// </summary>
+    public static DateTime StalledBefore(DateTime nowUtc, int stalledDealDays) =>
+        nowUtc.AddDays(-(stalledDealDays + 1));
+
     /// <summary>Instante em que o negócio passa a contar como parado.</summary>
     public static DateTime StalledAt(DateTime lastStageChangeUtc, int stalledDealDays) =>
         lastStageChangeUtc.AddDays(stalledDealDays + 1);

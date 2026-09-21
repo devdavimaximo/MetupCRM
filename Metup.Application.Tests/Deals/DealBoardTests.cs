@@ -202,7 +202,9 @@ public class DealBoardTests
         Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners)));
         Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, DealBoardClosedGroup.Won)));
         Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Ganho)));
-        Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, PerColumn: 51)));
+        // A coluna pagina até 100 (a lista lateral do "Ver todos", item 16 da PL3); o quadro, até 50.
+        Assert.True(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, PerColumn: 100)));
+        Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, PerColumn: 101)));
         Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, From: new DateOnly(2026, 9, 1))));
         Assert.False(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, From: new DateOnly(2026, 9, 1), To: new DateOnly(2026, 9, 16))));
         Assert.True(await Valid(new GetDealBoardColumnQuery(AllOwners, DealStage.Proposta, From: new DateOnly(2026, 9, 1), To: new DateOnly(2026, 9, 15))));

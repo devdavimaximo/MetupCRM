@@ -71,6 +71,32 @@ public static class CurrentUserServiceExtensions
     }
 
     /// <summary>
+    /// Ponto único de decisão de "em quais negócios este usuário pode agir" (mudar etapa, fechar,
+    /// editar, reatribuir), no molde de <see cref="ResolveTaskActionScope"/>. Admin e Closer agem em
+    /// qualquer negócio da organização; o SDR só nos próprios — e agir no negócio de outro é
+    /// <b>recusado</b> (403), não rebaixado. Leitura (<c>GetDealById</c>, <c>ListDeals</c>) continua
+    /// aberta à organização inteira: quem já viu o negócio numa lista não passa a receber 404 nela.
+    /// </summary>
+    public static DealScopeFilter ResolveDealActionScope(this ICurrentUserService currentUserService)
+    {
+        var organizationId = currentUserService.RequireOrganizationId();
+        var userId = currentUserService.RequireUserId();
+
+        return currentUserService.ReachesOrganization()
+            ? new DealScopeFilter(organizationId, null, DealScope.Organization)
+            : new DealScopeFilter(organizationId, userId, DealScope.Mine);
+    }
+
+    /// <summary>Reatribuir negócio: só Admin/Closer, como em Tarefas.</summary>
+    public static void RequireDealReassign(this ICurrentUserService currentUserService)
+    {
+        if (!currentUserService.ReachesOrganization())
+        {
+            throw new ForbiddenAccessException("Sem permissão para reatribuir negócios.");
+        }
+    }
+
+    /// <summary>
     /// Ponto único de decisão de "de quem são as tarefas" — listagem, resumo, criação e, nas próximas
     /// ondas, calendário e ações em massa. Sem pedido = as do próprio usuário. Pedir outro responsável
     /// (<paramref name="ownerUserId"/>) ou todos (<paramref name="allOwners"/>) só vale para

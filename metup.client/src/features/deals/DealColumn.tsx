@@ -13,8 +13,8 @@ import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { DealBoardCard, DealBoardClosedGroup, DealStage } from "./api"
 import type { DropTarget } from "./board-announcements"
-import type { BoardColumnState } from "./board-state"
-import { CLOSED_CARD_HINT_ID, DealCard } from "./DealCard"
+import { canLoadMoreInColumn, type BoardColumnState } from "./board-state"
+import { CLOSED_CARD_HINT_ID, DealCard, type DealCardActions } from "./DealCard"
 import { stageIcons } from "./stage-icons"
 import { stageLabels } from "./stage-labels"
 
@@ -25,15 +25,16 @@ export type CardHandlers = {
   now: Date
   pendingIds: ReadonlySet<string>
   returnedIds: ReadonlySet<string>
-  onOpenDeal: (card: DealBoardCard) => void
-  onMove: (card: DealBoardCard, stage: DealStage) => void
+  /** O menu `⋮` do cartão (item 15): a página monta as ações, a coluna só entrega. */
+  actionsFor: (card: DealBoardCard) => DealCardActions
 }
 
 type LoadState = {
   isLoadingMore: boolean
   loadError: string | undefined
   onLoadMore: () => void
-  onLoadAll: () => void
+  /** "Ver todos (N)": abre a etapa inteira na lista lateral (item 16). */
+  onSeeAll: () => void
 }
 
 /* ─── Partes comuns ───────────────────────────────────────────────────────── */
@@ -74,6 +75,7 @@ function CardList({
 }) {
   const listRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const canLoadMore = canLoadMoreInColumn(column.items.length, column.hasMore)
   const onLoadMore = useRef(load.onLoadMore)
   useEffect(() => {
     onLoadMore.current = load.onLoadMore
@@ -81,7 +83,7 @@ function CardList({
 
   useEffect(() => {
     const sentinel = sentinelRef.current
-    if (!sentinel || !column.hasMore || load.loadError) return
+    if (!sentinel || !canLoadMore || load.loadError) return
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) onLoadMore.current()
@@ -90,7 +92,7 @@ function CardList({
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [column.hasMore, column.items.length, load.loadError])
+  }, [canLoadMore, column.items.length, load.loadError])
 
   const remaining = column.count - column.items.length
 
@@ -108,15 +110,14 @@ function CardList({
                   now={handlers.now}
                   isPending={handlers.pendingIds.has(card.id)}
                   isReturned={handlers.returnedIds.has(card.id)}
-                  onOpen={() => handlers.onOpenDeal(card)}
-                  onMove={(stage) => handlers.onMove(card, stage)}
+                  actions={handlers.actionsFor(card)}
                 />
               </li>
             ))}
           </ul>
         )}
 
-        {column.hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-px shrink-0" />}
+        {canLoadMore && <div ref={sentinelRef} aria-hidden="true" className="h-px shrink-0" />}
         {load.isLoadingMore && (
           <p role="status" className="flex items-center justify-center gap-2 py-2 text-xs text-muted">
             <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
@@ -137,8 +138,7 @@ function CardList({
         <footer className="shrink-0 border-t border-line-soft p-1.5">
           <button
             type="button"
-            onClick={load.onLoadAll}
-            disabled={load.isLoadingMore}
+            onClick={load.onSeeAll}
             className="flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xs text-sm text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring disabled:cursor-progress"
           >
             Ver todos ({numberFormatter.format(column.count)})

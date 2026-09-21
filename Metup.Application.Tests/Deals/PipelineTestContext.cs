@@ -1,6 +1,12 @@
 using Metup.Application.Activities.Common;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
+using Metup.Application.Deals.Commands.ChangeDealStage;
+using Metup.Application.Deals.Commands.CloseDeal;
+using Metup.Application.Deals.Commands.ReassignDeal;
+using Metup.Application.Deals.Commands.UpdateDeal;
+using Metup.Application.Deals.Queries.GetPipelineInsights;
+using Metup.Application.Tests.Tasks;
 using Metup.Application.Deals.Analytics;
 using Metup.Application.Deals.Common;
 using Metup.Application.Deals.Queries.GetDealBoard;
@@ -158,6 +164,19 @@ public sealed class PipelineTestContext : IDisposable
 
     public GetPipelineEvolutionQueryHandler Evolution(Guid userId, UserRole role) =>
         new(Db, As(userId, role), Clock, Reader(), new StageAnalyticsProvider(Db));
+
+    public GetPipelineInsightsQueryHandler Insights(Guid userId, UserRole role) =>
+        new(Db, As(userId, role), Clock, Reader());
+
+    public ReassignDealCommandHandler Reassign(Guid userId, UserRole role) => new(Db, As(userId, role));
+
+    public ChangeDealStageCommandHandler ChangeStage(Guid userId, UserRole role) =>
+        new(Db, As(userId, role), Clock, new RecordingPublisher());
+
+    public CloseDealCommandHandler CloseDeal(Guid userId, UserRole role) =>
+        new(Db, As(userId, role), Clock, new RecordingPublisher());
+
+    public UpdateDealCommandHandler UpdateDeal(Guid userId, UserRole role) => new(Db, As(userId, role), Clock);
 
     public GetDashboardOverviewQueryHandler Dashboard(Guid userId, UserRole role) =>
         new(Db, As(userId, role), Clock, new ActivityFeedReader(Db, Clock), new StageAnalyticsProvider(Db));

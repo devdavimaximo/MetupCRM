@@ -19,6 +19,12 @@ public class DealBoardReader(IApplicationDbContext context, ITextSearch textSear
 {
     public const int DefaultPerColumn = 20;
     public const int MaxPerColumn = 50;
+
+    /// <summary>
+    /// Teto da coluna paginada (<c>board/column</c>), maior que o da amostra do quadro: a lista
+    /// lateral "Ver todos" pagina de 25 ou 50 e precisa de folga (item 16 da PL3).
+    /// </summary>
+    public const int MaxColumnPageSize = 100;
     public const int DefaultPeriodDays = 30;
 
     /// <summary>As colunas ativas do quadro, na ordem do funil (com Proposta — regra 4.2).</summary>
@@ -33,8 +39,12 @@ public class DealBoardReader(IApplicationDbContext context, ITextSearch textSear
         DealStage.Negociacao,
     ];
 
-    /// <summary>Negócios da organização no escopo resolvido, com origem, segmento e busca aplicados.</summary>
-    public IQueryable<Deal> Filtered(DealScopeFilter scope, DealPipelineFilter filter)
+    /// <summary>
+    /// Negócios da organização no escopo resolvido, com origem, segmento e busca aplicados.
+    /// <paramref name="boardClock"/> só é necessário para <c>StalledOnly</c> (o limite de parado da
+    /// organização); sem ele, o filtro de parados é ignorado.
+    /// </summary>
+    public IQueryable<Deal> Filtered(DealScopeFilter scope, DealPipelineFilter filter, BoardClock? boardClock = null)
     {
         var deals = context.Deals.AsNoTracking().Where(d => d.OrganizationId == scope.OrganizationId);
 
@@ -66,6 +76,16 @@ public class DealBoardReader(IApplicationDbContext context, ITextSearch textSear
                 .WhereAnyContains(context.Contacts.Where(c => c.OrganizationId == scope.OrganizationId), term, c => c.Name)
                 .Select(c => (Guid?)c.Id);
             deals = deals.Where(d => companyIds.Contains(d.CompanyId) || contactIds.Contains(d.ContactId));
+        }
+
+        if (filter.StalledOnly && boardClock is { } clock)
+        {
+            // Mesma conta de StalledDealRule, em forma de corte: entrou na etapa antes do limite.
+            var stalledBefore = StalledDealRule.StalledBefore(clock.UtcNow, clock.StalledDealDays);
+            deals = deals.Where(d =>
+                d.Status == DealStatus.Aberto
+                && (context.StageChanges.Where(sc => sc.DealId == d.Id).Max(sc => (DateTime?)sc.ChangedAt) ?? d.CreatedAt)
+                    <= stalledBefore);
         }
 
         return deals;

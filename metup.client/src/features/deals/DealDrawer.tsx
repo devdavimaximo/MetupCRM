@@ -134,7 +134,8 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
   const needsCompany = isNew && newCompanyId === null
   const initialStage = target?.mode === "new" ? target.stage : undefined
   const isReady = !isLoading && !loadError && !needsCompany && (isNew || deal !== null)
-  const value = deal ? (deal.amount ?? deal.ticket) : null
+  // Valor efetivo do servidor (`DealDto.Value`): a ficha e o cartão do quadro mostram o mesmo número.
+  const value = deal?.value ?? null
 
   // Chegada em "Registrar atividade": quando o formulário existe, leva a rolagem e o foco ao primeiro campo.
   const logSectionRef = useRef<HTMLElement>(null)
@@ -192,6 +193,11 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
               <Stat label="Valor">
                 <span className={cn("tabular", value === null ? "text-faint" : deal.status === "Ganho" ? "text-success" : "text-fg")}>
                   {formatMoney(value)}
+                  {deal.valueIsEstimated && (
+                    <span className="ml-1 text-2xs text-muted" title="Valor estimado (ticket), ainda sem valor em negociação">
+                      est.
+                    </span>
+                  )}
                 </span>
               </Stat>
               <Stat label="Responsável">{deal.ownerUserName}</Stat>
@@ -383,7 +389,7 @@ function CloseSection({
             key={closingAs}
             dealId={deal.id}
             outcome={closingAs}
-            defaultAmount={deal.amount ?? deal.ticket}
+            defaultAmount={deal.value}
             onClosed={(closed) => {
               onClosed(closed)
               onStartClosing(null)

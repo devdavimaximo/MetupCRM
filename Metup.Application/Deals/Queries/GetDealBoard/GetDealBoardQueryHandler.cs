@@ -23,7 +23,7 @@ public class GetDealBoardQueryHandler(
         var period = LocalPeriod.Resolve(request.From, request.To, clock.Today, DealBoardReader.DefaultPeriodDays);
         var boardClock = await reader.BoardClockAsync(scope.OrganizationId, clock, cancellationToken);
 
-        var deals = reader.Filtered(scope, request.Filter);
+        var deals = reader.Filtered(scope, request.Filter, boardClock);
         var openTotals = await DealBoardReader.OpenTotalsAsync(deals, cancellationToken);
 
         var columns = new List<DealBoardColumnDto>(DealBoardReader.ActiveStages.Count);

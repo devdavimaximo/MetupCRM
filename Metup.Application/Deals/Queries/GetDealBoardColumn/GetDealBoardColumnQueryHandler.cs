@@ -16,7 +16,7 @@ public class GetDealBoardColumnQueryHandler(
         var scope = currentUserService.ResolveDealOwnerScope(request.Filter.OwnerUserId, request.Filter.AllOwners);
         var clock = await organizationClock.SnapshotAsync(cancellationToken);
         var boardClock = await reader.BoardClockAsync(scope.OrganizationId, clock, cancellationToken);
-        var deals = reader.Filtered(scope, request.Filter);
+        var deals = reader.Filtered(scope, request.Filter, boardClock);
 
         if (request.Closed is { } group)
         {

@@ -13,6 +13,8 @@ public record StageChangeDto(
 /// <summary>
 /// Ficha completa do negócio, com o histórico de transições de estágio. <c>LostReason</c>/<c>LostNote</c>
 /// só existem em negócio perdido (nulos nos perdidos anteriores ao campo).
+/// <c>Value</c>/<c>ValueIsEstimated</c> são o valor efetivo por <see cref="DealValue.ForStatus"/> —
+/// a ficha e o quadro mostram o mesmo número, sem <c>amount ?? ticket</c> no front.
 /// </summary>
 public record DealDto(
     Guid Id,
@@ -32,7 +34,9 @@ public record DealDto(
     DateTime? ClosedAt,
     IReadOnlyList<StageChangeDto> StageHistory,
     LostReason? LostReason,
-    string? LostNote);
+    string? LostNote,
+    decimal? Value,
+    bool ValueIsEstimated);
 
 /// <summary>Linha do pipeline (kanban) e da listagem/busca de negócios.</summary>
 public record DealListItemDto(

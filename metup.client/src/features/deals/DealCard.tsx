@@ -1,6 +1,18 @@
 import { useRef, useState, type PointerEvent } from "react"
 import { useDraggable } from "@dnd-kit/core"
-import { ArrowRightLeft, ClockAlert, EllipsisVertical, Loader2, PanelRightOpen } from "lucide-react"
+import {
+  ArrowRightLeft,
+  Building2,
+  CalendarPlus,
+  CircleX,
+  ClockAlert,
+  EllipsisVertical,
+  Loader2,
+  NotebookPen,
+  PanelRightOpen,
+  Trophy,
+  UserRoundCog,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -112,8 +124,7 @@ export function DealCard({
   now,
   isPending,
   isReturned,
-  onOpen,
-  onMove,
+  actions,
 }: {
   card: DealBoardCard
   now: Date
@@ -121,9 +132,9 @@ export function DealCard({
   isPending: boolean
   /** Voltou ao lugar (erro/409): realce breve. */
   isReturned: boolean
-  onOpen: () => void
-  onMove: (stage: DealStage) => void
+  actions: DealCardActions
 }) {
+  const { onOpen } = actions
   const isOpen = card.status === "Aberto"
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: card.id,
@@ -201,14 +212,27 @@ export function DealCard({
             <Loader2 className="size-4 animate-spin" />
           </span>
         ) : (
-          <CardMenu card={card} onOpen={onOpen} onMove={onMove} />
+          <CardMenu card={card} actions={actions} />
         )}
       </div>
     </article>
   )
 }
 
-function CardMenu({ card, onOpen, onMove }: { card: DealBoardCard; onOpen: () => void; onMove: (stage: DealStage) => void }) {
+/** O que o `⋮` do cartão sabe fazer (item 15). Reatribuir só aparece para Admin/Closer. */
+export type DealCardActions = {
+  onOpen: () => void
+  onMove: (stage: DealStage) => void
+  onLogActivity: () => void
+  onNewTask: () => void
+  onClose: (won: boolean) => void
+  onReassign: () => void
+  onOpenCompany: () => void
+  canReassign: boolean
+}
+
+function CardMenu({ card, actions }: { card: DealBoardCard; actions: DealCardActions }) {
+  const { onOpen, onMove } = actions
   const isOpen = card.status === "Aberto"
   return (
     <DropdownMenu>
@@ -228,6 +252,14 @@ function CardMenu({ card, onOpen, onMove }: { card: DealBoardCard; onOpen: () =>
         </DropdownMenuItem>
         {isOpen && (
           <>
+            <DropdownMenuItem onSelect={actions.onLogActivity}>
+              <NotebookPen aria-hidden="true" />
+              Registrar atividade
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={actions.onNewTask}>
+              <CalendarPlus aria-hidden="true" />
+              Nova tarefa
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
@@ -243,8 +275,28 @@ function CardMenu({ card, onOpen, onMove }: { card: DealBoardCard; onOpen: () =>
                 ))}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            <DropdownMenuItem onSelect={() => actions.onClose(true)}>
+              <Trophy aria-hidden="true" />
+              Marcar como ganho
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => actions.onClose(false)}>
+              <CircleX aria-hidden="true" />
+              Marcar como perdido
+            </DropdownMenuItem>
+            {/* Reatribuir é ação de Admin/Closer — para o SDR a opção nem aparece (e o servidor recusa). */}
+            {actions.canReassign && (
+              <DropdownMenuItem onSelect={actions.onReassign}>
+                <UserRoundCog aria-hidden="true" />
+                Reatribuir responsável
+              </DropdownMenuItem>
+            )}
           </>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={actions.onOpenCompany}>
+          <Building2 aria-hidden="true" />
+          Abrir empresa
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

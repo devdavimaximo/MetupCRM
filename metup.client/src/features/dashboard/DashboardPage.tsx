@@ -16,7 +16,9 @@ import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 import { getDashboardOverview, getDashboardSummary, type DashboardOverview, type DealScope } from "./api"
 import { OriginBreakdown, RevenueAreaChart } from "./dashboard-charts"
-import { FeaturedDealsCard, KpiCard, KpiCarousel, Panel, PanelHeading, PipelineCard, PotentialCard, DeltaLine } from "./dashboard-cards"
+import { DeltaLine, KpiCard, KpiCarousel } from "@/components/metrics/KpiCard"
+import { Panel, PanelHeading } from "@/components/metrics/panel"
+import { FeaturedDealsCard, PipelineCard, PotentialCard } from "./dashboard-cards"
 import {
   closeRate,
   comparisonRange,

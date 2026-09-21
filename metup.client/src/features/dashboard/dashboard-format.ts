@@ -1,6 +1,13 @@
+import { deltaTone, type Delta, type DeltaPolarity, type DeltaTone } from "@/components/metrics/delta"
+import { smoothSeries } from "@/components/metrics/series"
 import { numberFormatter } from "@/lib/format"
 import type { DealSource } from "@/features/deals/api"
 import type { PeriodValue } from "./api"
+
+// Delta e a suavização de série moram em components/metrics (item 9 da PL3, com o KpiCard); o
+// dashboard continua importando daqui, que é a fachada de formatação da tela.
+export { deltaTone, smoothSeries }
+export type { Delta, DeltaPolarity, DeltaTone }
 
 const moneyWhole = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
 const moneyCompact = new Intl.NumberFormat("pt-BR", {
@@ -32,32 +39,6 @@ export const formatInstantDay = (iso: string) => bucketDay.format(new Date(iso))
 
 /** "15 de setembro de 2026". */
 export const formatLongDate = (date = new Date()) => longDate.format(date)
-
-/**
- * O que dá para dizer da variação contra a janela anterior. Percentual só quando existe base real;
- * nos demais casos o cartão diz por que não há comparação, em vez de um "sem base anterior" mudo.
- */
-export type Delta =
-  | { kind: "change"; direction: "up" | "down" | "flat"; label: string }
-  | { kind: "new" }
-  | { kind: "idle" }
-  | { kind: "no-history" }
-  /** A fonte não tem a janela anterior (resumo de tarefas com `previous = null`). */
-  | { kind: "no-base" }
-
-/**
- * O que "subir" significa para o número. Receita subir é bom; atrasadas subir é ruim; volume de
- * tarefas do dia não é bom nem ruim — a seta continua, a cor fica neutra.
- */
-export type DeltaPolarity = "higher-is-better" | "higher-is-worse" | "neutral"
-
-export type DeltaTone = "positive" | "negative" | "neutral"
-
-export function deltaTone(direction: "up" | "down" | "flat", polarity: DeltaPolarity = "higher-is-better"): DeltaTone {
-  if (direction === "flat" || polarity === "neutral") return "neutral"
-  const good = polarity === "higher-is-better" ? direction === "up" : direction === "down"
-  return good ? "positive" : "negative"
-}
 
 /** Variação de contagem com absoluto e percentual ("+4 · +12%"); sem base → "no-base". */
 export function countDelta(current: number, previous: number | null): Delta {
@@ -117,28 +98,6 @@ export function comparisonRange({ previousStart, periodStart }: DeltaContext) {
 
 export function closeRate(won: number, lost: number): number | null {
   return won + lost === 0 ? null : won / (won + lost)
-}
-
-/**
- * Suaviza a forma de uma série para desenho (média móvel ponderada, janela proporcional ao
- * tamanho). Só a curva usa isto — valores de tooltip e KPIs continuam sendo os reais.
- * Mantém primeiro e último ponto para a linha começar e terminar no valor verdadeiro.
- */
-export function smoothSeries(values: number[], strength = 0.12): number[] {
-  const radius = Math.max(1, Math.round(values.length * strength))
-  if (values.length < 4) return values
-  return values.map((_, i) => {
-    if (i === 0 || i === values.length - 1) return values[i]
-    const reach = Math.min(radius, i, values.length - 1 - i)
-    let weighted = 0
-    let weights = 0
-    for (let offset = -reach; offset <= reach; offset++) {
-      const weight = reach + 1 - Math.abs(offset)
-      weighted += values[i + offset] * weight
-      weights += weight
-    }
-    return weighted / weights
-  })
 }
 
 /**

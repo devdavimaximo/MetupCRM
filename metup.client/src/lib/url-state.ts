@@ -44,6 +44,9 @@ export function readUrlState() {
     pipelineSegments: params.get("segmentos") ?? "",
     pipelineSort: params.get("ordem") ?? "",
     pipelineClosed: params.get("fechados") ?? "",
+    pipelineStalled: params.get("parados") ?? "",
+    pipelineList: params.get("lista") ?? "",
+    pipelineMonths: params.get("evolucao") ?? "",
   }
 }
 
@@ -82,6 +85,9 @@ type UrlStatePatch = {
   pipelineSegments?: string
   pipelineSort?: string
   pipelineClosed?: string
+  pipelineStalled?: string
+  pipelineList?: string
+  pipelineMonths?: string
 }
 
 const STRING_KEYS = [
@@ -115,6 +121,9 @@ const STRING_KEYS = [
   ["pipelineSegments", "segmentos"],
   ["pipelineSort", "ordem"],
   ["pipelineClosed", "fechados"],
+  ["pipelineStalled", "parados"],
+  ["pipelineList", "lista"],
+  ["pipelineMonths", "evolucao"],
 ] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */

@@ -17,11 +17,16 @@ import type {
   DealSource,
   DealStage,
   LostReason,
+  PipelineInsights,
+  PipelineSummary,
 } from "@/features/deals/api"
 import type { Handler } from "./app"
 import { NOW } from "./tasks"
 
 const OWNER = { id: "11111111-1111-1111-1111-111111111111", name: "Davi Maximo" }
+
+/** Os mesmos responsáveis de `data.users`, para a reatribuição devolver um nome de verdade. */
+const OWNERS: Record<string, string> = { "u-1": "Davi Maximo", "u-2": "Ana Prado", [OWNER.id]: OWNER.name }
 const at = (localIso: string) => new Date(`${localIso}-03:00`).toISOString()
 
 const ACTIVE: DealStage[] = ["Prospect", "PrimeiroContato", "ContatoRealizado", "Qualificacao", "Reuniao", "Proposta", "Negociacao"]
@@ -106,6 +111,51 @@ function seed(): DealBoardCard[] {
   ]
 }
 
+/**
+ * Resumo do pipeline (KPIs, sparklines e funil). Números redondos de propósito: os testes conferem
+ * o valor compacto ("R$ 2,86 mi") e a conversão em coorte da frase do funil.
+ */
+export function pipelineSummary(patch: Partial<PipelineSummary> = {}): PipelineSummary {
+  const stages: DealStage[] = [...ACTIVE, "Ganho"]
+  return {
+    ownerUserId: null,
+    periodStartLocal: "2026-08-17",
+    periodEndLocal: "2026-09-15",
+    snapshotAt: at("2026-09-15T15:00:00"),
+    kpis: {
+      pipelineTotal: 2_860_000,
+      forecastRevenue: 184_200,
+      openDeals: 42,
+      conversionRate: 0.08,
+      averageTicket: 12_400,
+    },
+    previous: {
+      pipelineTotal: 2_600_000,
+      forecastRevenue: 200_000,
+      openDeals: 40,
+      conversionRate: 0.1,
+      averageTicket: 10_000,
+    },
+    sparklines: {
+      granularity: "day",
+      bucketStarts: Array.from({ length: 5 }, (_, i) => `2026-09-1${i}`),
+      pipelineTotal: [2_500_000, 2_600_000, 2_700_000, 2_800_000, 2_860_000],
+      forecastRevenue: [150_000, 160_000, 170_000, 180_000, 184_200],
+      openDeals: [38, 39, 40, 41, 42],
+      conversionRate: [0.05, 0.06, 0.07, 0.08, 0.08],
+      averageTicket: [9_000, 10_000, 11_000, 12_000, 12_400],
+    },
+    funnel: stages.map((stage, i) => ({
+      stage,
+      reached: 342 - i * 40,
+      value: (342 - i * 40) * 1000,
+      pctOfTop: (342 - i * 40) / 342,
+    })),
+    funnelSummary: { top: 342, won: 27, pct: 0.08 },
+    ...patch,
+  }
+}
+
 const problem = (route: Route, status: number, title: string, extra: Record<string, unknown> = {}) =>
   route.fulfill({ status, contentType: "application/problem+json", body: JSON.stringify({ title, status, ...extra }) })
 
@@ -119,6 +169,10 @@ export class BoardStore {
   movedByOther = new Map<string, DealStage>()
   /** O próximo pedido de etapa falha com 500. */
   failNextStage = false
+  reassignRequests: { id: string; ownerUserId: string }[] = []
+  summaryRequests: URLSearchParams[] = []
+  insightsRequests: URLSearchParams[] = []
+  evolutionRequests: number[] = []
 
   toDeal(card: DealBoardCard): Deal {
     return {
@@ -140,6 +194,8 @@ export class BoardStore {
       stageHistory: [],
       lostReason: card.lostReason,
       lostNote: null,
+      value: card.value,
+      valueIsEstimated: card.valueIsEstimated,
     }
   }
 
@@ -150,7 +206,9 @@ export class BoardStore {
     return (
       (sources.length === 0 || sources.includes(card.source)) &&
       (segments.length === 0 || (card.companySegment !== null && segments.includes(card.companySegment))) &&
-      (!search || card.companyName.toLowerCase().includes(search))
+      (!search || card.companyName.toLowerCase().includes(search)) &&
+      // `parados=1` (item 17): só os abertos com o selo de parado.
+      (params.get("stalledOnly") !== "true" || card.isStalled)
     )
   }
 
@@ -258,6 +316,64 @@ export class BoardStore {
     return { ...this.toDeal(card), lostNote: body.lostNote }
   }
 
+  /** Reatribuir (item 15 da PL3): troca o dono na loja e devolve o cartão, como o `?view=card`. */
+  reassign: Handler = (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-2)!
+    const body = JSON.parse(route.request().postData() ?? "{}") as { ownerUserId: string }
+    this.reassignRequests.push({ id, ownerUserId: body.ownerUserId })
+
+    const card = this.cards.find((c) => c.id === id)
+    if (!card) return problem(route, 404, "Negócio não encontrado.")
+    if (card.status !== "Aberto") return problem(route, 422, "O negócio já está fechado.")
+
+    card.ownerUserId = body.ownerUserId
+    card.ownerUserName = OWNERS[body.ownerUserId] ?? card.ownerUserName
+    return card
+  }
+
+  /** `GET /api/deals/{id}/card`: o cartão como está agora na loja. */
+  card: Handler = (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-2)!
+    const card = this.cards.find((c) => c.id === id)
+    return card ?? problem(route, 404, "Negócio não encontrado.")
+  }
+
+  /** KPIs, funil e o resumo — números fixos, o bastante para a tela e para as asserções. */
+  summary: Handler = (route) => {
+    this.summaryRequests.push(new URL(route.request().url()).searchParams)
+    return pipelineSummary()
+  }
+
+  insights: Handler = (route) => {
+    this.insightsRequests.push(new URL(route.request().url()).searchParams)
+    return this.insightsBody
+  }
+
+  insightsBody: PipelineInsights = {
+    ownerUserId: null,
+    windowStartLocal: "2026-08-17",
+    windowEndLocal: "2026-09-15",
+    volume: { stage: "Qualificacao", entered: 18, totalEntered: 56, pctOfTotal: 0.321, tied: [] },
+    bestPassage: { fromStage: "Qualificacao", toStage: "Reuniao", entered: 5, advanced: 4, rate: 0.8, tied: [] },
+    risk: { count: 3, value: 84_000, stalledAfterDays: 7 },
+  }
+
+  evolution: Handler = (route) => {
+    const months = Number(new URL(route.request().url()).searchParams.get("months") ?? 6)
+    this.evolutionRequests.push(months)
+    return {
+      ownerUserId: null,
+      points: Array.from({ length: months }, (_, i) => ({
+        month: `2026-${String(i + 4).padStart(2, "0")}`,
+        monthEndLocal: `2026-${String(i + 4).padStart(2, "0")}-30`,
+        isPartial: i === months - 1,
+        pipelineTotal: 2_000_000 + i * 120_000,
+        forecastRevenue: 400_000 + i * 20_000,
+        openDeals: 40 + i,
+      })),
+    }
+  }
+
   filterOptions = { segments: SEGMENTS, cities: ["Curitiba"] }
 
   routes() {
@@ -266,6 +382,11 @@ export class BoardStore {
       boardColumn: this.boardColumn,
       changeStage: this.stage,
       closeDeal: this.close,
+      reassignDeal: this.reassign,
+      dealCard: this.card,
+      pipelineSummary: this.summary,
+      pipelineInsights: this.insights,
+      pipelineEvolution: this.evolution,
       companyFilterOptions: this.filterOptions,
     }
   }

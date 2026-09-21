@@ -41,8 +41,8 @@ public class GetDealBoardColumnQueryValidator : AbstractValidator<GetDealBoardCo
         RuleFor(x => x.Sort).IsInEnum().WithMessage("Ordenação inválida.");
         RuleFor(x => x.Page).GreaterThan(0).WithMessage("A página deve ser maior que zero.");
         RuleFor(x => x.PerColumn)
-            .InclusiveBetween(1, DealBoardReader.MaxPerColumn)
-            .WithMessage($"A amostra por coluna deve estar entre 1 e {DealBoardReader.MaxPerColumn}.");
+            .InclusiveBetween(1, DealBoardReader.MaxColumnPageSize)
+            .WithMessage($"A página da coluna deve estar entre 1 e {DealBoardReader.MaxColumnPageSize}.");
 
         this.AddLocalPeriodRules(x => x.From, x => x.To, organizationClock);
     }
