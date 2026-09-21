@@ -103,7 +103,7 @@ function InsightRow({
           <button
             type="button"
             onClick={action.onAction}
-            className="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-xs text-xs text-accent transition-colors hover:text-accent-hover focus-visible:focus-ring"
+            className="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-xs text-xs text-accent max-md:min-h-11 transition-colors hover:text-accent-hover focus-visible:focus-ring"
           >
             {action.label}
             <ArrowRight className="size-3" aria-hidden="true" />

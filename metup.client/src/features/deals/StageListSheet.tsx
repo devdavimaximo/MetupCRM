@@ -98,7 +98,7 @@ function StageList({
   const lastPage = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <SheetContent side="right" className="sm:max-w-3xl">
+    <SheetContent side="right" className="sm:max-w-3xl max-md:w-full max-md:max-w-none max-md:border-l-0">
       <SheetHeader>
         <SheetTitle>{titleOf(target)}</SheetTitle>
         <SheetDescription>
@@ -126,7 +126,7 @@ function StageList({
                 setSort(event.target.value as DealBoardSort)
                 setPage(1)
               }}
-              className="h-8 cursor-pointer rounded-xs border border-line-strong/70 bg-surface px-2 text-xs text-fg focus-visible:focus-ring"
+              className="h-8 cursor-pointer rounded-xs border border-line-strong/70 bg-surface px-2 text-xs max-md:h-11 text-fg focus-visible:focus-ring"
             >
               {BOARD_SORTS.map((value) => (
                 <option key={value} value={value}>
@@ -143,7 +143,7 @@ function StageList({
                 setPageSize(Number(event.target.value) as PageSize)
                 setPage(1)
               }}
-              className="h-8 cursor-pointer rounded-xs border border-line-strong/70 bg-surface px-2 text-xs text-fg focus-visible:focus-ring"
+              className="h-8 cursor-pointer rounded-xs border border-line-strong/70 bg-surface px-2 text-xs max-md:h-11 text-fg focus-visible:focus-ring"
             >
               {PAGE_SIZES.map((value) => (
                 <option key={value} value={value}>

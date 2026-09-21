@@ -38,9 +38,13 @@ type Props = {
   onOpenChange: (open: boolean) => void
   onOpenCompany: (companyId: string) => void
   onSaved: () => void
+  /** Negócio que o usuário acabou de mexer pela ficha (salvar, fechar, registrar) — o Pipeline não pulsa o eco. */
+  onTouched?: (dealId: string) => void
+  /** Admin/Closer: trocar o responsável na ficha é reatribuir (mesma regra do servidor). */
+  canReassign: boolean
 }
 
-export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved }: Props) {
+export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved, onTouched, canReassign }: Props) {
   const [deal, setDeal] = useState<Deal | null>(null)
   const [companyName, setCompanyName] = useState("")
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([])
@@ -120,10 +124,12 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
 
   function handleSaved(saved: Deal) {
     setDeal(saved)
+    onTouched?.(saved.id)
     onSaved()
   }
 
   function handleActivityLogged(result: LogActivityResult) {
+    if (deal) onTouched?.(deal.id)
     setActivities((current) => [result.activity, ...current])
     setLastNextAction(result.nextAction)
   }
@@ -273,6 +279,7 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
                   contacts={contacts}
                   users={users}
                   deal={deal}
+                  canReassign={canReassign}
                   initialStage={initialStage}
                   onSaved={handleSaved}
                 />
@@ -411,7 +418,7 @@ function CompanyPicker({ onPick }: { onPick: (company: { id: string; name: strin
 
   return (
     <DrawerSection id="deal-company-heading" title="Empresa">
-      <label className="flex items-center gap-2 rounded-sm border border-line-soft bg-surface px-3 focus-within:border-line-strong">
+      <label className="flex items-center gap-2 rounded-sm border border-line-soft bg-surface px-3 focus-within:border-line-strong has-[input:focus-visible]:focus-ring">
         <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
         <span className="sr-only">Buscar empresa</span>
         <input

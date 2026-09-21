@@ -84,13 +84,13 @@ export function PipelineFunnel({
                   )}
                 />
                 {isClosed ? (
-                  <span className="relative flex min-h-9 min-w-0 items-center px-2.5">{row}</span>
+                  <span className="relative flex min-h-9 max-md:min-h-11 min-w-0 items-center px-2.5">{row}</span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => onOpenStage(step.stage)}
                     aria-label={`${label}: ${numberFormatter.format(step.reached)} negócios, ${share} do topo. Ir para a coluna no quadro`}
-                    className="relative flex min-h-9 w-full min-w-0 cursor-pointer items-center rounded-xs px-2.5 text-left transition-colors hover:bg-surface-3/40 focus-visible:focus-ring"
+                    className="relative flex min-h-9 max-md:min-h-11 w-full min-w-0 cursor-pointer items-center rounded-xs px-2.5 text-left transition-colors hover:bg-surface-3/40 focus-visible:focus-ring"
                   >
                     {row}
                   </button>

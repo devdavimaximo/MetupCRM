@@ -18,7 +18,7 @@ public class Deal : BaseEntity
 
     public DealSource Source { get; set; }
 
-    public Guid OwnerUserId { get; set; }
+    public Guid OwnerUserId { get; private set; }
 
     /// <summary>
     /// Id do lead emitido pela fonte externa (ex.: leadgen_id do Meta Ads) — garante idempotência

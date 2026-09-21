@@ -19,6 +19,8 @@ type Props = {
   onCancel?: () => void
   /** Só no cadastro: a etapa em que o negócio nasce. */
   initialStage?: DealStage
+  /** Na edição, trocar o responsável é reatribuir: só Admin/Closer e só negócio aberto. */
+  canReassign: boolean
 }
 
 type FormState = {
@@ -52,8 +54,14 @@ function toInput(form: FormState): DealInput {
   }
 }
 
-export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel, initialStage }: Props) {
+export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel, initialStage, canReassign }: Props) {
   const [form, setForm] = useState<FormState>(() => toFormState(deal))
+  const ownerLocked = deal !== null && (!canReassign || deal.status !== "Aberto")
+  const ownerHint = !ownerLocked
+    ? undefined
+    : deal.status !== "Aberto"
+      ? "Negócio fechado mantém o responsável que fechou."
+      : "Só Admin ou Closer trocam o responsável."
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -106,6 +114,8 @@ export function DealForm({ companyId, contacts, users, deal, onSaved, onCancel, 
           value={form.ownerUserId}
           onChange={(e) => update("ownerUserId", e.target.value)}
           error={fieldErrors.ownerUserId}
+          disabled={ownerLocked}
+          hint={ownerHint}
         >
           <option value="" disabled>
             Selecione…

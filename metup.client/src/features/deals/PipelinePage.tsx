@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 
 import { OwnerPicker } from "@/components/OwnerPicker"
+import { ShortcutsHelp } from "@/components/ShortcutsHelp"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -15,6 +16,7 @@ import { ActivityFeedSheet } from "@/features/dashboard/ActivityFeedSheet"
 import { NewTaskSheet } from "@/features/tasks/NewTaskSheet"
 import type { AuthenticatedUser } from "@/lib/auth"
 import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
+import { shortcutKey, type ShortcutHelpItem } from "@/lib/shortcuts"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 import { CloseDealDialog } from "./CloseDealForm"
@@ -43,6 +45,19 @@ type Props = {
   newDealIntent?: { companyId: string; companyName: string } | null
 }
 
+/** A folha do `?` (item 22). As setas, o Enter e o Espaço valem com o foco num cartão. */
+const PIPELINE_SHORTCUTS: ShortcutHelpItem[] = [
+  { keys: ["N"], label: "Novo negócio" },
+  { keys: ["/"], label: "Buscar no quadro" },
+  { keys: ["F"], label: "Abrir os filtros" },
+  { keys: ["↑", "↓", "←", "→"], label: "Andar entre os cartões" },
+  { keys: ["Enter"], label: "Abrir o negócio" },
+  { keys: ["Espaço"], label: "Pegar e soltar o cartão" },
+  { keys: ["M"], label: "Mover o cartão para…" },
+  { keys: ["Esc"], label: "Fechar ou cancelar" },
+  { keys: ["?"], label: "Mostrar os atalhos" },
+]
+
 type CloseRequest = { card: DealBoardCard; outcome: CloseOutcome }
 
 const listTargetOf = (key: ColumnKey): PipelineListTarget =>
@@ -55,7 +70,7 @@ const listTargetOf = (key: ColumnKey): PipelineListTarget =>
  */
 export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
   const canSeeOthers = user.role === "Admin" || user.role === "Closer"
-  const view = useDealBoard(canSeeOthers)
+  const view = useDealBoard(canSeeOthers, user.userId)
   const users = useAsyncResource((signal) => listUsers(signal), [])
   const filterOptions = useAsyncResource((signal) => listCompanyFilterOptions(signal), [])
   const isMobile = useMediaQuery("(max-width: 767px)")
@@ -82,6 +97,41 @@ export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
   const [feedOpen, setFeedOpen] = useState(false)
   const [listTarget, setListTarget] = useState<PipelineListTarget | null>(() => parsePipelineList(readUrlState().pipelineList))
   const [hiddenKpis, setHiddenKpis] = useState<KpiId[]>(() => readHiddenKpis())
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [moveRequestId, setMoveRequestId] = useState<string | null>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const filtersRef = useRef<HTMLButtonElement>(null)
+
+  /**
+   * Atalhos da tela (item 22). Só valem com o foco na própria página (nada de diálogo, folha ou menu
+   * aberto por cima) e fora de campo de texto; nenhum deles mexe na URL. O Esc é dos componentes:
+   * cada camada (diálogo → folha → popover) fecha a de cima primeiro.
+   */
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      const key = shortcutKey(event)
+      if (!key) return
+      const target = event.target as Node
+      if (target !== document.body && !pageRef.current?.contains(target)) return
+      // Camada aberta — ou ainda saindo: um popover na animação de fechamento devolve o foco ao
+      // gatilho depois, e isso fecharia na hora a ficha que o atalho acabou de abrir.
+      if (document.querySelector('[role="dialog"][data-state], [role="menu"][data-state]')) return
+
+      if (key === "n") newDeal()
+      else if (key === "/") searchRef.current?.focus()
+      else if (key === "f") filtersRef.current?.click()
+      else if (key === "?") setHelpOpen((open) => !open)
+      else if (key === "m") {
+        const card = document.activeElement?.closest<HTMLElement>('[data-deal-card][data-status="Aberto"]')
+        if (!card?.dataset.dealId) return
+        setMoveRequestId(card.dataset.dealId)
+      } else return
+      event.preventDefault()
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   function openDeal(dealId: string) {
     writeUrlState({ dealId, dealSection: "" })
@@ -133,11 +183,12 @@ export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col pb-10 max-md:pb-24">
+      <div ref={pageRef} className="flex flex-col pb-10 max-md:pb-24">
         <div className="flex shrink-0 flex-col gap-5 px-4 pt-6 pb-4 sm:px-6 lg:px-10 lg:pt-10">
           <PipelineHeader
             view={view}
             onNewDeal={() => newDeal()}
+            shortcuts={<ShortcutsHelp shortcuts={PIPELINE_SHORTCUTS} open={helpOpen} onOpenChange={setHelpOpen} />}
             ownerPicker={
               canSeeOthers ? (
                 <OwnerPicker
@@ -183,6 +234,8 @@ export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
           </div>
 
           <PipelineFilters
+            searchRef={searchRef}
+            filtersRef={filtersRef}
             filters={view.filters}
             sort={view.sort}
             segments={filterOptions.data?.segments ?? null}
@@ -233,6 +286,8 @@ export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
                 onAddTask={setTaskStage}
                 onCloseRequest={(card, won) => setCloseRequest({ card, outcome: won ? "won" : "lost" })}
                 onSeeAll={(key) => openList(listTargetOf(key))}
+                moveRequestId={moveRequestId}
+                onMoveRequestDone={() => setMoveRequestId(null)}
                 cardMenu={(card) => ({
                   onLogActivity: () => setLogTarget(card),
                   onNewTask: () => setTaskDeal(card),
@@ -394,7 +449,13 @@ export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
           }}
           onOpenCompany={onOpenCompany}
           onSaved={view.revalidate}
+          onTouched={view.markOwn}
+          canReassign={canSeeOthers}
         />
+
+        <p className="sr-only" aria-live="polite">
+          {view.realtimeAnnouncement}
+        </p>
 
         <Toaster toasts={view.toasts.toasts} onDismiss={view.toasts.dismiss} />
       </div>

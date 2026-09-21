@@ -501,6 +501,7 @@ export function TasksPage({ user, onOpenCompany }: Props) {
         onOpenChange={(open) => !open && setDrawer(null)}
         onOpenCompany={onOpenCompany}
         onSaved={view.revalidate}
+        canReassign={canSeeOthers}
       />
     </Page>
     </TooltipProvider>

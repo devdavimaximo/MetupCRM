@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api"
-import { changeDealStage, closeDeal, getDealBoard, getDealBoardColumn, getPipelineEvolution, staleDealOf } from "./api"
+import { changeDealStageForBoard, closeDeal, getDealBoard, getDealBoardColumn, getPipelineEvolution, staleDealOf } from "./api"
 import { LOST_REASONS, lostReasonLabels } from "./stage-labels"
 
 const fetchMock = vi.fn()
@@ -50,10 +50,10 @@ describe("contrato do pipeline", () => {
   })
 
   it("manda a etapa esperada e o motivo da perda no corpo", async () => {
-    await changeDealStage("d-1", "Proposta", { expectedFromStage: "Reuniao" })
+    await changeDealStageForBoard("d-1", "Proposta", { expectedFromStage: "Reuniao" })
     expect(lastCall().body).toEqual({ stage: "Proposta", expectedFromStage: "Reuniao" })
 
-    await changeDealStage("d-1", "Proposta")
+    await changeDealStageForBoard("d-1", "Proposta")
     expect(lastCall().body).toEqual({ stage: "Proposta", expectedFromStage: null })
 
     await closeDeal("d-1", false, null, "Preco", "  caro  ")
@@ -68,7 +68,7 @@ describe("contrato do pipeline", () => {
       new Response(JSON.stringify({ title: "Já saiu da etapa", current: { id: "d-1", stage: "Reuniao" } }), { status: 409 })
     )
 
-    const error = await changeDealStage("d-1", "Proposta", { expectedFromStage: "Qualificacao" }).catch((e: unknown) => e)
+    const error = await changeDealStageForBoard("d-1", "Proposta", { expectedFromStage: "Qualificacao" }).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(ApiError)
     expect(staleDealOf(error)).toMatchObject({ id: "d-1", stage: "Reuniao" })

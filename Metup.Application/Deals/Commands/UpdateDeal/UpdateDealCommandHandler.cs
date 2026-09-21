@@ -30,16 +30,24 @@ public class UpdateDealCommandHandler(
             }
         }
 
-        var ownerExists = await context.Users
-            .AnyAsync(u => u.Id == request.OwnerUserId && u.OrganizationId == organizationId, cancellationToken);
-        if (!ownerExists)
+        // Trocar o responsável é reatribuir: mesmas regras do ReassignDeal (só Admin/Closer, só
+        // negócio aberto). Reenviar o responsável atual não é troca, e não passa por elas.
+        if (request.OwnerUserId != deal.OwnerUserId)
         {
-            throw new NotFoundException("Responsável");
+            currentUserService.RequireDealReassign();
+
+            var ownerExists = await context.Users
+                .AnyAsync(u => u.Id == request.OwnerUserId && u.OrganizationId == organizationId, cancellationToken);
+            if (!ownerExists)
+            {
+                throw new NotFoundException("Responsável");
+            }
+
+            deal.Reassign(request.OwnerUserId);
         }
 
         deal.ContactId = request.ContactId;
         deal.Source = request.Source;
-        deal.OwnerUserId = request.OwnerUserId;
 
         var clock = await organizationClock.SnapshotAsync(cancellationToken);
         deal.SetExpectedCloseDate(request.ExpectedCloseDate, clock.LocalDateOf(deal.CreatedAt));

@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test"
 
 import { BoardStore, expect, gotoPipeline, installApi, test } from "./fixtures/app"
+import { installHub } from "./fixtures/hub"
 
 /** Abaixo de md o quadro é outra árvore: uma coluna por vez, com abas. */
 const isMobile = (page: Page) => (page.viewportSize()?.width ?? 0) < 768
@@ -22,6 +23,53 @@ async function dragWithMouse(page: Page, source: Locator, target: () => Locator)
   const to = (await target().boundingBox())!
   await page.mouse.move(to.x + to.width / 2, to.y + Math.min(80, to.height / 2), { steps: 12 })
   await page.mouse.up()
+}
+
+/**
+ * Um tique da página. O sensor de teclado do dnd-kit assina as setas num `setTimeout(0)` logo
+ * depois do Espaço (de propósito: o mesmo Espaço não pode soltar o que acabou de pegar). Os timers
+ * rodam em ordem, então um `setTimeout(0)` agendado depois da tecla só volta com o sensor pronto —
+ * sem folga arbitrária. Nenhuma pessoa aperta a seta no mesmo tique; o Playwright aperta.
+ */
+const nextTick = (page: Page) => page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+/** Toque de verdade (CDP): o Playwright só sabe `tap`, e o arrasto por toque precisa de mover. */
+async function touchInput(page: Page) {
+  const cdp = await page.context().newCDPSession(page)
+  return (type: "touchStart" | "touchMove" | "touchEnd", x = 0, y = 0) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y }] })
+}
+
+/**
+ * Arrasto por pressionar: segura o cartão além dos 250 ms do sensor de toque (o contrato do
+ * gesto, não uma folga), anda um pouco e solta sobre o alvo.
+ */
+async function dragWithTouch(page: Page, source: Locator, target: () => Locator) {
+  const touch = await touchInput(page)
+  const from = (await source.boundingBox())!
+  const x = from.x + from.width / 2
+  const y = from.y + 16
+  await touch("touchStart", x, y)
+  await page.waitForTimeout(350)
+  await touch("touchMove", x + 2, y + 2)
+  const to = (await target().boundingBox())!
+  for (let step = 1; step <= 8; step++) {
+    await touch("touchMove", x + ((to.x + to.width / 2 - x) * step) / 8, y + ((to.y + to.height / 2 - y) * step) / 8)
+  }
+  await touch("touchEnd")
+}
+
+/** Swipe horizontal rápido (sem segurar): troca de aba no celular. */
+async function swipe(page: Page, area: Locator, dx: number) {
+  const touch = await touchInput(page)
+  await area.scrollIntoViewIfNeeded()
+  const box = (await area.boundingBox())!
+  const x = box.x + box.width / 2
+  // Dentro da janela: o painel é alto e pode passar da dobra.
+  const y = Math.min(box.y + 80, page.viewportSize()!.height - 20)
+  await touch("touchStart", x, y)
+  for (let step = 1; step <= 5; step++) await touch("touchMove", x + (dx * step) / 5, y)
+  await touch("touchEnd")
 }
 
 async function open(page: Page, store = new BoardStore(), query = "") {
@@ -189,37 +237,46 @@ test.describe("mover de etapa", () => {
     }
   })
 
-  test("arrastar com o mouse entre colunas", async ({ page }) => {
-    test.skip(isMobile(page), "No celular uma coluna por vez: o arrasto por toque não é dublável aqui; o menu ⋮ cobre o celular.")
+  test("arrastar entre colunas (mouse no desktop, pressionar e soltar na aba no celular)", async ({ page }) => {
     const store = await open(page)
 
-    await dragWithMouse(page, cardButton(page, "Padaria Aurora"), () => column(page, "Prospect"))
-    await expect(column(page, "Prospect")).toContainText("Padaria Aurora")
-    await expect(column(page, "Prospect")).toContainText("31 negócios")
-    await expect(column(page, "PrimeiroContato")).toContainText("1 negócio")
+    if (isMobile(page)) {
+      await page.getByRole("tab", { name: /Primeiro Contato/ }).click()
+      await dragWithTouch(page, cardButton(page, "Padaria Aurora"), () => page.getByRole("tab", { name: /^Prospect/ }))
+      // Soltar na aba leva o cartão e abre a etapa de destino.
+      await expect(page.getByRole("tab", { name: /^Prospect\s*31/ })).toHaveAttribute("aria-selected", "true")
+      await expect(column(page, "Prospect")).toContainText("Padaria Aurora")
+    } else {
+      await dragWithMouse(page, cardButton(page, "Padaria Aurora"), () => column(page, "Prospect"))
+      await expect(column(page, "Prospect")).toContainText("Padaria Aurora")
+      await expect(column(page, "Prospect")).toContainText("31 negócios")
+      await expect(column(page, "PrimeiroContato")).toContainText("1 negócio")
+    }
     await expect.poll(() => store.stageRequests.at(-1)).toMatchObject({ id: "pc-1", stage: "Prospect", expectedFromStage: "PrimeiroContato" })
     expect(store.find("pc-1").stage).toBe("Prospect")
   })
 
-  test("soltar na mesma coluna não faz nada e o clique continua abrindo a ficha", async ({ page }) => {
-    test.skip(isMobile(page), "Arrasto com mouse só no desktop.")
+  test("soltar na mesma coluna não faz nada", async ({ page }) => {
     const store = await open(page)
-    await dragWithMouse(page, cardButton(page, "Padaria Aurora"), () => column(page, "PrimeiroContato"))
+    if (isMobile(page)) {
+      await page.getByRole("tab", { name: /Primeiro Contato/ }).click()
+      await dragWithTouch(page, cardButton(page, "Padaria Aurora"), () => page.getByRole("tab", { name: /Primeiro Contato/ }))
+    } else {
+      await dragWithMouse(page, cardButton(page, "Padaria Aurora"), () => column(page, "PrimeiroContato"))
+    }
     await expect(column(page, "PrimeiroContato")).toContainText("Padaria Aurora")
     expect(store.stageRequests).toHaveLength(0)
   })
 
   test("teclado: Espaço pega, → troca de coluna, Espaço solta; anúncios em pt-br", async ({ page }) => {
-    test.skip(isMobile(page), "No celular não há coluna vizinha na tela; a alternativa é o menu ⋮.")
+    test.skip(isMobile(page), "Limite da tela, não da ferramenta: no celular só uma coluna aparece e o arrasto por teclado não tem vizinha para onde ir (as abas não são alvo de teclado). O caminho do teclado no celular é o ⋮ / M, coberto em \"atalhos\".")
     const store = await open(page)
     const live = page.locator('[id^="DndLiveRegion"]')
 
     await cardButton(page, "Ótica Lumen").focus()
     await page.keyboard.press("Space")
     await expect(live).toContainText("Negócio Ótica Lumen pego. Coluna Qualificação, 4 de 8.")
-    // O sensor do dnd-kit só assina o teclado no tique seguinte ao Espaço: sem esta folga, a
-    // primeira seta se perde.
-    await page.waitForTimeout(100)
+    await nextTick(page)
     await page.keyboard.press("ArrowRight")
     await expect(live).toContainText("Coluna Reunião, 5 de 8.")
     await page.keyboard.press("Space")
@@ -229,14 +286,12 @@ test.describe("mover de etapa", () => {
   })
 
   test("teclado: Esc cancela e nada muda", async ({ page }) => {
-    test.skip(isMobile(page), "No celular a alternativa é o menu ⋮.")
+    test.skip(isMobile(page), "Mesmo motivo do teste anterior: sem coluna vizinha na tela do celular.")
     const store = await open(page)
     await cardButton(page, "Ótica Lumen").focus()
     await page.keyboard.press("Space")
     await expect(page.locator('[id^="DndLiveRegion"]')).toContainText("pego")
-    // O sensor do dnd-kit só assina o teclado no tique seguinte ao Espaço: sem esta folga, a
-    // primeira seta se perde.
-    await page.waitForTimeout(100)
+    await nextTick(page)
     await page.keyboard.press("ArrowRight")
     await page.keyboard.press("Escape")
     await expect(page.locator('[id^="DndLiveRegion"]')).toContainText("Movimento cancelado")
@@ -293,7 +348,10 @@ test.describe("mover de etapa", () => {
 })
 
 test.describe("soltar em Fechados", () => {
-  test.skip(({ viewport }) => (viewport?.width ?? 0) < 768, "As zonas de Fechados aparecem durante o arrasto com mouse, só no desktop.")
+  test.skip(
+    ({ viewport }) => (viewport?.width ?? 0) < 768,
+    "Limite da tela: no celular Fechados é uma aba à parte, então as zonas Ganho/Perdido nunca estão na tela junto com um cartão aberto. O fechamento no celular é pelo ⋮ (\"Marcar como ganho\"), coberto no menu completo."
+  )
 
   async function dropOnClosed(page: Page, company: string, zone: "won" | "lost") {
     await column(page, "Fechados").scrollIntoViewIfNeeded()
@@ -363,8 +421,8 @@ test.describe("soltar em Fechados", () => {
 
 test.describe("novo negócio", () => {
   test("+ Adicionar da coluna abre o drawer já na etapa", async ({ page }) => {
-    test.skip(isMobile(page), "No celular a coluna ativa é Prospect; o FAB cobre o CTA.")
     await open(page)
+    if (isMobile(page)) await page.getByRole("tab", { name: /Reunião/ }).click()
     await page.getByRole("button", { name: "Adicionar negócio em Reunião" }).click()
     const drawer = page.getByRole("dialog")
     await expect(drawer).toContainText("Nasce em Reunião")
@@ -394,7 +452,6 @@ test.describe("KPIs e funil", () => {
   })
 
   test("o × oculta o cartão e 'Restaurar cards' traz de volta", async ({ page }) => {
-    test.skip(isMobile(page), "No celular os KPIs são carrossel; o acabamento é da PL4.")
     await open(page)
 
     await page.getByRole("button", { name: "Ocultar o indicador Ticket médio" }).click()
@@ -405,12 +462,13 @@ test.describe("KPIs e funil", () => {
   })
 
   test("clicar numa etapa do funil leva o quadro até a coluna", async ({ page }) => {
-    test.skip(isMobile(page), "No celular a coluna vira aba; o destaque é outro.")
     await open(page)
     const funnel = page.getByTestId("pipeline-funnel")
     await expect(funnel).toContainText("Do total de 342 prospects")
 
     await funnel.getByRole("button", { name: /^Proposta:/ }).click()
+    // No celular a coluna é uma aba: a de Proposta abre.
+    if (isMobile(page)) await expect(page.getByRole("tab", { name: /Proposta/ })).toHaveAttribute("aria-selected", "true")
     await expect(column(page, "Proposta")).toBeInViewport()
   })
 })
@@ -483,9 +541,9 @@ test.describe("faixa inferior", () => {
   })
 
   test("'Ver detalhes' do maior volume leva à coluna da etapa", async ({ page }) => {
-    test.skip(isMobile(page), "No celular a coluna vira aba.")
     await open(page)
     await page.getByRole("region", { name: "Insights do Pipeline" }).getByRole("button", { name: "Ver detalhes" }).first().click()
+    if (isMobile(page)) await expect(page.getByRole("tab", { name: /Qualificação/ })).toHaveAttribute("aria-selected", "true")
     await expect(column(page, "Qualificacao")).toBeInViewport()
   })
 
@@ -506,5 +564,239 @@ test.describe("faixa inferior", () => {
 
     await activities.getByRole("button", { name: "Ver todas" }).click()
     await expect(page.getByRole("dialog", { name: /Atividade/i })).toBeVisible()
+  })
+})
+
+test.describe("atalhos e teclado", () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 0) < 768, "Atalhos de teclado físico: a folha de atalhos some no celular.")
+
+  test("N, / e F; nada dispara digitando e nenhum atalho mexe na URL", async ({ page }) => {
+    await open(page)
+    const url = page.url()
+
+    await page.keyboard.press("/")
+    const search = page.getByRole("searchbox", { name: /Buscar no quadro/ })
+    await expect(search).toBeFocused()
+    await page.keyboard.type("n")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await search.fill("")
+    await search.blur()
+
+    await page.keyboard.press("f")
+    const origin = page.getByRole("dialog", { name: "Filtrar por origem" })
+    await expect(origin).toBeVisible()
+    await page.keyboard.press("Escape")
+    // Enquanto o popover sai, os atalhos esperam (ver PipelinePage).
+    await expect(origin).toHaveCount(0)
+
+    await page.keyboard.press("n")
+    await expect(page.getByRole("dialog").getByRole("searchbox", { name: "Buscar empresa" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    expect(page.url()).toBe(url)
+  })
+
+  test("? abre a folha de atalhos e Esc fecha", async ({ page }) => {
+    await open(page)
+    await page.keyboard.press("?")
+    const help = page.getByRole("dialog", { name: "Atalhos de teclado" })
+    await expect(help).toContainText("Mover o cartão para…")
+    await page.keyboard.press("Escape")
+    await expect(help).toBeHidden()
+  })
+
+  test("Esc fecha a camada de cima primeiro: o menu antes do diálogo", async ({ page }) => {
+    await open(page)
+    await page.getByRole("button", { name: "Ações de Ótica Lumen" }).click()
+    await page.getByRole("menuitem", { name: "Marcar como ganho" }).click()
+    const dialog = page.getByRole("dialog", { name: "Marcar como ganho" })
+    await expect(dialog).toBeVisible()
+    await page.keyboard.press("?")
+    // Com um diálogo aberto os atalhos da tela não disparam.
+    await expect(page.getByRole("dialog", { name: "Atalhos de teclado" })).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+  })
+
+  test("Tab entra num cartão só; setas andam na coluna e entre colunas; Enter abre", async ({ page }) => {
+    await open(page)
+    // Roving tabindex: um único cartão no Tab.
+    await expect(page.locator('[data-deal-card] button[aria-roledescription][tabindex="0"]')).toHaveCount(1)
+
+    await cardButton(page, "Ótica Lumen").focus()
+    await page.keyboard.press("ArrowUp")
+    await expect(cardButton(page, "Tech Solutions")).toBeFocused()
+    await page.keyboard.press("ArrowRight")
+    await expect(column(page, "Reuniao").locator("button[aria-roledescription]").first()).toBeFocused()
+    await page.keyboard.press("ArrowLeft")
+    await expect(column(page, "Qualificacao").locator("button[aria-roledescription]").first()).toBeFocused()
+    await expect(page.locator('[data-deal-card] button[aria-roledescription][tabindex="0"]')).toHaveCount(1)
+
+    await page.keyboard.press("Enter")
+    await expect(page.getByRole("dialog")).toBeVisible()
+  })
+
+  test("M abre 'Mover para…' no cartão focado, move e o foco acompanha o cartão", async ({ page }) => {
+    const store = await open(page)
+    await cardButton(page, "Ótica Lumen").focus()
+    await page.keyboard.press("m")
+
+    const menu = page.getByRole("menu", { name: "Mover Ótica Lumen para" })
+    await expect(menu).toBeVisible()
+    await menu.getByRole("menuitem", { name: "Reunião" }).click()
+
+    await expect.poll(() => store.stageRequests.at(-1)).toMatchObject({ id: "q-2", stage: "Reuniao", expectedFromStage: "Qualificacao" })
+    await expect(column(page, "Reuniao")).toContainText("Ótica Lumen")
+    await expect(cardButton(page, "Ótica Lumen")).toBeFocused()
+  })
+
+  test("M num cartão fechado não abre nada", async ({ page }) => {
+    await open(page)
+    await cardButton(page, "Farmácia Central").focus()
+    await page.keyboard.press("m")
+    await expect(page.getByRole("menu")).toHaveCount(0)
+  })
+})
+
+test.describe("tempo real", () => {
+  async function openLive(page: Page, query = "") {
+    const store = new BoardStore()
+    await installApi(page, store.routes())
+    const hub = await installHub(page)
+    await gotoPipeline(page, query)
+    await hub.connected
+    await expect(page.getByTestId("realtime-indicator")).toHaveAttribute("data-status", "connected")
+    await expect(page.locator("[data-deal-card]").first()).toBeVisible()
+    return { store, hub }
+  }
+
+  test("outro usuário move: o cartão muda de coluna com pulso e os números se ajustam", async ({ page }) => {
+    test.skip(isMobile(page), "Uma coluna por vez no celular; a mesma regra está no Vitest (board-realtime).")
+    const { store, hub } = await openLive(page)
+    const summaries = store.summaryRequests.length
+
+    store.find("q-2").stage = "Reuniao"
+    hub.send({ type: "deal.stageChanged", dealId: "q-2", ownerUserId: "u-1" })
+
+    await expect(column(page, "Reuniao")).toContainText("Ótica Lumen")
+    await expect(card(page, "Ótica Lumen")).toHaveAttribute("data-pulse", "true")
+    await expect(column(page, "Reuniao")).toContainText("2 negócios")
+    await expect(column(page, "Qualificacao")).toContainText("1 negócio")
+    // KPIs e companhia em silêncio, com a folga de 2 s.
+    await expect.poll(() => store.summaryRequests.length, { timeout: 5_000 }).toBeGreaterThan(summaries)
+    await expect(card(page, "Ótica Lumen")).not.toHaveAttribute("data-pulse", "true")
+  })
+
+  test("evento fora do filtro é ignorado; o negócio que entra no filtro aparece com destaque", async ({ page }) => {
+    test.skip(isMobile(page), "Uma coluna por vez no celular; a mesma regra está no Vitest (board-realtime).")
+    const { store, hub } = await openLive(page, "&origens=MetaAds")
+    const before = await page.locator("[data-deal-card]").count()
+    const outside = store.find("q-2")
+    expect(outside.source).not.toBe("MetaAds")
+
+    hub.send({ type: "deal.stageChanged", dealId: outside.id, ownerUserId: "u-1" })
+    await nextTick(page)
+    await expect(page.locator("[data-deal-card]")).toHaveCount(before)
+
+    outside.source = "MetaAds"
+    hub.send({ type: "deal.stageChanged", dealId: outside.id, ownerUserId: "u-1" })
+    await expect(card(page, outside.companyName)).toHaveAttribute("data-pulse", "true")
+    await expect(page.locator("[data-deal-card]")).toHaveCount(before + 1)
+  })
+
+  test("a própria ação não pulsa quando o eco chega", async ({ page }) => {
+    const { store, hub } = await openLive(page)
+    if (isMobile(page)) await page.getByRole("tab", { name: /Qualificação/ }).click()
+    await page.getByRole("button", { name: "Ações de Ótica Lumen" }).click()
+    await page.getByRole("menuitem", { name: "Mover para…" }).click()
+    await page.getByRole("menuitem", { name: "Reunião" }).click()
+    await expect.poll(() => store.stageRequests.length).toBe(1)
+
+    hub.send({ type: "deal.stageChanged", dealId: "q-2", ownerUserId: "u-1" })
+    await nextTick(page)
+    await expect(page.locator("[data-pulse]")).toHaveCount(0)
+  })
+
+  test("durante o arrasto o evento espera; ao terminar ele é aplicado", async ({ page }) => {
+    test.skip(isMobile(page), "O arrasto por teclado precisa da coluna vizinha na tela; a fila está no Vitest.")
+    const { store, hub } = await openLive(page)
+    const live = page.locator('[id^="DndLiveRegion"]')
+
+    await cardButton(page, "Ótica Lumen").focus()
+    await page.keyboard.press("Space")
+    await expect(live).toContainText("pego")
+
+    store.find("pc-1").stage = "Prospect"
+    hub.send({ type: "deal.stageChanged", dealId: "pc-1", ownerUserId: "u-1" })
+    // Durante o arrasto o evento vai para a fila sem nem reler o cartão.
+    await page.waitForTimeout(300)
+    expect(store.cardRequests).toBe(0)
+    await expect(column(page, "PrimeiroContato")).toContainText("Padaria Aurora")
+
+    await page.keyboard.press("Escape")
+    await expect(column(page, "Prospect")).toContainText("Padaria Aurora")
+    await expect(column(page, "PrimeiroContato")).not.toContainText("Padaria Aurora")
+  })
+
+  test("conexão caiu: o indicador avisa, a tela segue utilizável e revalida ao reconectar", async ({ page }) => {
+    const { store, hub } = await openLive(page)
+    const boards = store.boardRequests.length
+    hub.drop()
+    await expect(page.getByTestId("realtime-indicator")).toHaveAttribute("data-status", "reconnecting")
+    await expect(page.locator("[data-deal-card]").first()).toBeVisible()
+    await expect(page.getByTestId("realtime-indicator")).toHaveAttribute("data-status", "connected", { timeout: 10_000 })
+    await expect.poll(() => store.boardRequests.length).toBeGreaterThan(boards)
+  })
+})
+
+test.describe("celular", () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 0) >= 768, "Acabamento do celular (< 768px).")
+
+  test("swipe troca de etapa e as abas mostram a contagem", async ({ page }) => {
+    await open(page)
+    const panel = page.getByRole("tabpanel")
+    await expect(page.getByRole("tab", { name: /^Prospect\s*30/ })).toHaveAttribute("aria-selected", "true")
+    await swipe(page, panel, -160)
+    await expect(page.getByRole("tab", { name: /Primeiro Contato/ })).toHaveAttribute("aria-selected", "true")
+    await swipe(page, panel, 160)
+    await expect(page.getByRole("tab", { name: /^Prospect/ })).toHaveAttribute("aria-selected", "true")
+  })
+
+  test("KPIs em carrossel com indicador de posição clicável", async ({ page }) => {
+    await open(page)
+    const position = page.getByRole("group", { name: "Posição em indicadores do pipeline" })
+    await expect(position.getByRole("button")).toHaveCount(3)
+    await expect(position).toContainText("Indicadores 1 e 2 de 5")
+    await position.getByRole("button", { name: "Indicador 5 de 5" }).click()
+    await expect(position.getByRole("button", { name: "Indicador 5 de 5" })).toHaveAttribute("aria-current", "true")
+  })
+
+  test("'Ver todos' abre a lista em tela cheia", async ({ page }) => {
+    await open(page)
+    await column(page, "Prospect").getByRole("button", { name: "Ver todos (30)" }).click()
+    const box = (await page.getByRole("dialog", { name: "Prospect" }).boundingBox())!
+    expect(box.width).toBeGreaterThanOrEqual(389)
+  })
+
+  test("⋮ é o caminho para mover e fechar; alvos de 44px e FAB", async ({ page }) => {
+    await open(page)
+    await page.getByRole("tab", { name: /Qualificação/ }).click()
+    const menuButton = page.getByRole("button", { name: "Ações de Tech Solutions" })
+    expect((await menuButton.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    await menuButton.click()
+    await expect(page.getByRole("menuitem", { name: "Mover para…" })).toBeVisible()
+    await expect(page.getByRole("menuitem", { name: "Marcar como ganho" })).toBeVisible()
+    await page.keyboard.press("Escape")
+
+    for (const tab of await page.getByRole("tab").all()) expect((await tab.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    await expect(page.getByRole("button", { name: "Novo negócio" })).toBeVisible()
+  })
+
+  test("página sem rolagem horizontal e insights em largura cheia", async ({ page }) => {
+    await open(page)
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    expect(overflow).toBeLessThanOrEqual(0)
+    const insights = (await page.getByRole("region", { name: "Insights do Pipeline" }).boundingBox())!
+    expect(insights.width).toBeGreaterThan(340)
   })
 })

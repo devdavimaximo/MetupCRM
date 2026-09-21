@@ -133,6 +133,39 @@ public class DealActionScopeTests
     }
 
     [Fact]
+    public async Task Editar_com_outro_responsavel_segue_as_regras_de_reatribuir()
+    {
+        using var context = new PipelineTestContext();
+        var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
+
+        // SDR no próprio negócio: editar sem trocar o dono vale; trocar o dono é reatribuir → 403.
+        var sdr = context.UpdateDeal(context.SdrUserId, UserRole.Sdr);
+        var edited = await sdr.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.SdrUserId, null, 2_000m, null), Ct);
+        Assert.Equal(2_000m, edited.Amount);
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            sdr.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.AdminUserId, null, 2_000m, null), Ct));
+
+        var admin = context.UpdateDeal(context.AdminUserId, UserRole.Admin);
+        var reassigned = await admin.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.CloserUserId, null, 2_000m, null), Ct);
+        Assert.Equal(context.CloserUserId, reassigned.OwnerUserId);
+    }
+
+    [Fact]
+    public async Task Editar_negocio_fechado_nao_troca_o_responsavel_mas_aceita_o_mesmo()
+    {
+        using var context = new PipelineTestContext();
+        var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
+        context.Close(deal, won: true, Now.AddDays(-1), closedAmount: 1_000m);
+        var admin = context.UpdateDeal(context.AdminUserId, UserRole.Admin);
+
+        await Assert.ThrowsAsync<DomainRuleException>(() =>
+            admin.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.CloserUserId, null, 1_000m, null), Ct));
+
+        var same = await admin.Handle(new UpdateDealCommand(deal.Id, null, DealSource.MetaAds, context.SdrUserId, null, 1_000m, null), Ct);
+        Assert.Equal((context.SdrUserId, DealSource.MetaAds), (same.OwnerUserId, same.Source));
+    }
+
+    [Fact]
     public void Dominio_recusa_reatribuir_negocio_fechado()
     {
         using var context = new PipelineTestContext();

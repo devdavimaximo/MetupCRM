@@ -272,7 +272,7 @@ export function getPipelineEvolution(params: PipelineFilters & { months: 3 | 6 |
 }
 
 /**
- * Ficha atual do negócio num 409 de `changeDealStage` com `expectedFromStage` (outro usuário já
+ * Ficha atual do negócio num 409 de `changeDealStageForBoard` com `expectedFromStage` (outro usuário já
  * moveu ou fechou). null para qualquer outro erro.
  */
 export function staleDealOf(error: unknown): Deal | null {
@@ -347,14 +347,7 @@ export function updateDeal(id: string, input: DealInput) {
  * Mesma etapa = sucesso sem nova transição. Com `expectedFromStage`, se o negócio já saiu dela o
  * servidor responde 409 com a ficha atual (ver `staleDealOf`).
  */
-export function changeDealStage(id: string, stage: DealStage, options: { expectedFromStage?: DealStage } = {}) {
-  return apiFetch<Deal>(`/api/deals/${id}/stage`, {
-    method: "POST",
-    body: JSON.stringify({ stage, expectedFromStage: options.expectedFromStage ?? null }),
-  })
-}
-
-/** Igual a `changeDealStage`, mas devolve o cartão do quadro (`?view=card`). */
+/** Muda a etapa e devolve o cartão do quadro (`?view=card`). O 409 traz a ficha atual (`staleDealOf`). */
 export function changeDealStageForBoard(id: string, stage: DealStage, options: { expectedFromStage?: DealStage } = {}) {
   return apiFetch<DealBoardCard>(`/api/deals/${id}/stage?view=card`, {
     method: "POST",

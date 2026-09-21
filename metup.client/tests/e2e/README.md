@@ -94,13 +94,30 @@ mudam a loja, e o quadro e as colunas seguintes refletem isso (contagem e soma d
 - **Arrasto com mouse:** `page.mouse` (apertar, passar dos 6px, mover, soltar). As zonas de Fechados
   só existem **durante** o arrasto, então o alvo é resolvido depois de começar (`dragWithMouse`).
 - **Teclado:** foco no cartão, `Space`, `ArrowRight`, `Space`. Os anúncios saem no
-  `[id^="DndLiveRegion"]` do `@dnd-kit`.
+  `[id^="DndLiveRegion"]` do `@dnd-kit`. Entre o `Space` e a primeira seta vai um `nextTick(page)`:
+  o sensor assina as setas num `setTimeout(0)` (de propósito, para o mesmo Espaço não soltar o
+  cartão), e um `setTimeout(0)` agendado depois sai só com ele pronto. Nada de folga em ms.
+- **Toque:** `dragWithTouch` e `swipe` falam CDP (`Input.dispatchTouchEvent`), porque o
+  `page.touchscreen` só sabe `tap`. Pressionar dura 350 ms: é o contrato do sensor (250 ms), não
+  folga. O ponto de toque precisa estar **dentro da janela** (role o alvo antes).
+- **Tempo real:** `installHub(page)` (`fixtures/hub.ts`), instalado **depois** do `installApi`,
+  responde o `negotiate` e fala o protocolo JSON do SignalR por `page.routeWebSocket`: o cliente
+  de verdade conecta, e `hub.send({ type, dealId, ownerUserId })` empurra um evento. Mude a
+  `BoardStore` antes de mandar o evento: a tela relê o cartão por `GET /card`. `hub.drop()`
+  derruba a conexão (o indicador vai a "Reconectando…" e volta sozinho).
 
 ## OneDrive: specs que "somem"
 
-Com o repositório no OneDrive, arquivos só na nuvem viram *reparse points*. O Node os vê como
-symlink, e o Playwright **não lista** esses specs, sem erro nenhum (`--list` mostra menos arquivos).
-Se o total cair, marque a pasta como "Sempre manter neste dispositivo" ou regrave os arquivos.
+Com o repositório no OneDrive, os arquivos viram *reparse points* — **inclusive com a pasta fixada
+como "Sempre manter neste dispositivo"** (testado na PL4: o atributo `P` fica, a etiqueta de nuvem
+também). O `readdir` do Node vê o arquivo como link simbólico, e o Playwright **não lista** esses
+specs, sem erro nenhum ("0 tests in 0 files"). O `lstat` não acusa nada, por isso a detecção é pela
+entrada do diretório.
+
+**Resolvido no `npm run test:e2e`:** o `pretest:e2e` (`scripts/e2e-onedrive.mjs`) regrava como
+arquivo comum tudo de `tests/e2e` que virou reparse point e confere que todo `*.spec.ts` do disco
+ficou legível; se não ficou, **falha** com a lista dos arquivos. Para só regravar:
+`npm run test:e2e:fix`. Rodando `npx playwright test` direto, a guarda não roda — use o script.
 
 ## Pulos declarados
 
@@ -114,9 +131,14 @@ Nada aqui é silenciado: todo `test.skip` diz por que existe.
 | `tasks-page` › 1366×768 sem rolagem | ≠ 1366px | Faixa mais estreita com tabela. |
 | `tasks-page` › 390×844 cards | ≥ 768px | Cards só abaixo de `md`. |
 | `dashboard-mobile` › o arquivo inteiro | ≥ 768px | Abaixo de `md` o dashboard monta **outra árvore** (item 26); as asserções de ordem não valem no desktop. |
-| `pipeline-page` › arrastar com mouse, mesma coluna, teclado (2) | < 768px | No celular é uma coluna por vez: não há coluna vizinha na tela, e o arrasto por toque (pressionar 250 ms) não é dublável com fidelidade. O menu `⋮ > Mover para…` é testado em todas as larguras. |
-| `pipeline-page` › soltar em Fechados (4) | < 768px | As zonas Ganho/Perdido aparecem durante o arrasto com mouse. |
-| `pipeline-page` › + Adicionar da coluna | < 768px | No celular o CTA é o FAB (testado em "Novo negócio"). |
+| `pipeline-page` › teclado: pega/solta e Esc (2) | < 768px | Limite da tela: uma coluna por vez, e o arrasto por teclado não tem vizinha (as abas não são alvo de teclado). No celular o teclado usa ⋮ / `M`. |
+| `pipeline-page` › soltar em Fechados (4) | < 768px | Limite da tela: Fechados é uma aba à parte, então as zonas Ganho/Perdido nunca estão na tela junto com um cartão aberto. O fechamento no celular é pelo ⋮. |
+| `pipeline-page` › tempo real: mover, filtro, arrasto (3) | < 768px | Uma coluna por vez; as mesmas regras estão no Vitest (`board-realtime.test.ts`). O eco da própria ação e a reconexão rodam no celular. |
+| `pipeline-page` › atalhos e teclado (6) | < 768px | Teclado físico; a folha de atalhos some no celular. |
+| `pipeline-page` › celular (5) | ≥ 768px | Acabamento só abaixo de `md`. |
+
+> PL4: o arrasto por toque (pressionar e soltar na aba), soltar na mesma coluna, "+ Adicionar", o
+> `×` dos KPIs, o funil e o "Ver detalhes" deixaram de pular no celular.
 
 > O pulo do tooltip do nó Ganhos saiu na onda 3B: o item 26 deu ao `Hint` a abertura por toque
 > (`openOnTap`), e o cenário passou a valer em todas as larguras.

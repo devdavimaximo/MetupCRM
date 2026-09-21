@@ -81,7 +81,8 @@ public class RealtimeNotificationTests
         var deal = seed.AddOpenDeal(seed.AdminUserId, null, null, NowUtc.AddDays(-1));
         await using (var copy = new MetupDbContext(options))
         {
-            copy.Deals.Add(new Deal { Id = deal.Id, OrganizationId = seed.OrganizationId, CompanyId = seed.CompanyId, OwnerUserId = seed.AdminUserId, CreatedAt = deal.CreatedAt });
+            // Sem responsável: o comando falha ao gravar, e o Admin age sem recorte por dono.
+            copy.Deals.Add(new Deal { Id = deal.Id, OrganizationId = seed.OrganizationId, CompanyId = seed.CompanyId, CreatedAt = deal.CreatedAt });
             await copy.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 

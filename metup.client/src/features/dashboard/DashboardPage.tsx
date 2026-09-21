@@ -11,7 +11,8 @@ import type { TaskItem } from "@/features/tasks/api"
 import { numberFormatter } from "@/lib/format"
 import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
 import { addDays, todayLocal, type LocalDate } from "@/lib/local-date"
-import { useRealtime, useRealtimeStatus } from "@/lib/realtime"
+import { useRealtime } from "@/lib/realtime"
+import { RealtimeIndicator } from "@/components/RealtimeIndicator"
 import { readUrlState, writeUrlState, type View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 import { getDashboardOverview, getDashboardSummary, type DashboardOverview, type DealScope } from "./api"
@@ -74,24 +75,6 @@ function greeting(date = new Date()) {
 const REALTIME_DEBOUNCE_MS = 2_000
 /** Quanto tempo o evento novo fica realçado na Atividade Recente. */
 const HIGHLIGHT_MS = 2_500
-
-/** Ponto discreto do estado do tempo real, com o texto no tooltip e para leitor de tela. */
-function RealtimeIndicator() {
-  const status = useRealtimeStatus()
-  const live = status === "connected"
-  const text = live ? "Atualização em tempo real" : "Reconectando…"
-  return (
-    <Hint content={text}>
-      <span tabIndex={0} data-testid="realtime-indicator" data-status={status} className="ml-1 inline-flex size-4 items-center justify-center rounded-full focus-visible:focus-ring">
-        <span
-          aria-hidden="true"
-          className={cn("size-1.5 rounded-full", live ? "bg-success" : "animate-pulse bg-accent motion-reduce:animate-none")}
-        />
-        <span className="sr-only">{text}</span>
-      </span>
-    </Hint>
-  )
-}
 
 /** Série acumulada a partir de valores por intervalo. */
 function runningSum(values: number[]) {

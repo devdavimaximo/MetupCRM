@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type TouchEvent } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -22,6 +22,7 @@ import { useMediaQuery } from "@/lib/hooks"
 import { numberFormatter } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { DealBoardCard, DealBoardClosedGroup, DealStage } from "./api"
+import { isBoardArrow, nextFocus, tabStopOf } from "./board-keyboard"
 import { boardAnnouncements, boardScreenReaderInstructions, targetPosition, type DropTarget } from "./board-announcements"
 import type { ColumnKey } from "./board-state"
 import { DealCardContent, type DealCardActions, type DraggedCardData } from "./DealCard"
@@ -40,9 +41,12 @@ type Props = {
   /** Soltou em Ganho/Perdido: o diálogo decide; o cartão não sai do lugar até confirmar. */
   onCloseRequest: (card: DealBoardCard, won: boolean) => void
   /** Item 15: o resto do menu `⋮`, montado pela página (registrar, nova tarefa, reatribuir, empresa). */
-  cardMenu: (card: DealBoardCard) => Omit<DealCardActions, "onOpen" | "onMove">
+  cardMenu: (card: DealBoardCard) => Omit<DealCardActions, "onOpen" | "onMove" | "onFocus" | "onMoveRequestDone">
   /** "Ver todos (N)": abre a coluna inteira na lista lateral (item 16). */
   onSeeAll: (key: ColumnKey) => void
+  /** O `M` da página: abre "Mover para…" no cartão focado. */
+  moveRequestId: string | null
+  onMoveRequestDone: () => void
 }
 
 const HIGHLIGHT_MS = 2800
@@ -95,15 +99,90 @@ const order = (target: DropTarget) => targetPosition(target) + (target.kind === 
  * O quadro: 7 etapas + Fechados. Só o quadro rola na horizontal (sombras nas bordas avisam que há
  * mais colunas); cada coluna rola na vertical. Abaixo de 768px, uma coluna por vez com abas.
  */
-export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTask, onCloseRequest, cardMenu, onSeeAll }: Props) {
+export function DealBoard({
+  view,
+  highlightStage,
+  onOpenDeal,
+  onAddDeal,
+  onAddTask,
+  onCloseRequest,
+  cardMenu,
+  onSeeAll,
+  moveRequestId,
+  onMoveRequestDone,
+}: Props) {
   const columns = view.columns!
   const isMobile = useMediaQuery("(max-width: 767px)")
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)")
   const [activeCard, setActiveCard] = useState<DealBoardCard | null>(null)
   const [highlighted, setHighlighted] = useState<DealStage | null>(highlightStage)
   const [mobileKey, setMobileKey] = useState<MobileKey>(highlightStage ?? ACTIVE_STAGES[0])
+  const [focusedId, setFocusedId] = useState<string | null>(null)
+  // Destaque novo (funil, insights): no celular a aba da etapa abre; no desktop a coluna realça de novo.
+  const [lastHighlight, setLastHighlight] = useState(highlightStage)
+  if (highlightStage !== lastHighlight) {
+    setLastHighlight(highlightStage)
+    if (highlightStage) {
+      setHighlighted(highlightStage)
+      setMobileKey(highlightStage)
+    }
+  }
   const lastDragEnd = useRef(0)
+  /** Cartão que o teclado moveu: o foco o acompanha até a coluna nova. */
+  const refocusId = useRef<string | null>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
   const now = new Date()
+
+  // O que está na tela, na ordem da tela: o Tab entra no último cartão focado (roving tabindex).
+  const visibleKeys: ColumnKey[] = isMobile
+    ? [mobileKey === "closed" ? view.closedTab : mobileKey]
+    : [...ACTIVE_STAGES, view.closedTab]
+  const tabStopId = tabStopOf(
+    visibleKeys.map((key) => columns[key].items.map((card) => card.id)),
+    focusedId
+  )
+
+  function focusCard(id: string) {
+    const button = boardRef.current?.querySelector<HTMLElement>(`[data-deal-id="${CSS.escape(id)}"] button[aria-roledescription]`)
+    if (!button) return false
+    button.focus({ preventScroll: true })
+    // A coluna (e o quadro, na horizontal) rola para acompanhar o foco.
+    button.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reducedMotion ? "auto" : "smooth" })
+    return true
+  }
+
+  // Depois de um movimento pelo teclado o cartão remonta em outra coluna: devolve o foco a ele.
+  useEffect(() => {
+    const id = refocusId.current
+    if (id && focusCard(id)) refocusId.current = null
+  })
+
+  /**
+   * Setas fora do arrasto (item 22): ↑/↓ na coluna, ←/→ para a coluna vizinha com cartão. No
+   * celular, ←/→ trocam de aba. Durante o arrasto as setas são do dnd-kit.
+   */
+  function handleBoardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (activeCard || !isBoardArrow(event.key) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    const target = event.target as HTMLElement
+    const cardEl = target.closest<HTMLElement>("[data-deal-card]")
+    if (!cardEl || !target.matches("button[aria-roledescription]")) return
+    event.preventDefault()
+
+    if (isMobile && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      const index = MOBILE_KEYS.indexOf(mobileKey)
+      const next = MOBILE_KEYS[Math.max(0, Math.min(MOBILE_KEYS.length - 1, index + (event.key === "ArrowRight" ? 1 : -1)))]
+      const key = next === "closed" ? view.closedTab : next
+      refocusId.current = columns[key].items[0]?.id ?? null
+      setMobileKey(next)
+      return
+    }
+
+    const grid = [...event.currentTarget.querySelectorAll<HTMLElement>("[data-column-list]")].map((list) =>
+      [...list.querySelectorAll<HTMLElement>("[data-deal-card]")].map((el) => el.dataset.dealId!)
+    )
+    const next = nextFocus(grid, cardEl.dataset.dealId!, event.key)
+    if (next) focusCard(next)
+  }
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -148,6 +227,7 @@ export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTa
 
   function handleDragStart({ active }: DragStartEvent) {
     setActiveCard(cardOf(active.data.current))
+    view.setDragging(true)
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
@@ -155,27 +235,35 @@ export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTa
     lastDragEnd.current = Date.now()
     const card = cardOf(active.data.current)
     const target = dropTargetOf(over?.data.current)
-    if (!card || !target) return
-    if (target.kind === "close") {
-      onCloseRequest(card, target.won)
-      return
+    if (card && target?.kind === "close") onCloseRequest(card, target.won)
+    else if (card && target?.kind === "stage" && target.stage !== card.stage) {
+      // O movimento marca o cartão como "em voo" antes de soltar a fila do tempo real.
+      void view.moveDeal(card, target.stage)
+      if (isMobile) setMobileKey(target.stage)
     }
-    if (target.stage === card.stage) return
-    void view.moveDeal(card, target.stage)
-    if (isMobile) setMobileKey(target.stage)
+    view.setDragging(false)
   }
 
   const handlers: CardHandlers = {
     now,
     pendingIds: view.pendingIds,
     returnedIds: view.returnedIds,
+    pulsedIds: view.pulsedIds,
+    tabStopId,
+    moveRequestId,
+    onHoverColumn: view.setHoveredColumn,
     actionsFor: (card) => ({
       ...cardMenu(card),
       // O clique que termina um arrasto não abre a ficha.
       onOpen: () => {
         if (Date.now() - lastDragEnd.current > 300) onOpenDeal(card)
       },
-      onMove: (stage) => void view.moveDeal(card, stage),
+      onMove: (stage) => {
+        if (moveRequestId === card.id) refocusId.current = card.id
+        void view.moveDeal(card, stage)
+      },
+      onFocus: () => setFocusedId(card.id),
+      onMoveRequestDone,
     }),
   }
 
@@ -230,8 +318,10 @@ export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTa
       onDragCancel={() => {
         setActiveCard(null)
         lastDragEnd.current = Date.now()
+        view.setDragging(false)
       }}
     >
+      <div ref={boardRef} onKeyDown={handleBoardKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
       {isMobile ? (
         <MobileBoard
           view={view}
@@ -243,6 +333,7 @@ export function DealBoard({ view, highlightStage, onOpenDeal, onAddDeal, onAddTa
       ) : (
         <DesktopBoard highlightStage={highlightStage}>{MOBILE_KEYS.map(renderColumn)}</DesktopBoard>
       )}
+      </div>
 
       <DragOverlay dropAnimation={reducedMotion ? null : undefined}>
         {activeCard && (

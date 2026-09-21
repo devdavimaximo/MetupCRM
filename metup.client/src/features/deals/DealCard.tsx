@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from "react"
+import { useRef, useState, type PointerEvent, type RefObject } from "react"
 import { useDraggable } from "@dnd-kit/core"
 import {
   ArrowRightLeft,
@@ -19,6 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -124,6 +125,9 @@ export function DealCard({
   now,
   isPending,
   isReturned,
+  isPulsed,
+  tabStop,
+  requestMove,
   actions,
 }: {
   card: DealBoardCard
@@ -132,9 +136,16 @@ export function DealCard({
   isPending: boolean
   /** Voltou ao lugar (erro/409): realce breve. */
   isReturned: boolean
+  /** Mudou por outro usuário (tempo real): pulso sutil. */
+  isPulsed: boolean
+  /** O único cartão do quadro no Tab (roving tabindex): as setas levam aos outros. */
+  tabStop: boolean
+  /** O `M` pediu "Mover para…" neste cartão: o menu abre já na lista de etapas. */
+  requestMove: boolean
   actions: DealCardActions
 }) {
   const { onOpen } = actions
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
   const isOpen = card.status === "Aberto"
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: card.id,
@@ -172,21 +183,28 @@ export function DealCard({
       data-deal-card
       data-deal-id={card.id}
       data-status={card.status}
+      data-pulse={isPulsed || undefined}
       aria-busy={isPending || undefined}
       className={cn(
-        "group/card relative rounded-sm border border-line-soft bg-surface shadow-hairline transition-[border-color,opacity] hover:border-line-strong/70",
+        "group/card relative rounded-sm border border-line-soft bg-surface shadow-hairline transition-[border-color,opacity,box-shadow] duration-500 hover:border-line-strong/70 motion-reduce:transition-none",
         card.status === "Perdido" && "opacity-60 hover:opacity-90",
         isDragging && "border-dashed border-line-strong opacity-40",
         isPending && "opacity-70",
+        isPulsed && "border-accent/70 shadow-glow-accent",
         isReturned && "animate-in fade-in-0 zoom-in-95 border-danger/60 duration-300 motion-reduce:animate-none"
       )}
     >
       <button
-        ref={setActivatorNodeRef}
+        ref={(node) => {
+          buttonRef.current = node
+          setActivatorNodeRef(node)
+        }}
         type="button"
         {...attributes}
         {...listeners}
         {...closedGesture}
+        tabIndex={tabStop ? 0 : -1}
+        onFocus={actions.onFocus}
         aria-disabled={undefined}
         aria-roledescription={isOpen ? "negócio arrastável" : "negócio"}
         aria-describedby={isOpen ? attributes["aria-describedby"] : CLOSED_CARD_HINT_ID}
@@ -212,7 +230,7 @@ export function DealCard({
             <Loader2 className="size-4 animate-spin" />
           </span>
         ) : (
-          <CardMenu card={card} actions={actions} />
+          <CardMenu card={card} actions={actions} tabStop={tabStop} requestMove={requestMove && isOpen} cardButton={buttonRef} />
         )}
       </div>
     </article>
@@ -229,75 +247,118 @@ export type DealCardActions = {
   onReassign: () => void
   onOpenCompany: () => void
   canReassign: boolean
+  /** O cartão ganhou foco: vira o ponto de entrada do Tab no quadro. */
+  onFocus: () => void
+  /** O menu aberto pelo `M` fechou (com ou sem escolha). */
+  onMoveRequestDone: () => void
 }
 
-function CardMenu({ card, actions }: { card: DealBoardCard; actions: DealCardActions }) {
+/**
+ * O `⋮`. Pelo `M` ele abre direto na lista de etapas ("Mover para…") e, ao fechar, devolve o foco
+ * ao cartão — não ao `⋮`, que o teclado não pediu.
+ */
+function CardMenu({
+  card,
+  actions,
+  tabStop,
+  requestMove,
+  cardButton,
+}: {
+  card: DealBoardCard
+  actions: DealCardActions
+  tabStop: boolean
+  requestMove: boolean
+  cardButton: RefObject<HTMLButtonElement | null>
+}) {
   const { onOpen, onMove } = actions
   const isOpen = card.status === "Aberto"
+  const [open, setOpen] = useState(false)
+
+  const stageItems = ACTIVE_STAGES.map((stage) => (
+    <DropdownMenuItem key={stage} disabled={stage === card.stage} onSelect={() => onMove(stage)}>
+      {stageLabels[stage]}
+      {stage === card.stage && <span className="ml-auto text-xs text-faint">atual</span>}
+    </DropdownMenuItem>
+  ))
+
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      open={open || requestMove}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next && requestMove) actions.onMoveRequestDone()
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          tabIndex={tabStop ? 0 : -1}
           aria-label={`Ações de ${card.companyName}`}
-          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-xs text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring data-[state=open]:bg-surface-3 data-[state=open]:text-fg max-md:size-10"
+          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-xs text-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring data-[state=open]:bg-surface-3 data-[state=open]:text-fg max-md:size-11"
         >
           <EllipsisVertical className="size-4" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuItem onSelect={onOpen}>
-          <PanelRightOpen aria-hidden="true" />
-          Abrir negócio
-        </DropdownMenuItem>
-        {isOpen && (
-          <>
-            <DropdownMenuItem onSelect={actions.onLogActivity}>
-              <NotebookPen aria-hidden="true" />
-              Registrar atividade
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={actions.onNewTask}>
-              <CalendarPlus aria-hidden="true" />
-              Nova tarefa
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <ArrowRightLeft aria-hidden="true" />
-                Mover para…
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent aria-label="Etapas">
-                {ACTIVE_STAGES.map((stage) => (
-                  <DropdownMenuItem key={stage} disabled={stage === card.stage} onSelect={() => onMove(stage)}>
-                    {stageLabels[stage]}
-                    {stage === card.stage && <span className="ml-auto text-xs text-faint">atual</span>}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onSelect={() => actions.onClose(true)}>
-              <Trophy aria-hidden="true" />
-              Marcar como ganho
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => actions.onClose(false)}>
-              <CircleX aria-hidden="true" />
-              Marcar como perdido
-            </DropdownMenuItem>
-            {/* Reatribuir é ação de Admin/Closer — para o SDR a opção nem aparece (e o servidor recusa). */}
-            {actions.canReassign && (
-              <DropdownMenuItem onSelect={actions.onReassign}>
-                <UserRoundCog aria-hidden="true" />
-                Reatribuir responsável
+      {requestMove ? (
+        <DropdownMenuContent
+          aria-label={`Mover ${card.companyName} para`}
+          aria-labelledby={undefined}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            cardButton.current?.focus()
+          }}
+        >
+          <DropdownMenuLabel>Mover para…</DropdownMenuLabel>
+          {stageItems}
+        </DropdownMenuContent>
+      ) : (
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={onOpen}>
+            <PanelRightOpen aria-hidden="true" />
+            Abrir negócio
+          </DropdownMenuItem>
+          {isOpen && (
+            <>
+              <DropdownMenuItem onSelect={actions.onLogActivity}>
+                <NotebookPen aria-hidden="true" />
+                Registrar atividade
               </DropdownMenuItem>
-            )}
-          </>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={actions.onOpenCompany}>
-          <Building2 aria-hidden="true" />
-          Abrir empresa
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+              <DropdownMenuItem onSelect={actions.onNewTask}>
+                <CalendarPlus aria-hidden="true" />
+                Nova tarefa
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <ArrowRightLeft aria-hidden="true" />
+                  Mover para…
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent aria-label="Etapas">{stageItems}</DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onSelect={() => actions.onClose(true)}>
+                <Trophy aria-hidden="true" />
+                Marcar como ganho
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => actions.onClose(false)}>
+                <CircleX aria-hidden="true" />
+                Marcar como perdido
+              </DropdownMenuItem>
+              {/* Reatribuir é ação de Admin/Closer — para o SDR a opção nem aparece (e o servidor recusa). */}
+              {actions.canReassign && (
+                <DropdownMenuItem onSelect={actions.onReassign}>
+                  <UserRoundCog aria-hidden="true" />
+                  Reatribuir responsável
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={actions.onOpenCompany}>
+            <Building2 aria-hidden="true" />
+            Abrir empresa
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      )}
     </DropdownMenu>
   )
 }

@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "pretest:e2e": "node scripts/e2e-onedrive.mjs",
+    "test:e2e:fix": "node scripts/e2e-onedrive.mjs --fix"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

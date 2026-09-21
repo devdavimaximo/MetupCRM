@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import type { DealBoardCard, DealBoardClosedGroup, DealStage } from "./api"
 import type { DropTarget } from "./board-announcements"
-import { canLoadMoreInColumn, type BoardColumnState } from "./board-state"
+import { canLoadMoreInColumn, type BoardColumnState, type ColumnKey } from "./board-state"
 import { CLOSED_CARD_HINT_ID, DealCard, type DealCardActions } from "./DealCard"
 import { stageIcons } from "./stage-icons"
 import { stageLabels } from "./stage-labels"
@@ -25,6 +25,14 @@ export type CardHandlers = {
   now: Date
   pendingIds: ReadonlySet<string>
   returnedIds: ReadonlySet<string>
+  /** Mudaram por outro usuário (tempo real). */
+  pulsedIds: ReadonlySet<string>
+  /** O cartão que recebe o Tab ao entrar no quadro (roving tabindex). */
+  tabStopId: string | null
+  /** Cartão em que o `M` pediu "Mover para…". */
+  moveRequestId: string | null
+  /** O cursor entrou (ou saiu, com `null`) numa coluna: o tempo real não reordena sob ele. */
+  onHoverColumn: (key: ColumnKey | null) => void
   /** O menu `⋮` do cartão (item 15): a página monta as ações, a coluna só entrega. */
   actionsFor: (card: DealBoardCard) => DealCardActions
 }
@@ -110,6 +118,9 @@ function CardList({
                   now={handlers.now}
                   isPending={handlers.pendingIds.has(card.id)}
                   isReturned={handlers.returnedIds.has(card.id)}
+                  isPulsed={handlers.pulsedIds.has(card.id)}
+                  tabStop={handlers.tabStopId === card.id}
+                  requestMove={handlers.moveRequestId === card.id}
                   actions={handlers.actionsFor(card)}
                 />
               </li>
@@ -139,7 +150,7 @@ function CardList({
           <button
             type="button"
             onClick={load.onSeeAll}
-            className="flex h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xs text-sm text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring disabled:cursor-progress"
+            className="flex h-9 max-md:h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xs text-sm text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring disabled:cursor-progress"
           >
             Ver todos ({numberFormatter.format(column.count)})
             <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -190,6 +201,8 @@ export function StageColumn({
       data-stage={stage}
       data-highlighted={highlighted || undefined}
       data-over={isOver || undefined}
+      onPointerEnter={() => handlers.onHoverColumn(stage)}
+      onPointerLeave={() => handlers.onHoverColumn(null)}
       className={cn(
         columnShell,
         "border-line-soft",
@@ -232,7 +245,7 @@ export function StageColumn({
 
 /** `+ Adicionar ▾`: o clique cria o negócio já nesta etapa; a seta abre as outras opções. */
 function AddMenu({ stage, onAddDeal, onAddTask }: { stage: DealStage; onAddDeal: () => void; onAddTask: () => void }) {
-  const button = "inline-flex h-8 cursor-pointer items-center text-xs text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
+  const button = "inline-flex h-8 max-md:h-11 cursor-pointer items-center text-xs text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
   return (
     <div className="flex shrink-0 items-center rounded-xs border border-line-soft">
       <button
@@ -294,13 +307,15 @@ export function ClosedColumn({
 }) {
   const column = tab === "won" ? won : lost
   const toggle =
-    "inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xs px-2 text-xs transition-colors focus-visible:focus-ring"
+    "inline-flex h-8 max-md:h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xs px-2 text-xs transition-colors focus-visible:focus-ring"
 
   return (
     <section
       aria-labelledby="pipeline-col-closed"
       data-stage="Fechados"
       data-highlighted={highlighted || undefined}
+      onPointerEnter={() => handlers.onHoverColumn(tab)}
+      onPointerLeave={() => handlers.onHoverColumn(null)}
       className={cn(columnShell, "border-line-soft", highlighted && "border-accent/70 shadow-glow-accent")}
     >
       <header className="flex shrink-0 flex-col gap-2 border-b border-line-soft px-3 pt-3 pb-2.5">

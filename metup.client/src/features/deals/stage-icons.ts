@@ -24,5 +24,3 @@ export const stageIcons: Record<DealStage, LucideIcon> = {
   Ganho: Trophy,
   Perdido: Trophy,
 }
-
-export const ClosedIcon = Trophy

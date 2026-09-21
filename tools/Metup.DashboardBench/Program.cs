@@ -14,6 +14,11 @@ using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Models;
 using Metup.Application.Dashboard.Queries.GetDashboardOverview;
 using Metup.Application.Deals.Analytics;
+using Metup.Application.Deals.Common;
+using Metup.Application.Deals.Queries.GetDealBoard;
+using Metup.Application.Deals.Queries.GetPipelineEvolution;
+using Metup.Application.Deals.Queries.GetPipelineInsights;
+using Metup.Application.Deals.Queries.GetPipelineSummary;
 using Metup.Domain.Activities;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
@@ -21,6 +26,7 @@ using Metup.Domain.Deals;
 using Metup.Domain.Organizations;
 using Metup.Domain.Users;
 using Metup.Infrastructure.Persistence;
+using Metup.Infrastructure.Search;
 using Metup.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -54,8 +60,11 @@ switch (command)
     case "profile":
         await ProfileAsync(connectionString);
         return 0;
+    case "pipeline":
+        await MeasurePipelineAsync(connectionString);
+        return 0;
     default:
-        Console.Error.WriteLine($"Comando desconhecido: {command}. Use 'seed' ou 'measure'.");
+        Console.Error.WriteLine($"Comando desconhecido: {command}. Use 'seed', 'measure', 'profile' ou 'pipeline'.");
         return 1;
 }
 
@@ -451,6 +460,79 @@ static async Task ProfileAsync(string connectionString)
         samples.Sort();
         Console.WriteLine($"{label,-46}{samples[0],7:N0}ms{Percentile(samples, 0.50),7:N0}ms");
     }
+}
+
+/// <summary>
+/// Os quatro endpoints do Pipeline (PL4, item 25) com o volume da massa, na organização inteira
+/// (Admin) e na carteira (SDR). O limite de alerta do <c>PerformanceBehavior</c> é 500 ms.
+/// </summary>
+static async Task MeasurePipelineAsync(string connectionString)
+{
+    await using var probe = OpenContext(connectionString);
+    var org = await probe.Organizations.FirstOrDefaultAsync(o => o.Name == OrgName)
+        ?? throw new InvalidOperationException("Massa não encontrada. Rode 'dotnet run -- seed' antes.");
+    var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Role == UserRole.Admin);
+    var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Role == UserRole.Sdr);
+
+    Console.WriteLine($"Massa: {await probe.Deals.CountAsync(d => d.OrganizationId == org.Id):N0} negócios");
+    Console.WriteLine();
+    Console.WriteLine($"{"cenário",-40}{"mín",8}{"p50",8}{"p95",8}");
+    Console.WriteLine(new string('─', 64));
+
+    var all = new DealPipelineFilter(AllOwners: true);
+    var mine = new DealPipelineFilter();
+    var scenarios = new (string Name, Guid UserId, UserRole Role, Func<MetupDbContext, ICurrentUserService, Task> Run)[]
+    {
+        ("board · organização", admin.Id, UserRole.Admin, (db, user) => Board(db, user, all)),
+        ("board · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Board(db, user, mine)),
+        ("pipeline-summary 30 d · organização", admin.Id, UserRole.Admin, (db, user) => Summary(db, user, all, 30)),
+        ("pipeline-summary 90 d · organização", admin.Id, UserRole.Admin, (db, user) => Summary(db, user, all, 90)),
+        ("pipeline-summary 30 d · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Summary(db, user, mine, 30)),
+        ("pipeline-insights · organização", admin.Id, UserRole.Admin, (db, user) => Insights(db, user, all)),
+        ("pipeline-insights · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Insights(db, user, mine)),
+        ("pipeline-evolution 6 m · organização", admin.Id, UserRole.Admin, (db, user) => Evolution(db, user, all, 6)),
+        ("pipeline-evolution 12 m · organização", admin.Id, UserRole.Admin, (db, user) => Evolution(db, user, all, 12)),
+        ("pipeline-evolution 6 m · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Evolution(db, user, mine, 6)),
+    };
+
+    foreach (var (name, userId, role, run) in scenarios)
+    {
+        var samples = new List<double>();
+        // Como no overview: contexto novo por rodada e as três primeiras fora (plano e JIT).
+        for (var i = 0; i < 23; i++)
+        {
+            await using var db = OpenContext(connectionString);
+            var user = new BenchUser(userId, org.Id, role.ToString());
+            var stopwatch = Stopwatch.StartNew();
+            await run(db, user);
+            stopwatch.Stop();
+            if (i >= 3) samples.Add(stopwatch.Elapsed.TotalMilliseconds);
+        }
+
+        samples.Sort();
+        Console.WriteLine($"{name,-40}{samples[0],7:N0}ms{Percentile(samples, 0.50),7:N0}ms{Percentile(samples, 0.95),7:N0}ms");
+    }
+
+    static DealBoardReader Reader(MetupDbContext db) => new(db, new NpgsqlTextSearch());
+
+    static Task Board(MetupDbContext db, ICurrentUserService user, DealPipelineFilter filter) =>
+        new GetDealBoardQueryHandler(user, new OrganizationClock(db, user), Reader(db))
+            .Handle(new GetDealBoardQuery(filter), CancellationToken.None);
+
+    static Task Summary(MetupDbContext db, ICurrentUserService user, DealPipelineFilter filter, int days)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return new GetPipelineSummaryQueryHandler(db, user, new OrganizationClock(db, user), Reader(db), new StageAnalyticsProvider(db))
+            .Handle(new GetPipelineSummaryQuery(filter, today.AddDays(1 - days), today), CancellationToken.None);
+    }
+
+    static Task Insights(MetupDbContext db, ICurrentUserService user, DealPipelineFilter filter) =>
+        new GetPipelineInsightsQueryHandler(db, user, new OrganizationClock(db, user), Reader(db))
+            .Handle(new GetPipelineInsightsQuery(filter), CancellationToken.None);
+
+    static Task Evolution(MetupDbContext db, ICurrentUserService user, DealPipelineFilter filter, int months) =>
+        new GetPipelineEvolutionQueryHandler(db, user, new OrganizationClock(db, user), Reader(db), new StageAnalyticsProvider(db))
+            .Handle(new GetPipelineEvolutionQuery(filter, months), CancellationToken.None);
 }
 
 static double Percentile(List<double> sorted, double percentile) =>

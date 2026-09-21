@@ -1,6 +1,7 @@
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import { ArrowDownUp, ChevronDown, Plus, Search, X } from "lucide-react"
 
+import { RealtimeIndicator } from "@/components/RealtimeIndicator"
 import { Button } from "@/components/ui/button"
 import { ToggleChips } from "@/components/ui/choice-chips"
 import { DateRangePicker } from "@/components/ui/date-range-picker"
@@ -25,7 +26,18 @@ import type { BoardFilters, DealBoardView } from "./useDealBoard"
  * Trilha, título e, à direita, período (só vale para Fechados), responsável (Admin/Closer) e o CTA.
  * No celular o CTA vira o FAB da página.
  */
-export function PipelineHeader({ view, ownerPicker, onNewDeal }: { view: DealBoardView; ownerPicker: ReactNode; onNewDeal: () => void }) {
+export function PipelineHeader({
+  view,
+  ownerPicker,
+  shortcuts,
+  onNewDeal,
+}: {
+  view: DealBoardView
+  ownerPicker: ReactNode
+  /** A folha de atalhos (item 22), à esquerda do CTA. */
+  shortcuts: ReactNode
+  onNewDeal: () => void
+}) {
   return (
     <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -41,7 +53,10 @@ export function PipelineHeader({ view, ownerPicker, onNewDeal }: { view: DealBoa
             </li>
           </ol>
         </nav>
-        <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-fg">Pipeline Comercial</h1>
+        <div className="flex items-center">
+          <h1 className="font-display text-2xl font-semibold tracking-[-0.02em] text-fg">Pipeline Comercial</h1>
+          <RealtimeIndicator />
+        </div>
         <p className="max-w-2xl text-base text-fg-muted">Acompanhe cada etapa do funil e mova os negócios até o fechamento.</p>
       </div>
 
@@ -60,6 +75,7 @@ export function PipelineHeader({ view, ownerPicker, onNewDeal }: { view: DealBoa
           className="min-w-56"
         />
         {ownerPicker}
+        {shortcuts}
         <Button type="button" onClick={onNewDeal} className="h-10 max-md:hidden">
           <Plus aria-hidden="true" />
           Novo negócio
@@ -73,11 +89,23 @@ export function PipelineHeader({ view, ownerPicker, onNewDeal }: { view: DealBoa
 
 const SOURCES = Object.keys(sourceLabels) as DealSource[]
 
-function FilterPopover({ label, count, children, width = "w-[min(24rem,calc(100vw-1.5rem))]" }: { label: string; count: number; children: ReactNode; width?: string }) {
+function FilterPopover({
+  label,
+  count,
+  children,
+  triggerRef,
+  width = "w-[min(24rem,calc(100vw-1.5rem))]",
+}: {
+  label: string
+  count: number
+  children: ReactNode
+  triggerRef?: RefObject<HTMLButtonElement | null>
+  width?: string
+}) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9" aria-label={count > 0 ? `${label} (${count} marcados)` : label}>
+        <Button ref={triggerRef} type="button" variant="outline" size="sm" className="h-9 max-md:h-11" aria-label={count > 0 ? `${label} (${count} marcados)` : label}>
           {label}
           {count > 0 && (
             <span className="inline-flex min-w-4.5 items-center justify-center rounded-full bg-accent px-1 text-2xs text-on-accent tabular">{count}</span>
@@ -105,7 +133,12 @@ export function PipelineFilters({
   onChange,
   onSort,
   onClear,
+  searchRef,
+  filtersRef,
 }: {
+  /** `/` foca a busca e `F` abre os filtros (item 22). */
+  searchRef: RefObject<HTMLInputElement | null>
+  filtersRef: RefObject<HTMLButtonElement | null>
   filters: BoardFilters
   sort: DealBoardSort
   segments: string[] | null
@@ -120,10 +153,11 @@ export function PipelineFilters({
 
   return (
     <div role="search" aria-label="Filtros do quadro" className="flex flex-wrap items-center gap-2">
-      <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-sm border border-line-soft bg-surface px-3 focus-within:border-line-strong max-sm:basis-full sm:max-w-72">
+      <label className="flex h-9 max-md:h-11 min-w-0 flex-1 items-center gap-2 rounded-sm border border-line-soft bg-surface px-3 focus-within:border-line-strong has-[input:focus-visible]:focus-ring max-sm:basis-full sm:max-w-72">
         <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
         <span className="sr-only">Buscar no quadro por empresa ou contato</span>
         <input
+          ref={searchRef}
           type="search"
           name="quadro-busca"
           value={filters.search}
@@ -136,7 +170,7 @@ export function PipelineFilters({
         />
       </label>
 
-      <FilterPopover label="Origem" count={filters.sources.length}>
+      <FilterPopover label="Origem" count={filters.sources.length} triggerRef={filtersRef}>
         <ToggleChips
           label="Origem"
           options={SOURCES.map((source) => ({ value: source, label: sourceLabels[source] }))}
@@ -165,7 +199,7 @@ export function PipelineFilters({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="h-9" aria-label={`Ordenar colunas por: ${boardSortLabels[sort]}`}>
+          <Button type="button" variant="outline" size="sm" className="h-9 max-md:h-11" aria-label={`Ordenar colunas por: ${boardSortLabels[sort]}`}>
             <ArrowDownUp aria-hidden="true" />
             <span className="max-sm:sr-only">{boardSortLabels[sort]}</span>
             <ChevronDown aria-hidden="true" />
@@ -185,7 +219,7 @@ export function PipelineFilters({
           <span className="rounded-xs bg-accent/10 px-2 py-1 text-xs text-accent tabular" aria-live="polite">
             {activeCount === 1 ? "1 filtro ativo" : `${activeCount} filtros ativos`}
           </span>
-          <Button type="button" size="sm" variant="ghost" className="h-9" onClick={onClear}>
+          <Button type="button" size="sm" variant="ghost" className="h-9 max-md:h-11" onClick={onClear}>
             <X aria-hidden="true" />
             Limpar
           </Button>

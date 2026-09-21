@@ -332,7 +332,11 @@ export class BoardStore {
   }
 
   /** `GET /api/deals/{id}/card`: o cartão como está agora na loja. */
+  /** Quantas vezes a tela releu um cartão (revalidação e tempo real). */
+  cardRequests = 0
+
   card: Handler = (route) => {
+    this.cardRequests++
     const id = new URL(route.request().url()).pathname.split("/").at(-2)!
     const card = this.cards.find((c) => c.id === id)
     return card ?? problem(route, 404, "Negócio não encontrado.")

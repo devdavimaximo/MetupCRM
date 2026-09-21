@@ -5,6 +5,7 @@ import { Hint } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { deltaTone, type Delta, type DeltaPolarity, type DeltaTone } from "./delta"
 import { Panel, panelSurface } from "./panel"
+import { carouselPageAt, carouselPageCount, carouselRangeLabel } from "./carousel"
 import { Sparkline } from "./Sparkline"
 
 /** Texto e tooltip de cada caso sem percentual — o cartão explica a ausência em vez de calá-la. */
@@ -154,7 +155,7 @@ export function KpiCard({
       type="button"
       onClick={onDismiss}
       aria-label={dismissLabel ?? `Ocultar ${label}`}
-      className="absolute top-1.5 right-1.5 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-sm text-faint transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
+      className="absolute top-1.5 right-1.5 z-10 inline-flex size-6 max-md:top-0 max-md:right-0 max-md:size-11 cursor-pointer items-center justify-center rounded-sm text-faint transition-colors hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
     >
       <X className="size-3.5" aria-hidden="true" />
     </button>
@@ -199,35 +200,37 @@ export function KpiCard({
  * Os KPIs no celular: faixa que rola na horizontal com encaixe, duas de cada vez. A rolagem é do
  * próprio trilho, então a página não rola de lado. Pelo teclado, Tab já percorre os cartões (o
  * navegador traz o foco para a vista); as setas movem de página para quem estiver com o trilho em foco.
+ * O indicador de posição é clicável (alvo de 44px) e a posição também é lida em texto.
  */
 export function KpiCarousel({ children, label }: { children: ReactNode[]; label: string }) {
   const trackRef = useRef<HTMLUListElement>(null)
   const [page, setPage] = useState(0)
-  const pages = Math.ceil(children.length / 2)
+  const pages = carouselPageCount(children.length)
 
   function goTo(next: number) {
     const track = trackRef.current
     if (!track) return
     const target = Math.max(0, Math.min(pages - 1, next))
-    track.scrollTo({ left: target * track.clientWidth, behavior: "smooth" })
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    track.scrollTo({ left: target * track.clientWidth, behavior: reduced ? "auto" : "smooth" })
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1">
       <ul
         ref={trackRef}
         aria-label={label}
         tabIndex={0}
         onScroll={(event) => {
           const track = event.currentTarget
-          setPage(track.clientWidth === 0 ? 0 : Math.round(track.scrollLeft / track.clientWidth))
+          setPage(carouselPageAt(track.scrollLeft, track.clientWidth, pages))
         }}
         onKeyDown={(event) => {
           if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return
           event.preventDefault()
           goTo(page + (event.key === "ArrowRight" ? 1 : -1))
         }}
-        className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1 scrollbar-none focus-visible:focus-ring"
+        className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1 scrollbar-none focus-visible:focus-ring motion-reduce:scroll-auto"
       >
         {children.map((child, index) => (
           <li key={index} className="w-[calc(50%-0.375rem)] shrink-0 snap-start">
@@ -235,17 +238,26 @@ export function KpiCarousel({ children, label }: { children: ReactNode[]; label:
           </li>
         ))}
       </ul>
-      <div className="flex justify-center gap-1.5" aria-hidden="true">
-        {Array.from({ length: pages }, (_, index) => (
-          <button
-            key={index}
-            type="button"
-            tabIndex={-1}
-            onClick={() => goTo(index)}
-            className={cn("h-1 w-5 cursor-pointer rounded-full transition-colors", index === page ? "bg-accent" : "bg-line-strong")}
-          />
-        ))}
-      </div>
+      {pages > 1 && (
+        <div className="flex justify-center" role="group" aria-label={`Posição em ${label.toLowerCase()}`}>
+          {Array.from({ length: pages }, (_, index) => (
+            <button
+              key={index}
+              type="button"
+              tabIndex={-1}
+              aria-label={carouselRangeLabel(index, children.length)}
+              aria-current={index === page || undefined}
+              onClick={() => goTo(index)}
+              className="group/dot inline-flex h-11 w-8 cursor-pointer items-center justify-center"
+            >
+              <span className={cn("h-1 w-5 rounded-full transition-colors", index === page ? "bg-accent" : "bg-line-strong")} />
+            </button>
+          ))}
+          <span className="sr-only" aria-live="polite">
+            {carouselRangeLabel(page, children.length)}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

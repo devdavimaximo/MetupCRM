@@ -51,6 +51,11 @@ function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typ
   return <DropdownMenuPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-line-soft", className)} {...props} />
 }
 
+/** Título de um grupo do menu (não é item: o leitor de tela o lê, as setas o pulam). */
+function DropdownMenuLabel({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return <DropdownMenuPrimitive.Label className={cn("label-mono px-2 pt-1.5 pb-1 text-muted", className)} {...props} />
+}
+
 const DropdownMenuSub = DropdownMenuPrimitive.Sub
 
 /** Item que abre um submenu (seta à direita; → abre, ← volta). */
@@ -94,6 +99,7 @@ export {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,

@@ -47,6 +47,8 @@ import {
   type EvolutionMonths,
   type PipelinePeriodChoice,
 } from "./pipeline-url"
+import type { BoardRealtimeFilter } from "./board-realtime"
+import { useBoardRealtime } from "./useBoardRealtime"
 import { ACTIVE_STAGES, stageLabels } from "./stage-labels"
 
 export type BoardFilters = {
@@ -86,7 +88,7 @@ function ownerParams(owner: OwnerFilter) {
  * O estado das colunas vive num ref além do `useState`: cada operação lê o estado mais recente de
  * forma síncrona (um arrasto logo depois de outro não pode partir de um quadro velho).
  */
-export function useDealBoard(canSeeOthers: boolean) {
+export function useDealBoard(canSeeOthers: boolean, currentUserId: string) {
   const [initial] = useState(() => {
     const url = readUrlState()
     return parsePipelineUrl(
@@ -142,6 +144,7 @@ export function useDealBoard(canSeeOthers: boolean) {
   const [loadingMore, setLoadingMore] = useState<Partial<Record<ColumnKey, boolean>>>({})
   const [loadMoreErrors, setLoadMoreErrors] = useState<Partial<Record<ColumnKey, string>>>({})
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set())
+  const pendingRef = useRef<ReadonlySet<string>>(pendingIds)
   const [returnedIds, setReturnedIds] = useState<ReadonlySet<string>>(() => new Set())
   const toasts = useToasts()
 
@@ -204,14 +207,14 @@ export function useDealBoard(canSeeOthers: boolean) {
    * arrasto costuma vir atrás do outro. Nunca mexe no quadro nem no cartão em voo.
    */
   const metricsTimer = useRef<number | undefined>(undefined)
-  const revalidateMetrics = useCallback(() => {
+  const revalidateMetrics = useCallback((delayMs = METRICS_DEBOUNCE_MS) => {
     window.clearTimeout(metricsTimer.current)
     metricsTimer.current = window.setTimeout(() => {
       summary.reload({ silent: true })
       insights.reload({ silent: true })
       evolution.reload({ silent: true })
       activities.reload({ silent: true })
-    }, METRICS_DEBOUNCE_MS)
+    }, delayMs)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => () => window.clearTimeout(metricsTimer.current), [])
@@ -227,13 +230,38 @@ export function useDealBoard(canSeeOthers: boolean) {
     [revalidateNumbers, setColumns]
   )
 
+  /** O recorte da tela, para o tempo real decidir se um cartão que mudou pertence a ele. */
+  const filter: BoardRealtimeFilter = {
+    ownerUserId: !canSeeOthers || owner.kind === "mine" ? currentUserId : owner.kind === "user" ? owner.userId : null,
+    sources: filters.sources,
+    segments: filters.segments,
+    search,
+    stalledOnly,
+    from: range.from,
+    to: range.to,
+  }
+  const filterRef = useRef(filter)
+  useEffect(() => {
+    filterRef.current = filter
+  })
+
+  const realtime = useBoardRealtime({
+    columnsRef,
+    generationRef: generation,
+    pendingRef,
+    filterRef,
+    commit: (result) => mutate(() => result),
+    reloadBoard: () => board.reload({ silent: true }),
+    reloadMetrics: revalidateMetrics,
+  })
+
   function setPending(id: string, on: boolean) {
-    setPendingIds((ids) => {
-      const next = new Set(ids)
-      if (on) next.add(id)
-      else next.delete(id)
-      return next
-    })
+    const next = new Set(pendingRef.current)
+    if (on) next.add(id)
+    else next.delete(id)
+    pendingRef.current = next
+    setPendingIds(next)
+    if (!on) realtime.settled()
   }
 
   function flagReturned(id: string) {
@@ -263,8 +291,9 @@ export function useDealBoard(canSeeOthers: boolean) {
    * Desfazer é uma nova mudança de etapa — o histórico registra as duas.
    */
   async function moveDeal(card: DealBoardCard, toStage: DealStage, options: { isUndo?: boolean } = {}) {
-    if (card.status !== "Aberto" || card.stage === toStage || pendingIds.has(card.id)) return
+    if (card.status !== "Aberto" || card.stage === toStage || pendingRef.current.has(card.id)) return
     const fromStage = card.stage
+    realtime.markOwn(card.id)
     const originalIndex = columnsRef.current ? indexInColumn(columnsRef.current, card) : 0
 
     mutate((current) => moveCard(current, card, toStage, new Date().toISOString()))
@@ -315,6 +344,7 @@ export function useDealBoard(canSeeOthers: boolean) {
 
   /** Depois de confirmar o fechamento: o cartão vai para Ganhos/Perdidos se o fechamento cai no período. */
   function applyClosed(card: DealBoardCard, deal: Deal) {
+    realtime.markOwn(card.id)
     const group: DealBoardClosedGroup = deal.status === "Ganho" ? "won" : "lost"
     const closed: DealBoardCard = {
       ...card,
@@ -373,8 +403,9 @@ export function useDealBoard(canSeeOthers: boolean) {
    * atualizado. Se o novo dono sai do filtro de responsável, o cartão deixa o quadro.
    */
   async function reassignDeal(card: DealBoardCard, ownerUserId: string, ownerUserName: string) {
-    if (card.status !== "Aberto" || card.ownerUserId === ownerUserId || pendingIds.has(card.id)) return
+    if (card.status !== "Aberto" || card.ownerUserId === ownerUserId || pendingRef.current.has(card.id)) return
     const key = columnKeyOf(card)
+    realtime.markOwn(card.id)
 
     mutate((current) => ({ columns: replaceCard(current, { ...card, ownerUserId, ownerUserName }), revalidate: [] }))
     setPending(card.id, true)
@@ -401,6 +432,7 @@ export function useDealBoard(canSeeOthers: boolean) {
 
   /** Só o cartão, depois de registrar atividade ou criar tarefa — o quadro não recarrega. */
   async function revalidateCard(id: string) {
+    realtime.markOwn(id)
     try {
       const card = await getDealBoardCard(id)
       mutate((current) => ({ columns: replaceCard(current, card), revalidate: [] }))
@@ -450,6 +482,12 @@ export function useDealBoard(canSeeOthers: boolean) {
     applyClosed,
     revalidateCard,
     loadMore,
+    /** Tempo real (item 23): cartões realçados, o eco das próprias ações e o que prende a fila. */
+    pulsedIds: realtime.pulsedIds,
+    realtimeAnnouncement: realtime.announcement,
+    markOwn: realtime.markOwn,
+    setDragging: realtime.setDragging,
+    setHoveredColumn: realtime.setHoveredColumn,
     /** Depois de uma ação fora do quadro (drawer, novo negócio): recarrega sem esqueleto. */
     revalidate: () => {
       board.reload({ silent: true })
