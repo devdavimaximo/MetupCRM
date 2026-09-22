@@ -28,6 +28,8 @@ public class UpdateCompanyCommandHandler(
         company.City = request.City.NormalizeOptional();
         company.Instagram = request.Instagram.NormalizeOptional();
         company.Phone = request.Phone.NormalizeOptional();
+        company.Cnpj = request.Cnpj.NormalizeOptional();
+        company.Website = request.Website.NormalizeOptional();
 
         await context.SaveChangesAsync(cancellationToken);
 
@@ -38,6 +40,8 @@ public class UpdateCompanyCommandHandler(
             company.City,
             company.Instagram,
             company.Phone,
+            company.Cnpj,
+            company.Website,
             [.. company.Contacts.OrderBy(c => c.Name).Select(ContactDto.FromEntity)]);
     }
 }

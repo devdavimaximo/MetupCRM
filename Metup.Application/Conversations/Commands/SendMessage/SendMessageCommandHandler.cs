@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
+using Metup.Application.Common.Realtime;
 using Metup.Application.Conversations.Common;
 using Metup.Domain.Conversations;
 using Metup.Domain.Integrations;
@@ -16,7 +17,8 @@ namespace Metup.Application.Conversations.Commands.SendMessage;
 /// </summary>
 public class SendMessageCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<SendMessageCommand, MessageDto>
+    ICurrentUserService currentUserService,
+    IPublisher publisher) : IRequestHandler<SendMessageCommand, MessageDto>
 {
     public async Task<MessageDto> Handle(SendMessageCommand request, CancellationToken cancellationToken)
     {
@@ -60,6 +62,7 @@ public class SendMessageCommandHandler(
             IntegrationEvent.Create(organizationId, IntegrationEventTypes.WhatsAppMessageSendRequested, payload));
 
         await context.SaveChangesAsync(cancellationToken);
+        await publisher.Publish(new ConversationMessageSentNotification(organizationId, conversation.Id), cancellationToken);
 
         return await context.Messages
             .AsNoTracking()

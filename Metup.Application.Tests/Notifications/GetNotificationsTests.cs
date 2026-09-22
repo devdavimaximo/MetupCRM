@@ -92,7 +92,7 @@ public class GetNotificationsTests
 
         Conversation AddConversation(params (MessageDirection Direction, DateTime At)[] messages)
         {
-            var conversation = Conversation.Create(context.OrganizationId, contact.Id);
+            var conversation = Conversation.Create(context.OrganizationId, contact.Id, ConversationChannel.WhatsApp);
             context.Db.Conversations.Add(conversation);
             foreach (var (direction, at) in messages)
             {

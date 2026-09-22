@@ -38,6 +38,16 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options) : DbContex
 
     public DbSet<Message> Messages => Set<Message>();
 
+    public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
+
+    public DbSet<ConversationRead> ConversationReads => Set<ConversationRead>();
+
+    public DbSet<ConversationFavorite> ConversationFavorites => Set<ConversationFavorite>();
+
+    public DbSet<ConversationTagOption> ConversationTagOptions => Set<ConversationTagOption>();
+
+    public DbSet<ConversationTag> ConversationTags => Set<ConversationTag>();
+
     public DbSet<IntegrationEvent> IntegrationEvents => Set<IntegrationEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -9,4 +9,6 @@ public record CreateCompanyCommand(
     string? Segment,
     string? City,
     string? Instagram,
-    string? Phone) : IRequest<CompanyDto>;
+    string? Phone,
+    string? Cnpj = null,
+    string? Website = null) : IRequest<CompanyDto>;

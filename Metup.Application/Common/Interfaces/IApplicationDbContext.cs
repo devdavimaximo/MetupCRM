@@ -37,6 +37,16 @@ public interface IApplicationDbContext
 
     DbSet<Message> Messages { get; }
 
+    DbSet<MessageAttachment> MessageAttachments { get; }
+
+    DbSet<ConversationRead> ConversationReads { get; }
+
+    DbSet<ConversationFavorite> ConversationFavorites { get; }
+
+    DbSet<ConversationTagOption> ConversationTagOptions { get; }
+
+    DbSet<ConversationTag> ConversationTags { get; }
+
     DbSet<IntegrationEvent> IntegrationEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);

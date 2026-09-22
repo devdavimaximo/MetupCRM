@@ -45,7 +45,9 @@ public class CompaniesController(ISender sender) : ControllerBase
             request.Segment,
             request.City,
             request.Instagram,
-            request.Phone);
+            request.Phone,
+            request.Cnpj,
+            request.Website);
 
         return Ok(await sender.Send(command, cancellationToken));
     }
@@ -106,7 +108,9 @@ public record UpdateCompanyRequest(
     string? Segment,
     string? City,
     string? Instagram,
-    string? Phone);
+    string? Phone,
+    string? Cnpj = null,
+    string? Website = null);
 
 public record CreateContactRequest(
     string Name,

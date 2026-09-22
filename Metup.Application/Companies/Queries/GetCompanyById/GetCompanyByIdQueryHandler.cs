@@ -25,6 +25,8 @@ public class GetCompanyByIdQueryHandler(
                 c.City,
                 c.Instagram,
                 c.Phone,
+                c.Cnpj,
+                c.Website,
                 c.Contacts
                     .OrderBy(contact => contact.Name)
                     .Select(contact => new ContactDto(

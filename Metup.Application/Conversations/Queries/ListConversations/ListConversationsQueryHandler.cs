@@ -1,6 +1,7 @@
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Models;
 using Metup.Application.Conversations.Common;
+using Metup.Domain.Conversations;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +16,7 @@ public class ListConversationsQueryHandler(
         CancellationToken cancellationToken)
     {
         var organizationId = currentUserService.RequireOrganizationId();
+        var userId = currentUserService.RequireUserId();
 
         var query = context.Conversations
             .AsNoTracking()
@@ -29,6 +31,45 @@ public class ListConversationsQueryHandler(
                     context.Companies.Any(co => co.Id == ct.CompanyId && co.Name.Contains(search))));
         }
 
+        if (request.Channel is { Count: > 0 } channels)
+        {
+            query = query.Where(c => channels.Contains(c.Channel));
+        }
+
+        if (request.Status is { Count: > 0 } statuses)
+        {
+            query = query.Where(c => statuses.Contains(c.Status));
+        }
+
+        if (request.Favorite is { } favorite)
+        {
+            query = favorite
+                ? query.Where(c => context.ConversationFavorites.Any(f => f.ConversationId == c.Id && f.UserId == userId))
+                : query.Where(c => !context.ConversationFavorites.Any(f => f.ConversationId == c.Id && f.UserId == userId));
+        }
+
+        if (request.Unread is { } unread)
+        {
+            query = unread
+                ? query.Where(c =>
+                    !context.ConversationReads.Any(r => r.ConversationId == c.Id && r.UserId == userId)
+                        ? context.Messages.Any(m => m.ConversationId == c.Id && m.Direction == MessageDirection.Inbound)
+                        : context.Messages.Any(m => m.ConversationId == c.Id
+                            && m.Direction == MessageDirection.Inbound
+                            && m.OccurredAt > context.ConversationReads
+                                .Where(r => r.ConversationId == c.Id && r.UserId == userId)
+                                .Select(r => r.LastReadAt)
+                                .First()))
+                : query.Where(c =>
+                    context.ConversationReads.Any(r => r.ConversationId == c.Id && r.UserId == userId)
+                        && !context.Messages.Any(m => m.ConversationId == c.Id
+                            && m.Direction == MessageDirection.Inbound
+                            && m.OccurredAt > context.ConversationReads
+                                .Where(r => r.ConversationId == c.Id && r.UserId == userId)
+                                .Select(r => r.LastReadAt)
+                                .First()));
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var items = await query
@@ -36,9 +77,16 @@ public class ListConversationsQueryHandler(
             .ThenBy(c => c.Id)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .ToListItemDto(context)
+            .ToListItemDto(context, userId)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<ConversationListItemDto>(items, request.Page, request.PageSize, totalCount);
+        var tagsByConversation = await ConversationProjections.LoadTagNamesAsync(
+            context, [.. items.Select(i => i.Id)], cancellationToken);
+
+        var withTags = items
+            .Select(i => tagsByConversation.TryGetValue(i.Id, out var tags) ? i with { Tags = tags } : i)
+            .ToList();
+
+        return new PagedResult<ConversationListItemDto>(withTags, request.Page, request.PageSize, totalCount);
     }
 }

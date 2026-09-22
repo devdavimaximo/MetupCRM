@@ -129,6 +129,36 @@ public class RealtimeNotificationTests
 
         Assert.Null(exception);
     }
+
+    [Fact]
+    public async Task Eventos_de_conversa_levam_o_ConversationId_e_favoritar_e_so_do_usuario()
+    {
+        var hub = new RecordingHubContext();
+        var notifier = new DashboardRealtimeNotifier(hub, NullLogger<DashboardRealtimeNotifier>.Instance);
+        var organizationId = Guid.NewGuid();
+        var conversationId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await notifier.Handle(new ConversationMessageReceivedNotification(organizationId, conversationId), TestContext.Current.CancellationToken);
+        await notifier.Handle(new ConversationMessageSentNotification(organizationId, conversationId), TestContext.Current.CancellationToken);
+        await notifier.Handle(new ConversationStatusChangedNotification(organizationId, conversationId), TestContext.Current.CancellationToken);
+        await notifier.Handle(new ConversationFavoritedNotification(organizationId, conversationId, userId), TestContext.Current.CancellationToken);
+
+        Assert.Collection(
+            hub.Sent,
+            s =>
+            {
+                Assert.Equal(DashboardHub.OrganizationGroup(organizationId), s.Group);
+                Assert.Equal(new RealtimeEventMessage("conversation.messageReceived", null, null, conversationId), s.Payload);
+            },
+            s => Assert.Equal(DashboardHub.OrganizationGroup(organizationId), s.Group),
+            s => Assert.Equal(DashboardHub.OrganizationGroup(organizationId), s.Group),
+            s =>
+            {
+                Assert.Equal(DashboardHub.UserGroup(userId), s.Group);
+                Assert.Equal(new RealtimeEventMessage("conversation.favorited", null, userId, conversationId), s.Payload);
+            });
+    }
 }
 
 /// <summary>IHubContext mínimo que só registra grupo, método e payload do que seria enviado.</summary>

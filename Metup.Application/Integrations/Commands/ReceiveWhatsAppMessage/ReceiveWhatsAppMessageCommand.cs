@@ -1,4 +1,5 @@
 using Metup.Application.Conversations.Common;
+using Metup.Application.Integrations.Common;
 using MediatR;
 
 namespace Metup.Application.Integrations.Commands.ReceiveWhatsAppMessage;
@@ -8,4 +9,6 @@ public record ReceiveWhatsAppMessageCommand(
     string FromWhatsApp,
     string Body,
     string? ExternalMessageId,
-    DateTime? OccurredAt) : IRequest<MessageDto>;
+    DateTime? OccurredAt,
+    string? ExternalConversationId = null,
+    IReadOnlyList<InboundAttachmentInput>? Attachments = null) : IRequest<MessageDto>;

@@ -12,4 +12,13 @@ public record MessageDto(
     string? AuthorUserName,
     Guid? DealId,
     DealStage? DealStageAtMessage,
-    DateTime OccurredAt);
+    DateTime OccurredAt,
+    MessageAuthorKind? AuthorKind,
+    IReadOnlyList<MessageAttachmentDto> Attachments);
+
+public record MessageAttachmentDto(
+    MessageAttachmentKind Kind,
+    string Url,
+    string? FileName,
+    string? MimeType,
+    long? SizeBytes);

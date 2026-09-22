@@ -1,4 +1,5 @@
 using FluentValidation;
+using Metup.Application.Integrations.Common;
 
 namespace Metup.Application.Integrations.Commands.ReceiveWhatsAppMessage;
 
@@ -15,5 +16,8 @@ public class ReceiveWhatsAppMessageCommandValidator : AbstractValidator<ReceiveW
             .MaximumLength(4096);
 
         RuleFor(x => x.ExternalMessageId).MaximumLength(200);
+        RuleFor(x => x.ExternalConversationId).MaximumLength(200);
+
+        RuleForEach(x => x.Attachments).SetValidator(new InboundAttachmentInputValidator());
     }
 }

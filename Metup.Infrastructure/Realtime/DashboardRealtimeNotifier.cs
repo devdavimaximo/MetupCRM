@@ -5,12 +5,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Metup.Infrastructure.Realtime;
 
-/// <summary>Mensagem enxuta do hub: o que mudou e em qual negócio. Nada além disso sai do servidor.</summary>
-public sealed record RealtimeEventMessage(string Type, Guid? DealId, Guid? OwnerUserId);
+/// <summary>Mensagem enxuta do hub: o que mudou e em qual negócio/conversa. Nada além disso sai do servidor.</summary>
+public sealed record RealtimeEventMessage(string Type, Guid? DealId, Guid? OwnerUserId, Guid? ConversationId = null);
 
 /// <summary>
-/// Leva os avisos in-process dos comandos até as telas abertas: eventos de negócio vão para o grupo
-/// da organização; os pessoais (tarefa concluída) só para o grupo do responsável.
+/// Leva os avisos in-process dos comandos até as telas abertas: eventos de negócio/conversa vão
+/// para o grupo da organização; os pessoais (tarefa concluída, conversa favoritada) só para o
+/// grupo do responsável/usuário.
 ///
 /// Falha de entrega é registrada e engolida: o comando já foi gravado, e o tempo real é só
 /// aceleração. As telas revalidam ao reconectar.
@@ -22,7 +23,11 @@ public sealed class DashboardRealtimeNotifier(
     INotificationHandler<DealStageChangedNotification>,
     INotificationHandler<DealClosedNotification>,
     INotificationHandler<ActivityLoggedNotification>,
-    INotificationHandler<TaskCompletedNotification>
+    INotificationHandler<TaskCompletedNotification>,
+    INotificationHandler<ConversationMessageReceivedNotification>,
+    INotificationHandler<ConversationMessageSentNotification>,
+    INotificationHandler<ConversationStatusChangedNotification>,
+    INotificationHandler<ConversationFavoritedNotification>
 {
     public Task Handle(DealCreatedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
 
@@ -34,9 +39,18 @@ public sealed class DashboardRealtimeNotifier(
 
     public Task Handle(TaskCompletedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
 
+    public Task Handle(ConversationMessageReceivedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
+
+    public Task Handle(ConversationMessageSentNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
+
+    public Task Handle(ConversationStatusChangedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
+
+    public Task Handle(ConversationFavoritedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
+
     private async Task SendAsync(IRealtimeNotification notification, CancellationToken cancellationToken)
     {
-        var message = new RealtimeEventMessage(notification.Type, notification.DealId, notification.OwnerUserId);
+        var conversationId = (notification as IConversationRealtimeNotification)?.ConversationId;
+        var message = new RealtimeEventMessage(notification.Type, notification.DealId, notification.OwnerUserId, conversationId);
         var group = notification.UserScoped && notification.OwnerUserId is { } ownerUserId
             ? DashboardHub.UserGroup(ownerUserId)
             : DashboardHub.OrganizationGroup(notification.OrganizationId);

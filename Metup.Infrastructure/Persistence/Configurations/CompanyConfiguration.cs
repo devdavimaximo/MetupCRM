@@ -39,6 +39,14 @@ public class CompanyConfiguration : IEntityTypeConfiguration<Company>
             .HasColumnName("phone")
             .HasMaxLength(40);
 
+        builder.Property(c => c.Cnpj)
+            .HasColumnName("cnpj")
+            .HasMaxLength(20);
+
+        builder.Property(c => c.Website)
+            .HasColumnName("website")
+            .HasMaxLength(200);
+
         // Listagem e busca sempre partem do escopo da organização.
         builder.HasIndex(c => c.OrganizationId);
         builder.HasIndex(c => new { c.OrganizationId, c.Name });

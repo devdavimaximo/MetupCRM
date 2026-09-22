@@ -279,7 +279,7 @@ TaskItem AddTask(Deal deal, ActivityType type, DateTime due, Guid ownerId, strin
 
 void SeedConversation(Guid contactId, Guid dealId, Guid ownerId, DealStage stageAtMessage, DateTime around)
 {
-    var conversation = Conversation.Create(org.Id, contactId);
+    var conversation = Conversation.Create(org.Id, contactId, ConversationChannel.WhatsApp);
     db.Conversations.Add(conversation);
 
     var messageCount = rng.Next(2, 7);

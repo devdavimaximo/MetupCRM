@@ -1,3 +1,5 @@
+using Metup.Domain.Conversations;
+
 namespace Metup.Application.Conversations.Common;
 
 public record ConversationListItemDto(
@@ -8,4 +10,9 @@ public record ConversationListItemDto(
     string CompanyName,
     string? LastMessagePreview,
     DateTime? LastMessageAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    ConversationChannel Channel,
+    ConversationStatus Status,
+    bool IsUnread,
+    bool IsFavorite,
+    IReadOnlyList<string> Tags);

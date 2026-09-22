@@ -19,5 +19,9 @@ public class Company : BaseEntity
 
     public string? Phone { get; set; }
 
+    public string? Cnpj { get; set; }
+
+    public string? Website { get; set; }
+
     public ICollection<Contact> Contacts { get; init; } = [];
 }

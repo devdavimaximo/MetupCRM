@@ -20,6 +20,8 @@ public class CreateCompanyCommandHandler(
             City = request.City.NormalizeOptional(),
             Instagram = request.Instagram.NormalizeOptional(),
             Phone = request.Phone.NormalizeOptional(),
+            Cnpj = request.Cnpj.NormalizeOptional(),
+            Website = request.Website.NormalizeOptional(),
         };
 
         context.Companies.Add(company);
@@ -32,6 +34,8 @@ public class CreateCompanyCommandHandler(
             company.City,
             company.Instagram,
             company.Phone,
+            company.Cnpj,
+            company.Website,
             []);
     }
 }

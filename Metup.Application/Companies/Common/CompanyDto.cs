@@ -10,6 +10,8 @@ public record CompanyDto(
     string? City,
     string? Instagram,
     string? Phone,
+    string? Cnpj,
+    string? Website,
     IReadOnlyList<ContactDto> Contacts);
 
 /// <summary>Linha da listagem/busca de empresas.</summary>

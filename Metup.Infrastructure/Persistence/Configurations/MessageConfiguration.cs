@@ -42,6 +42,12 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(m => m.AuthorUserId)
             .HasColumnName("author_user_id");
 
+        // Só existe para outbound — distingue o SDR humano da automação (Bot); null em inbound.
+        builder.Property(m => m.AuthorKind)
+            .HasColumnName("author_kind")
+            .HasConversion<string>()
+            .HasMaxLength(20);
+
         builder.Property(m => m.DealId)
             .HasColumnName("deal_id");
 
@@ -86,5 +92,10 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
             .WithMany()
             .HasForeignKey(m => m.AuthorUserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(m => m.Attachments)
+            .WithOne()
+            .HasForeignKey(a => a.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

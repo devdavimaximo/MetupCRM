@@ -17,5 +17,7 @@ public class UpdateCompanyCommandValidator : AbstractValidator<UpdateCompanyComm
         RuleFor(x => x.City).MaximumLength(120);
         RuleFor(x => x.Instagram).MaximumLength(120);
         RuleFor(x => x.Phone).MaximumLength(40);
+        RuleFor(x => x.Cnpj).MaximumLength(20);
+        RuleFor(x => x.Website).MaximumLength(200);
     }
 }
