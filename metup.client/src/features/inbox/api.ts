@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api"
 import type { DealStage, DealStatus } from "@/features/deals/api"
+import type { RecentEvent } from "@/features/dashboard/api"
 
 export type MessageDirection = "Inbound" | "Outbound"
 export type ConversationChannel = "WhatsApp"
@@ -157,6 +158,10 @@ export function markConversationRead(conversationId: string) {
   return apiFetch<void>(`/api/conversations/${conversationId}/read`, { method: "POST" })
 }
 
+export function markConversationUnread(conversationId: string) {
+  return apiFetch<void>(`/api/conversations/${conversationId}/read`, { method: "DELETE" })
+}
+
 export function favoriteConversation(conversationId: string) {
   return apiFetch<void>(`/api/conversations/${conversationId}/favorite`, { method: "POST" })
 }
@@ -181,4 +186,10 @@ export function setConversationAutomation(conversationId: string, enabled: boole
     method: "PUT",
     body: JSON.stringify({ enabled }),
   })
+}
+
+/** Os 5 últimos eventos do negócio (atividade + transição de estágio), sem filtro de tipo (item 20). */
+export function getActivityHistory(dealId: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({ dealId, pageSize: "5" })
+  return apiFetch<{ items: RecentEvent[]; nextCursor: string | null }>(`/api/activity-feed?${query}`, { signal })
 }

@@ -78,6 +78,31 @@ public class SearchQueryHandler(
                 context.Users.Where(u => u.Id == d.OwnerUserId).Select(u => u.Name).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
-        return new SearchResultDto(companies, contacts, dealHits);
+        // Conversas são da organização inteira, sem responsável (a Inbox é compartilhada) — mesmo
+        // critério de nome usado na lista de Conversas: contato ou empresa, nunca o corpo da mensagem.
+        var matchingContactIds = textSearch
+            .WhereAnyContains(context.Contacts.AsNoTracking().Where(c => c.OrganizationId == scope.OrganizationId), term, c => c.Name)
+            .Select(c => c.Id);
+
+        var conversationHits = await context.Conversations
+            .AsNoTracking()
+            .Where(c => c.OrganizationId == scope.OrganizationId)
+            .Join(context.Contacts, c => c.ContactId, ct => ct.Id, (c, ct) => new { Conversation = c, Contact = ct })
+            .Join(context.Companies, x => x.Contact.CompanyId, co => co.Id, (x, co) => new { x.Conversation, x.Contact, Company = co })
+            .Where(x => matchingContactIds.Contains(x.Contact.Id) || matchingCompanyIds.Contains(x.Company.Id))
+            .OrderByDescending(x => x.Conversation.LastMessageAt ?? x.Conversation.CreatedAt)
+            .Take(take)
+            .Select(x => new ConversationSearchHitDto(
+                x.Conversation.Id,
+                x.Contact.Name,
+                x.Company.Name,
+                context.Messages
+                    .Where(m => m.ConversationId == x.Conversation.Id)
+                    .OrderByDescending(m => m.OccurredAt)
+                    .Select(m => m.Body)
+                    .FirstOrDefault()))
+            .ToListAsync(cancellationToken);
+
+        return new SearchResultDto(companies, contacts, dealHits, conversationHits);
     }
 }

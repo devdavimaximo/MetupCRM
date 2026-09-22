@@ -22,6 +22,7 @@ public class ActivityFeedController(ISender sender) : ControllerBase
         [FromQuery] string[]? kinds,
         [FromQuery] Guid? ownerUserId,
         [FromQuery] int pageSize = ListActivityFeedQuery.DefaultPageSize,
+        [FromQuery] Guid? dealId = null,
         CancellationToken cancellationToken = default)
     {
         var parsedKinds = new List<ActivityFeedFilter>();
@@ -36,7 +37,7 @@ public class ActivityFeedController(ISender sender) : ControllerBase
             parsedKinds.Add(parsed);
         }
 
-        var query = new ListActivityFeedQuery(cursor, parsedKinds, ownerUserId, pageSize);
+        var query = new ListActivityFeedQuery(cursor, parsedKinds, ownerUserId, pageSize, dealId);
         return Ok(await sender.Send(query, cancellationToken));
     }
 }

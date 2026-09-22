@@ -119,7 +119,7 @@ function App() {
       {view === "tarefas" && (
         <TasksPage key={`tarefas-${navSeed}`} user={session.user} onOpenCompany={openCompany} />
       )}
-      {view === "inbox" && <InboxPage key={`inbox-${navSeed}`} onOpenDeal={openDeal} />}
+      {view === "inbox" && <InboxPage key={`inbox-${navSeed}`} onOpenDeal={openDeal} onOpenCompany={openCompany} />}
       {view === "relatorios" && (
         <ReportsPage
           key={`relatorios-${navSeed}`}

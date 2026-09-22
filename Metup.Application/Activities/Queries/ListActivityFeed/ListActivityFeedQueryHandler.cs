@@ -17,7 +17,7 @@ public class ListActivityFeedQueryHandler(
 
         return feedReader.ReadAsync(
             scope,
-            new ActivityFeedRequest(after, request.Kinds ?? [], request.OwnerUserId, request.PageSize),
+            new ActivityFeedRequest(after, request.Kinds ?? [], request.OwnerUserId, request.PageSize, request.DealId),
             cancellationToken);
     }
 }

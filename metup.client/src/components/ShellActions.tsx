@@ -69,6 +69,7 @@ export function ShellActions({ userId, navigation }: { userId: string; navigatio
         onNavigate={navigation.onNavigate}
         onOpenCompany={navigation.onOpenCompany}
         onOpenDeal={navigation.onOpenDeal}
+        onOpenConversation={navigation.onOpenConversation}
       />
     </>
   )

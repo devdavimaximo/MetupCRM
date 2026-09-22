@@ -301,6 +301,7 @@ export const searchResult: SearchResult = {
       ownerUserName: "Davi Maximo",
     },
   ],
+  conversations: [],
 }
 
 export const users: UserSummary[] = [

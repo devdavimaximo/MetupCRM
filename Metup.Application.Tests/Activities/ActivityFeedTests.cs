@@ -151,6 +151,29 @@ public class ActivityFeedTests
     }
 
     [Fact]
+    public async Task DealId_restringe_a_um_negocio_e_ignora_o_escopo_por_responsavel()
+    {
+        using var context = new DashboardOverviewTestContext();
+        var sdrDeal = context.AddOpenDeal(context.SdrUserId, amount: null, ticket: null, BaseUtc.AddDays(-3));
+        var adminDeal = context.AddOpenDeal(context.AdminUserId, amount: null, ticket: null, BaseUtc.AddDays(-3));
+        AddActivity(context, sdrDeal, context.SdrUserId, BaseUtc.AddHours(-2));
+        AddActivity(context, adminDeal, context.AdminUserId, BaseUtc.AddHours(-1));
+
+        // O SDR só enxerga os próprios negócios em qualquer outro filtro, mas pedir um negócio
+        // específico (painel de contexto das Conversas) alcança a organização inteira — item 20.
+        var handler = Handler(context, context.SdrUserId, UserRole.Sdr);
+        var feed = await handler.Handle(new ListActivityFeedQuery(DealId: adminDeal.Id), TestContext.Current.CancellationToken);
+
+        Assert.All(feed.Items, item => Assert.Equal(adminDeal.Id, item.DealId));
+        Assert.Contains(feed.Items, item => item.Kind == ActivityFeedKind.DealCreated);
+        Assert.Contains(feed.Items, item => item.Kind == ActivityFeedKind.Activity);
+
+        // Sem DealId, o comportamento de hoje (escopo do SDR) continua valendo — regressão zero.
+        var withoutDealId = await handler.Handle(new ListActivityFeedQuery(), TestContext.Current.CancellationToken);
+        Assert.All(withoutDealId.Items, item => Assert.Equal(sdrDeal.Id, item.DealId));
+    }
+
+    [Fact]
     public async Task Admin_filtra_por_responsavel_do_negocio()
     {
         using var context = new DashboardOverviewTestContext();

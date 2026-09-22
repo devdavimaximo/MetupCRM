@@ -6,20 +6,31 @@ import { Button } from "@/components/ui/button"
 import { Monogram } from "@/components/ui/monogram"
 import { EmptyState } from "@/components/ui/states"
 import { Hint, TooltipProvider } from "@/components/ui/tooltip"
+import { Toaster } from "@/components/ui/toast"
+import type { DealDrawerSection } from "@/features/deals/deal-section"
 import { useDebouncedValue } from "@/lib/hooks"
+import { useToasts } from "@/lib/toasts"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 import { toMessage } from "@/features/companies/form-errors"
 import { ConversationList, type ConversationTab } from "./ConversationList"
+import { ConversationMenu } from "./ConversationMenu"
 import { ContextPanel } from "./ContextPanel"
 import { InboxHeader } from "./InboxHeader"
 import { MessageThread } from "./MessageThread"
 import {
+  applyConversationTag,
+  favoriteConversation,
   getConversationContext,
   getConversationsSummary,
   listConversations,
   listMessages,
   markConversationRead,
+  markConversationUnread,
+  removeConversationTag,
+  setConversationAutomation,
+  unfavoriteConversation,
+  updateConversationStatus,
   type ConversationChannel,
   type ConversationContext,
   type ConversationCounts,
@@ -30,7 +41,8 @@ import {
 import { CHANNEL_OPTIONS, channelLabels, statusBadgeVariant, STATUS_OPTIONS, statusLabels, telHref } from "./inbox-format"
 
 type Props = {
-  onOpenDeal: (dealId: string) => void
+  onOpenDeal: (dealId: string, section?: DealDrawerSection) => void
+  onOpenCompany: (companyId: string) => void
 }
 
 const PAGE_SIZE = 50
@@ -48,8 +60,9 @@ function parseStatuses(raw: string): ConversationStatus[] {
   return STATUS_OPTIONS.filter((option) => values.includes(option))
 }
 
-export function InboxPage({ onOpenDeal }: Props) {
+export function InboxPage({ onOpenDeal, onOpenCompany }: Props) {
   const initialUrlState = readUrlState()
+  const toasts = useToasts()
 
   const [search, setSearch] = useState(initialUrlState.search)
   const debouncedSearch = useDebouncedValue(search)
@@ -77,6 +90,7 @@ export function InboxPage({ onOpenDeal }: Props) {
   const [context, setContext] = useState<ConversationContext | null>(null)
   const [isContextLoading, setIsContextLoading] = useState(false)
   const [contextError, setContextError] = useState<string | null>(null)
+  const [isAutomationPending, setIsAutomationPending] = useState(false)
 
   const isLoadingMoreRef = useRef(false)
   const filterKeyRef = useRef("")
@@ -161,6 +175,87 @@ export function InboxPage({ onOpenDeal }: Props) {
         isLoadingMoreRef.current = false
         setIsLoadingMore(false)
       })
+  }
+
+  // Toda ação do menu `⋮` (item 18) e do painel de contexto (itens 19/21) é otimista: muda a tela na
+  // hora e desfaz com um aviso se o servidor recusar (regra do bloco comum da onda C3).
+  function toggleFavorite(conversation: ConversationListItem) {
+    const next = !conversation.isFavorite
+    setConversations((current) => current.map((c) => (c.id === conversation.id ? { ...c, isFavorite: next } : c)))
+    setCounts((current) => (current ? { ...current, favorite: Math.max(0, current.favorite + (next ? 1 : -1)) } : current))
+
+    const request = next ? favoriteConversation(conversation.id) : unfavoriteConversation(conversation.id)
+    request.catch((error: unknown) => {
+      setConversations((current) => current.map((c) => (c.id === conversation.id ? { ...c, isFavorite: !next } : c)))
+      setCounts((current) => (current ? { ...current, favorite: Math.max(0, current.favorite + (next ? -1 : 1)) } : current))
+      toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível favoritar a conversa.") })
+    })
+  }
+
+  function changeStatus(conversationId: string, next: ConversationStatus) {
+    const previous = conversations.find((c) => c.id === conversationId)?.status
+    setConversations((current) => current.map((c) => (c.id === conversationId ? { ...c, status: next } : c)))
+    if (selectedId === conversationId) {
+      setContext((current) => (current ? { ...current, status: next } : current))
+    }
+
+    updateConversationStatus(conversationId, next).catch((error: unknown) => {
+      if (previous) {
+        setConversations((current) => current.map((c) => (c.id === conversationId ? { ...c, status: previous } : c)))
+        if (selectedId === conversationId) {
+          setContext((current) => (current ? { ...current, status: previous } : current))
+        }
+      }
+      toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível mudar o status da conversa.") })
+    })
+  }
+
+  function markUnread(conversationId: string) {
+    setConversations((current) => current.map((c) => (c.id === conversationId ? { ...c, isUnread: true } : c)))
+    setCounts((current) => (current ? { ...current, unread: current.unread + 1 } : current))
+
+    markConversationUnread(conversationId).catch((error: unknown) => {
+      setConversations((current) => current.map((c) => (c.id === conversationId ? { ...c, isUnread: false } : c)))
+      setCounts((current) => (current ? { ...current, unread: Math.max(0, current.unread - 1) } : current))
+      toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível marcar como não lida.") })
+    })
+  }
+
+  function toggleAutomation(conversationId: string, next: boolean) {
+    setContext((current) => (current ? { ...current, automationEnabled: next } : current))
+    setIsAutomationPending(true)
+
+    setConversationAutomation(conversationId, next)
+      .catch((error: unknown) => {
+        setContext((current) => (current ? { ...current, automationEnabled: !next } : current))
+        toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível atualizar a automação.") })
+      })
+      .finally(() => setIsAutomationPending(false))
+  }
+
+  function applyTag(conversationId: string, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+
+    setContext((current) =>
+      current && !current.tags.includes(trimmed) ? { ...current, tags: [...current.tags, trimmed].sort((a, b) => a.localeCompare(b)) } : current
+    )
+
+    applyConversationTag(conversationId, trimmed).catch((error: unknown) => {
+      setContext((current) => (current ? { ...current, tags: current.tags.filter((t) => t !== trimmed) } : current))
+      toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível aplicar a tag.") })
+    })
+  }
+
+  function removeTag(conversationId: string, tagOptionId: string, name: string) {
+    setContext((current) => (current ? { ...current, tags: current.tags.filter((t) => t !== name) } : current))
+
+    removeConversationTag(conversationId, tagOptionId).catch((error: unknown) => {
+      setContext((current) =>
+        current && !current.tags.includes(name) ? { ...current, tags: [...current.tags, name].sort((a, b) => a.localeCompare(b)) } : current
+      )
+      toasts.show({ tone: "danger", message: toMessage(error, "Não foi possível remover a tag.") })
+    })
   }
 
   useEffect(() => {
@@ -308,6 +403,18 @@ export function InboxPage({ onOpenDeal }: Props) {
                         </Button>
                       </span>
                     </Hint>
+                    <ConversationMenu
+                      contactName={selectedConversation.contactName}
+                      status={activeStatus ?? selectedConversation.status}
+                      isFavorite={selectedConversation.isFavorite}
+                      dealId={context?.dealId ?? null}
+                      companyId={selectedConversation.companyId}
+                      onMarkUnread={() => markUnread(selectedConversation.id)}
+                      onToggleFavorite={() => toggleFavorite(selectedConversation)}
+                      onChangeStatus={(status) => changeStatus(selectedConversation.id, status)}
+                      onOpenDeal={onOpenDeal}
+                      onOpenCompany={onOpenCompany}
+                    />
                   </div>
 
                   {context?.dealId && (
@@ -337,10 +444,22 @@ export function InboxPage({ onOpenDeal }: Props) {
           </section>
 
           <aside aria-label="Contexto do contato" className="hidden min-h-0 overflow-y-auto border-l border-line-soft bg-sunken/40 xl:block">
-            <ContextPanel context={context} isLoading={isContextLoading} error={contextError} onOpenDeal={onOpenDeal} />
+            <ContextPanel
+              conversationId={selectedId}
+              context={context}
+              isLoading={isContextLoading}
+              error={contextError}
+              onOpenDeal={onOpenDeal}
+              onApplyTag={applyTag}
+              onRemoveTag={removeTag}
+              onToggleAutomation={toggleAutomation}
+              isAutomationPending={isAutomationPending}
+            />
           </aside>
         </div>
       </div>
+
+      <Toaster toasts={toasts.toasts} onDismiss={toasts.dismiss} />
     </TooltipProvider>
   )
 }

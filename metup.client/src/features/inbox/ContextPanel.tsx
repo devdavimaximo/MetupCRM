@@ -1,26 +1,61 @@
-import type { ReactNode } from "react"
-import { ArrowUpRight, Bot, Building2, Globe, Mail, MapPin, MessageCircle, Phone, Tag as TagIcon, UserRound } from "lucide-react"
+import { useState, type ReactNode } from "react"
+import {
+  ArrowUpRight,
+  Bot,
+  Building2,
+  Globe,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  Plus,
+  Tag as TagIcon,
+  UserRound,
+  X,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Monogram } from "@/components/ui/monogram"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Alert, EmptyState, Skeleton } from "@/components/ui/states"
+import { Switch } from "@/components/ui/switch"
+import { ActivityEventButton } from "@/features/dashboard/activity-event"
+import type { DealDrawerSection } from "@/features/deals/deal-section"
 import { stageLabels, statusLabels as dealStatusLabels } from "@/features/deals/stage-labels"
+import { useAsyncResource, useDebouncedValue } from "@/lib/hooks"
 import { formatDue } from "@/lib/format"
 import { formatMoney } from "@/lib/money"
 import { cn } from "@/lib/utils"
-import type { ConversationContext } from "./api"
+import { getActivityHistory, listConversationTagOptions, type ConversationContext } from "./api"
 import { formatResponseTime } from "./inbox-format"
 
 type Props = {
+  conversationId: string | null
   context: ConversationContext | null
   isLoading: boolean
   error: string | null
-  onOpenDeal: (dealId: string) => void
+  onOpenDeal: (dealId: string, section?: DealDrawerSection) => void
+  onApplyTag: (conversationId: string, name: string) => void
+  onRemoveTag: (conversationId: string, tagOptionId: string, name: string) => void
+  onToggleAutomation: (conversationId: string, enabled: boolean) => void
+  isAutomationPending: boolean
 }
 
 /** Painel de contexto: quem é, de qual empresa e onde está no funil — ao lado da conversa. */
-export function ContextPanel({ context, isLoading, error, onOpenDeal }: Props) {
+export function ContextPanel({
+  conversationId,
+  context,
+  isLoading,
+  error,
+  onOpenDeal,
+  onApplyTag,
+  onRemoveTag,
+  onToggleAutomation,
+  isAutomationPending,
+}: Props) {
   if (isLoading) {
     return (
       <div role="status" className="flex flex-col gap-4 p-5">
@@ -41,7 +76,7 @@ export function ContextPanel({ context, isLoading, error, onOpenDeal }: Props) {
     )
   }
 
-  if (!context) {
+  if (!context || !conversationId) {
     return <EmptyState compact icon={UserRound} title="Sem contato selecionado" description="O contexto do contato e do negócio aparece aqui." className="h-full" />
   }
 
@@ -154,25 +189,18 @@ export function ContextPanel({ context, isLoading, error, onOpenDeal }: Props) {
         </dl>
       </section>
 
-      <section className="flex flex-col gap-2 border-b border-line-soft px-5 py-5">
-        <h3 className="label-mono text-muted">Tags</h3>
-        {context.tags.length > 0 ? (
-          <ul className="flex flex-wrap gap-1.5">
-            {context.tags.map((tag) => (
-              <li key={tag}>
-                <Badge variant="outline">{tag}</Badge>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted">Sem tags nesta conversa.</p>
-        )}
-      </section>
+      <TagsSection
+        conversationId={conversationId}
+        tags={context.tags}
+        onApplyTag={(name) => onApplyTag(conversationId, name)}
+        onRemoveTag={(tagOptionId, name) => onRemoveTag(conversationId, tagOptionId, name)}
+      />
 
-      {/* Histórico de atividades — onda C3, item 20 */}
+      {context.dealId && <ActivityHistorySection dealId={context.dealId} onOpenDeal={onOpenDeal} />}
 
       <section className="px-5 py-5">
         <div
+          aria-busy={isAutomationPending}
           className={cn(
             "flex flex-col gap-1.5 rounded-sm border p-4",
             context.automationEnabled ? "border-accent/30 bg-accent/10" : "border-line-soft bg-surface"
@@ -183,13 +211,16 @@ export function ContextPanel({ context, isLoading, error, onOpenDeal }: Props) {
               <Bot className="size-4 text-accent" aria-hidden="true" />
               Automação
             </span>
-            <Badge variant={context.automationEnabled ? "accent" : "default"} dot>
-              {context.automationEnabled ? "Ativa" : "Inativa"}
-            </Badge>
+            <Switch
+              checked={context.automationEnabled}
+              disabled={isAutomationPending}
+              onCheckedChange={(checked) => onToggleAutomation(conversationId, checked)}
+              aria-label={context.automationEnabled ? "Desativar automação" : "Ativar automação"}
+            />
           </div>
-          {context.automationEnabled && (
-            <p className="text-xs text-fg-muted">Este lead está recebendo comunicações automáticas.</p>
-          )}
+          <p className="text-xs text-fg-muted">
+            {context.automationEnabled ? "Este lead está recebendo comunicações automáticas." : "A automação está desligada para este lead."}
+          </p>
         </div>
       </section>
     </div>
@@ -205,5 +236,196 @@ function InfoRow({ icon, label, children }: { icon: ReactNode; label: string; ch
       </dt>
       <dd className="min-w-0">{children}</dd>
     </div>
+  )
+}
+
+/**
+ * Tags da conversa (item 19): chips aplicados com `×` direto e um popover com busca no catálogo da
+ * organização + criação de uma tag nova. O catálogo completo (sem termo) também serve para achar o
+ * id de uma tag já aplicada — o contexto só devolve os nomes — e é recarregado sempre que a lista de
+ * tags aplicadas muda, o que também resolve o id de uma tag recém-criada.
+ */
+function TagsSection({
+  conversationId,
+  tags,
+  onApplyTag,
+  onRemoveTag,
+}: {
+  conversationId: string
+  tags: string[]
+  onApplyTag: (name: string) => void
+  onRemoveTag: (tagOptionId: string, name: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, 250)
+
+  // Catálogo completo, sem termo de busca: só para resolver o id de uma tag já aplicada (o contexto
+  // só devolve nomes). Recarrega quando as tags aplicadas mudam — cobre também uma tag recém-criada.
+  const catalogResource = useAsyncResource(
+    (signal) => listConversationTagOptions(undefined, signal),
+    [conversationId, tags]
+  )
+  const catalog = catalogResource.data ?? []
+
+  const searchResource = useAsyncResource((signal) => listConversationTagOptions(debouncedSearch || undefined, signal), [debouncedSearch], {
+    enabled: open,
+  })
+  const options = searchResource.data ?? []
+  const isSearching = searchResource.isLoading
+
+  function idOf(name: string) {
+    return catalog.find((option) => option.name.toLowerCase() === name.toLowerCase())?.id ?? null
+  }
+
+  const trimmedSearch = search.trim()
+  const hasExactMatch = options.some((option) => option.name.toLowerCase() === trimmedSearch.toLowerCase())
+
+  return (
+    <section className="flex flex-col gap-2.5 border-b border-line-soft px-5 py-5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="label-mono text-muted">Tags</h3>
+        <Popover
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next)
+            if (!next) setSearch("")
+          }}
+        >
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-accent hover:text-accent-hover">
+              <Plus className="size-3.5" aria-hidden="true" />
+              Adicionar tag
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="flex w-64 flex-col gap-2.5 p-3">
+            <Label htmlFor="conversation-tag-search" className="sr-only">
+              Buscar ou criar tag
+            </Label>
+            <Input
+              id="conversation-tag-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar ou criar tag…"
+              autoComplete="off"
+              spellCheck={false}
+              className="h-9"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {isSearching && <p className="text-xs text-muted">Buscando…</p>}
+              {!isSearching &&
+                options.map((option) => {
+                  const applied = tags.some((tag) => tag.toLowerCase() === option.name.toLowerCase())
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      aria-pressed={applied}
+                      onClick={() => (applied ? onRemoveTag(option.id, option.name) : onApplyTag(option.name))}
+                      className={cn(
+                        "inline-flex h-7 cursor-pointer items-center rounded-xs border px-2 text-xs transition-colors focus-visible:focus-ring",
+                        applied ? "border-accent/60 bg-accent/10 text-accent" : "border-line-soft bg-surface-2 text-fg-muted hover:border-line-strong hover:text-fg"
+                      )}
+                    >
+                      {option.name}
+                    </button>
+                  )
+                })}
+              {!isSearching && trimmedSearch && !hasExactMatch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApplyTag(trimmedSearch)
+                    setSearch("")
+                  }}
+                  className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-xs border border-dashed border-line-strong px-2 text-xs text-accent transition-colors hover:bg-accent/10 focus-visible:focus-ring"
+                >
+                  <Plus className="size-3" aria-hidden="true" />
+                  Criar “{trimmedSearch}”
+                </button>
+              )}
+              {!isSearching && options.length === 0 && !trimmedSearch && (
+                <p className="text-xs text-muted">Digite para buscar ou criar uma tag.</p>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {tags.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <li key={tag}>
+              <Badge variant="outline" className="gap-1 py-0.5 pr-1">
+                {tag}
+                <button
+                  type="button"
+                  aria-label={`Remover tag ${tag}`}
+                  onClick={() => {
+                    const id = idOf(tag)
+                    if (id) onRemoveTag(id, tag)
+                  }}
+                  className="inline-flex size-3.5 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
+                >
+                  <X className="size-2.5" aria-hidden="true" />
+                </button>
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">Sem tags nesta conversa.</p>
+      )}
+    </section>
+  )
+}
+
+/**
+ * Histórico de atividades do negócio (item 20): os 5 últimos eventos, mesmo item visual do feed do
+ * dashboard (`ActivityEventButton`). Some se a conversa não tiver negócio vinculado.
+ */
+function ActivityHistorySection({
+  dealId,
+  onOpenDeal,
+}: {
+  dealId: string
+  onOpenDeal: (dealId: string, section?: DealDrawerSection) => void
+}) {
+  const history = useAsyncResource((signal) => getActivityHistory(dealId, signal).then((page) => page.items), [dealId])
+  const items = history.error ? [] : history.data
+
+  return (
+    <section className="flex flex-col gap-2.5 border-b border-line-soft px-5 py-5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="label-mono text-muted">Histórico de atividades</h3>
+        <button
+          type="button"
+          onClick={() => onOpenDeal(dealId, "activity")}
+          className="cursor-pointer rounded-xs text-xs text-accent hover:text-accent-hover focus-visible:focus-ring"
+        >
+          Ver tudo
+        </button>
+      </div>
+
+      {items === null && (
+        <div role="status" className="flex flex-col gap-2">
+          <span className="sr-only">Carregando histórico…</span>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      )}
+
+      {items !== null && items.length === 0 && <p className="text-sm text-muted">Sem atividade registrada neste negócio ainda.</p>}
+
+      {items !== null && items.length > 0 && (
+        <ol className="flex flex-col divide-y divide-line-soft/70">
+          {items.map((event) => (
+            <li key={event.id}>
+              <ActivityEventButton event={event} onOpenDeal={() => onOpenDeal(dealId)} />
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }

@@ -3,9 +3,11 @@ using System.Linq.Expressions;
 using System.Text;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Search.Queries.GlobalSearch;
+using Metup.Application.Tests.Conversations;
 using Metup.Application.Tests.Dashboard;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
+using Metup.Domain.Conversations;
 using Metup.Domain.Users;
 using Metup.Infrastructure.Persistence;
 using Metup.Infrastructure.Search;
@@ -105,6 +107,45 @@ public class SearchTests
         var result = await Handler(context, context.AdminUserId, UserRole.Admin).Handle(new SearchQuery("mercado"), TestContext.Current.CancellationToken);
 
         Assert.Equal(SearchQuery.MaxHitsPerGroup, result.Companies.Count);
+    }
+
+    [Fact]
+    public async Task Conversas_sao_encontradas_pelo_contato_ou_pela_empresa_sem_acento_e_da_organizacao_inteira()
+    {
+        using var conversations = new ConversationsTestContext();
+        var conversation = conversations.AddConversation();
+        conversations.AddInbound(conversation.Id, NowUtc, "Olá, tudo bem?");
+
+        var handler = new SearchQueryHandler(conversations.Db, conversations.As(conversations.SdrUserId, UserRole.Sdr), new InMemoryTextSearch());
+
+        var byContact = await handler.Handle(new SearchQuery("BIA"), TestContext.Current.CancellationToken);
+        var hit = Assert.Single(byContact.Conversations);
+        Assert.Equal(conversation.Id, hit.Id);
+        Assert.Equal("Bia Cliente", hit.ContactName);
+        Assert.Equal("Empresa Alfa", hit.CompanyName);
+        Assert.Equal("Olá, tudo bem?", hit.LastMessagePreview);
+
+        // A conversa não tem responsável (a Inbox é compartilhada) — o SDR também encontra pela empresa.
+        var byCompany = await handler.Handle(new SearchQuery("alfa"), TestContext.Current.CancellationToken);
+        Assert.Single(byCompany.Conversations);
+    }
+
+    [Fact]
+    public async Task No_maximo_cinco_conversas_por_grupo()
+    {
+        using var context = new DashboardOverviewTestContext();
+        for (var i = 0; i < 8; i++)
+        {
+            var contact = new Contact { OrganizationId = context.OrganizationId, CompanyId = context.CompanyId, Name = $"Cliente Mercado {i}" };
+            context.Db.Contacts.Add(contact);
+            context.Db.SaveChanges();
+            context.Db.Conversations.Add(Conversation.Create(context.OrganizationId, contact.Id, ConversationChannel.WhatsApp));
+            context.Db.SaveChanges();
+        }
+
+        var result = await Handler(context, context.AdminUserId, UserRole.Admin).Handle(new SearchQuery("mercado"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(SearchQuery.MaxHitsPerGroup, result.Conversations.Count);
     }
 
     [Theory]

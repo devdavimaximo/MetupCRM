@@ -14,7 +14,14 @@ export type DealSearchHit = {
   ownerUserName: string | null
 }
 
-export type SearchResult = { companies: CompanySearchHit[]; contacts: ContactSearchHit[]; deals: DealSearchHit[] }
+export type ConversationSearchHit = { id: string; contactName: string; companyName: string; lastMessagePreview: string | null }
+
+export type SearchResult = {
+  companies: CompanySearchHit[]
+  contacts: ContactSearchHit[]
+  deals: DealSearchHit[]
+  conversations: ConversationSearchHit[]
+}
 
 export const MIN_SEARCH_LENGTH = 2
 

@@ -39,12 +39,14 @@ export function GlobalSearch({
   onNavigate,
   onOpenCompany,
   onOpenDeal,
+  onOpenConversation,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onNavigate: (view: View) => void
   onOpenCompany: (companyId: string) => void
   onOpenDeal: (dealId: string) => void
+  onOpenConversation: (conversationId: string) => void
 }) {
   const [term, setTerm] = useState("")
   const [attempt, setAttempt] = useState(0)
@@ -128,6 +130,17 @@ export function GlobalSearch({
             ),
             icon: Handshake,
             onSelect: () => run(() => onOpenDeal(deal.id)),
+          })),
+        },
+        {
+          id: "conversations",
+          label: "Conversas",
+          items: result.conversations.map((conversation) => ({
+            id: `conversation-${conversation.id}`,
+            label: conversation.contactName,
+            description: joinParts(conversation.companyName, conversation.lastMessagePreview),
+            icon: MessagesSquare,
+            onSelect: () => run(() => onOpenConversation(conversation.id)),
           })),
         },
         navigation,

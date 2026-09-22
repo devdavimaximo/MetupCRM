@@ -8,13 +8,17 @@ namespace Metup.Application.Activities.Common;
 
 /// <summary>
 /// O que o feed pede: a posição (<c>After</c>, nulo na primeira página), os filtros (vazio = tudo),
-/// o responsável dos negócios (só vale quando o escopo alcança a organização) e o tamanho da página.
+/// o responsável dos negócios (só vale quando o escopo alcança a organização), o tamanho da página e,
+/// opcionalmente, um negócio único (<see cref="DealId"/>) — usado pelo painel de contexto das
+/// Conversas (item 20). Quando presente, ignora o escopo por responsável: o acesso a um negócio já é
+/// da organização inteira (mesma regra do Pipeline), não é uma regressão de escopo.
 /// </summary>
 public sealed record ActivityFeedRequest(
     ActivityFeedCursor? After,
     IReadOnlyCollection<ActivityFeedFilter> Filters,
     Guid? OwnerUserId,
-    int PageSize);
+    int PageSize,
+    Guid? DealId = null);
 
 /// <summary>
 /// Composição única do feed da operação: <see cref="Activity"/> + <see cref="StageChange"/>, do mais
@@ -36,13 +40,13 @@ public sealed class ActivityFeedReader(IApplicationDbContext context, IOrganizat
         ActivityFeedRequest request,
         CancellationToken cancellationToken)
     {
-        var ownerUserId = scope.OwnerUserId ?? request.OwnerUserId;
+        var ownerUserId = request.DealId is not null ? null : scope.OwnerUserId ?? request.OwnerUserId;
         var take = request.PageSize + 1;
         var filters = request.Filters.Count == 0 ? Enum.GetValues<ActivityFeedFilter>() : request.Filters;
 
         var rows = new List<FeedRow>();
-        rows.AddRange(await ReadActivitiesAsync(scope.OrganizationId, ownerUserId, filters, request.After, take, cancellationToken));
-        rows.AddRange(await ReadStageChangesAsync(scope.OrganizationId, ownerUserId, filters, request.After, take, cancellationToken));
+        rows.AddRange(await ReadActivitiesAsync(scope.OrganizationId, ownerUserId, request.DealId, filters, request.After, take, cancellationToken));
+        rows.AddRange(await ReadStageChangesAsync(scope.OrganizationId, ownerUserId, request.DealId, filters, request.After, take, cancellationToken));
 
         var ordered = rows
             .DistinctBy(r => r.Id)
@@ -63,6 +67,7 @@ public sealed class ActivityFeedReader(IApplicationDbContext context, IOrganizat
     private async Task<List<FeedRow>> ReadActivitiesAsync(
         Guid organizationId,
         Guid? ownerUserId,
+        Guid? dealId,
         IReadOnlyCollection<ActivityFeedFilter> filters,
         ActivityFeedCursor? after,
         int take,
@@ -77,6 +82,11 @@ public sealed class ActivityFeedReader(IApplicationDbContext context, IOrganizat
         var activities = context.Activities
             .AsNoTracking()
             .Where(a => a.OrganizationId == organizationId && types.Contains(a.Type));
+
+        if (dealId is { } deal)
+        {
+            activities = activities.Where(a => a.DealId == deal);
+        }
 
         if (ownerUserId is { } owner)
         {
@@ -111,6 +121,7 @@ public sealed class ActivityFeedReader(IApplicationDbContext context, IOrganizat
     private async Task<List<FeedRow>> ReadStageChangesAsync(
         Guid organizationId,
         Guid? ownerUserId,
+        Guid? dealId,
         IReadOnlyCollection<ActivityFeedFilter> filters,
         ActivityFeedCursor? after,
         int take,
@@ -132,6 +143,11 @@ public sealed class ActivityFeedReader(IApplicationDbContext context, IOrganizat
                     || (won && sc.ToStage == DealStage.Ganho)
                     || (lost && sc.ToStage == DealStage.Perdido)
                     || (advanced && sc.FromStage != null && sc.ToStage != DealStage.Ganho && sc.ToStage != DealStage.Perdido)));
+
+        if (dealId is { } deal)
+        {
+            stageChanges = stageChanges.Where(sc => sc.DealId == deal);
+        }
 
         if (ownerUserId is { } owner)
         {

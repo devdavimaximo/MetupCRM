@@ -1,6 +1,7 @@
 using Metup.Application.Common.Realtime;
 using Metup.Application.Conversations.Commands.FavoriteConversation;
 using Metup.Application.Conversations.Commands.MarkConversationRead;
+using Metup.Application.Conversations.Commands.MarkConversationUnread;
 using Metup.Application.Conversations.Commands.UnfavoriteConversation;
 using Metup.Application.Conversations.Common;
 using Metup.Application.Conversations.Queries.ListConversations;
@@ -71,6 +72,38 @@ public class ConversationReadAndFavoriteTests
 
         Assert.False((await SingleListItem(context, context.SdrUserId)).IsUnread);
         Assert.True((await SingleListItem(context, context.AdminUserId)).IsUnread);
+    }
+
+    [Fact]
+    public async Task Marcar_como_nao_lida_apaga_o_cursor_e_e_idempotente()
+    {
+        using var context = new ConversationsTestContext();
+        var conversation = context.AddConversation();
+        context.AddInbound(conversation.Id, NowUtc);
+        var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc.AddMinutes(1));
+        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), clock)
+            .Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
+        Assert.False((await SingleListItem(context, context.SdrUserId)).IsUnread);
+
+        var handler = new MarkConversationUnreadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr));
+        await handler.Handle(new MarkConversationUnreadCommand(conversation.Id), TestContext.Current.CancellationToken);
+        await handler.Handle(new MarkConversationUnreadCommand(conversation.Id), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, await context.Db.ConversationReads.CountAsync(TestContext.Current.CancellationToken));
+        Assert.True((await SingleListItem(context, context.SdrUserId)).IsUnread);
+    }
+
+    [Fact]
+    public async Task Marcar_como_nao_lida_sem_cursor_de_leitura_nao_e_erro()
+    {
+        using var context = new ConversationsTestContext();
+        var conversation = context.AddConversation();
+
+        var exception = await Record.ExceptionAsync(() =>
+            new MarkConversationUnreadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+                .Handle(new MarkConversationUnreadCommand(conversation.Id), TestContext.Current.CancellationToken));
+
+        Assert.Null(exception);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using Metup.Application.Common.Models;
 using Metup.Application.Conversations.Commands.ApplyConversationTag;
 using Metup.Application.Conversations.Commands.FavoriteConversation;
 using Metup.Application.Conversations.Commands.MarkConversationRead;
+using Metup.Application.Conversations.Commands.MarkConversationUnread;
 using Metup.Application.Conversations.Commands.RemoveConversationTag;
 using Metup.Application.Conversations.Commands.SendMessage;
 using Metup.Application.Conversations.Commands.SetConversationAutomation;
@@ -88,6 +89,13 @@ public class ConversationsController(ISender sender) : ControllerBase
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken cancellationToken)
     {
         await sender.Send(new MarkConversationReadCommand(id), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}/read")]
+    public async Task<IActionResult> MarkUnread(Guid id, CancellationToken cancellationToken)
+    {
+        await sender.Send(new MarkConversationUnreadCommand(id), cancellationToken);
         return NoContent();
     }
 
