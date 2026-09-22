@@ -15,6 +15,9 @@ export function readUrlState() {
     companyId: params.get("empresa"),
     dealId: params.get("negocio"),
     conversationId: params.get("conversa"),
+    conversationTab: params.get("conversaAba") ?? "",
+    conversationChannels: params.get("conversaCanal") ?? "",
+    conversationStatuses: params.get("conversaStatus") ?? "",
     segment: params.get("segmento") ?? "",
     city: params.get("cidade") ?? "",
     ownerUserId: params.get("responsavel") ?? "",
@@ -56,6 +59,9 @@ type UrlStatePatch = {
   companyId?: string | null
   dealId?: string | null
   conversationId?: string | null
+  conversationTab?: string
+  conversationChannels?: string
+  conversationStatuses?: string
   segment?: string
   city?: string
   ownerUserId?: string
@@ -92,6 +98,9 @@ type UrlStatePatch = {
 
 const STRING_KEYS = [
   ["search", "busca"],
+  ["conversationTab", "conversaAba"],
+  ["conversationChannels", "conversaCanal"],
+  ["conversationStatuses", "conversaStatus"],
   ["segment", "segmento"],
   ["city", "cidade"],
   ["ownerUserId", "responsavel"],

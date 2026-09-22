@@ -79,6 +79,8 @@ export type ConversationContext = {
   tags: string[]
   companyCnpj: string | null
   companyWebsite: string | null
+  companySegment: string | null
+  companyCity: string | null
   dealOwnerUserName: string | null
   summary: ConversationSummary
 }

@@ -24,6 +24,8 @@ public record ConversationContextDto(
     IReadOnlyList<string> Tags,
     string? CompanyCnpj,
     string? CompanyWebsite,
+    string? CompanySegment,
+    string? CompanyCity,
     string? DealOwnerUserName,
     ConversationSummaryDto Summary);
 

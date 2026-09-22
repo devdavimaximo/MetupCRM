@@ -35,7 +35,7 @@ public class GetConversationContextQueryHandler(
         var company = await context.Companies
             .AsNoTracking()
             .Where(co => co.Id == contact.CompanyId)
-            .Select(co => new { co.Name, co.Cnpj, co.Website })
+            .Select(co => new { co.Name, co.Cnpj, co.Website, co.Segment, co.City })
             .FirstAsync(cancellationToken);
 
         var deal = await context.Deals
@@ -82,6 +82,8 @@ public class GetConversationContextQueryHandler(
             tags,
             company.Cnpj,
             company.Website,
+            company.Segment,
+            company.City,
             dealOwnerUserName,
             summary);
     }
