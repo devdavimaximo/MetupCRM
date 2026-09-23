@@ -1,3 +1,5 @@
+using Metup.Domain.Users;
+
 namespace Metup.Application.Common.Interfaces;
 
 /// <summary>
@@ -11,5 +13,9 @@ public interface ICurrentUserService
 
     Guid? OrganizationId { get; }
 
-    string? Role { get; }
+    /// <summary>
+    /// Permissões efetivas do cargo do usuário, lidas do banco a cada requisição (mudar o cargo vale
+    /// na hora, sem novo login). Vazio para o service token do n8n e para quem não está logado.
+    /// </summary>
+    IReadOnlySet<Permission> Permissions { get; }
 }

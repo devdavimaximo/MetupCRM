@@ -34,8 +34,8 @@ public class TaskSummaryTests
         context.AddTask(Utc(10, 12), completedAtUtc: NowUtc.AddDays(-40));
         context.AddTask(Utc(10, 12), cancelledAtUtc: NowUtc.AddDays(-1));
 
-        var summary = await context.Summary(context.SdrUserId, UserRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
-        var list = context.List(context.SdrUserId, UserRole.Sdr, Clock);
+        var summary = await context.Summary(context.SdrUserId, DefaultRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
+        var list = context.List(context.SdrUserId, DefaultRole.Sdr, Clock);
 
         async Task<int> Total(TaskScope scope, params TaskItemStatus[] statuses) =>
             (await list.Handle(new ListTasksQuery(Scope: scope, Statuses: statuses), Ct)).TotalCount;
@@ -73,7 +73,7 @@ public class TaskSummaryTests
         context.AddTask(Utc(7, 12), createdAtUtc: created, completedAtUtc: Utc(8, 12));
         context.AddTask(Utc(20, 15), createdAtUtc: asOf.AddHours(1));
 
-        var summary = await context.Summary(context.SdrUserId, UserRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
+        var summary = await context.Summary(context.SdrUserId, DefaultRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
 
         Assert.Equal(new TaskPreviousCountsDto(Overdue: 2, Today: 1, ThisWeek: 0), summary.Previous);
     }
@@ -85,7 +85,7 @@ public class TaskSummaryTests
         // Mesma tarefa do teste anterior, mas sem histórico: o prazo 20/09 não conta em D−7.
         context.AddTask(Utc(20, 15), createdAtUtc: Utc(1, 12));
 
-        var summary = await context.Summary(context.SdrUserId, UserRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
+        var summary = await context.Summary(context.SdrUserId, DefaultRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
 
         Assert.Equal(new TaskPreviousCountsDto(0, 0, 0), summary.Previous);
     }
@@ -96,7 +96,7 @@ public class TaskSummaryTests
         using var context = new TasksTestContext(NowUtc);
         context.AddTask(Utc(20, 15), createdAtUtc: NowUtc.AddDays(-2));
 
-        var summary = await context.Summary(context.SdrUserId, UserRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
+        var summary = await context.Summary(context.SdrUserId, DefaultRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
 
         Assert.Null(summary.Previous);
         Assert.Null(summary.CompletedChangePct);
@@ -113,7 +113,7 @@ public class TaskSummaryTests
         context.AddTask(Utc(1, 12), completedAtUtc: Utc(2, 12));    // fora da série
         context.AddTask(Utc(1, 12), cancelledAtUtc: Utc(16, 12));   // cancelada não conta
 
-        var summary = await context.Summary(context.SdrUserId, UserRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
+        var summary = await context.Summary(context.SdrUserId, DefaultRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(), Ct);
 
         Assert.Equal(14, summary.WeeklyCompleted.Count);
         Assert.Equal(new DateOnly(2026, 9, 3), summary.WeeklyCompleted[0].Date);
@@ -134,9 +134,9 @@ public class TaskSummaryTests
         context.AddTask(Utc(20, 15), ownerUserId: context.SdrUserId);
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
-            context.Summary(context.SdrUserId, UserRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(AllOwners: true), Ct));
+            context.Summary(context.SdrUserId, DefaultRole.Sdr, Clock).Handle(new GetTaskSummaryQuery(AllOwners: true), Ct));
 
-        var all = await context.Summary(context.AdminUserId, UserRole.Admin, Clock).Handle(new GetTaskSummaryQuery(AllOwners: true), Ct);
+        var all = await context.Summary(context.AdminUserId, DefaultRole.Admin, Clock).Handle(new GetTaskSummaryQuery(AllOwners: true), Ct);
         Assert.Equal(2, all.Counts.All);
     }
 }

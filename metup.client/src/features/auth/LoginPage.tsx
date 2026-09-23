@@ -7,17 +7,13 @@ import { Field } from "@/components/ui/field"
 import { Eyebrow } from "@/components/ui/page"
 import { Alert } from "@/components/ui/states"
 import { ApiError, apiFetch } from "@/lib/api"
-import { saveSession, type Session } from "@/lib/auth"
+import { saveSession, type AuthenticatedUser, type Session } from "@/lib/auth"
 import { brand } from "@/lib/brand"
 
 type LoginResponse = {
   token: string
   expiresAtUtc: string
-  userId: string
-  organizationId: string
-  name: string
-  email: string
-  role: "Admin" | "Closer" | "Sdr"
+  user: AuthenticatedUser
 }
 
 type Props = {
@@ -44,17 +40,7 @@ export function LoginPage({ onLoggedIn }: Props) {
         body: JSON.stringify({ email, password }),
       })
 
-      const session: Session = {
-        token: response.token,
-        expiresAtUtc: response.expiresAtUtc,
-        user: {
-          userId: response.userId,
-          organizationId: response.organizationId,
-          name: response.name,
-          email: response.email,
-          role: response.role,
-        },
-      }
+      const session: Session = { token: response.token, expiresAtUtc: response.expiresAtUtc, user: response.user }
 
       saveSession(session)
       onLoggedIn(session)

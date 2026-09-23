@@ -54,7 +54,6 @@ public sealed class PipelineTestContext : IDisposable
             Name = "Carla Closer",
             Email = "carla@acme.com",
             PasswordHash = "x",
-            Role = UserRole.Closer,
         });
         Db.Companies.Add(new Company { Id = RetailCompanyId, OrganizationId = OrganizationId, Name = "Padaria São João", Segment = "Varejo" });
         Db.Contacts.Add(new Contact { Id = RetailContactId, OrganizationId = OrganizationId, CompanyId = RetailCompanyId, Name = "João Ávila" });
@@ -151,37 +150,37 @@ public sealed class PipelineTestContext : IDisposable
         return task;
     }
 
-    public ICurrentUserService As(Guid userId, UserRole role) => Base.As(userId, role);
+    public ICurrentUserService As(Guid userId, DefaultRole role) => Base.As(userId, role);
 
     public DealBoardReader Reader() => new(Db, new InMemoryTextSearch());
 
-    public GetDealBoardQueryHandler Board(Guid userId, UserRole role) => new(As(userId, role), Clock, Reader());
+    public GetDealBoardQueryHandler Board(Guid userId, DefaultRole role) => new(As(userId, role), Clock, Reader());
 
-    public GetDealBoardColumnQueryHandler Column(Guid userId, UserRole role) => new(As(userId, role), Clock, Reader());
+    public GetDealBoardColumnQueryHandler Column(Guid userId, DefaultRole role) => new(As(userId, role), Clock, Reader());
 
-    public GetPipelineSummaryQueryHandler Summary(Guid userId, UserRole role) =>
+    public GetPipelineSummaryQueryHandler Summary(Guid userId, DefaultRole role) =>
         new(Db, As(userId, role), Clock, Reader(), new StageAnalyticsProvider(Db));
 
-    public GetPipelineEvolutionQueryHandler Evolution(Guid userId, UserRole role) =>
+    public GetPipelineEvolutionQueryHandler Evolution(Guid userId, DefaultRole role) =>
         new(Db, As(userId, role), Clock, Reader(), new StageAnalyticsProvider(Db));
 
-    public GetPipelineInsightsQueryHandler Insights(Guid userId, UserRole role) =>
+    public GetPipelineInsightsQueryHandler Insights(Guid userId, DefaultRole role) =>
         new(Db, As(userId, role), Clock, Reader());
 
-    public ReassignDealCommandHandler Reassign(Guid userId, UserRole role) => new(Db, As(userId, role));
+    public ReassignDealCommandHandler Reassign(Guid userId, DefaultRole role) => new(Db, As(userId, role));
 
-    public ChangeDealStageCommandHandler ChangeStage(Guid userId, UserRole role) =>
+    public ChangeDealStageCommandHandler ChangeStage(Guid userId, DefaultRole role) =>
         new(Db, As(userId, role), Clock, new RecordingPublisher());
 
-    public CloseDealCommandHandler CloseDeal(Guid userId, UserRole role) =>
+    public CloseDealCommandHandler CloseDeal(Guid userId, DefaultRole role) =>
         new(Db, As(userId, role), Clock, new RecordingPublisher());
 
-    public UpdateDealCommandHandler UpdateDeal(Guid userId, UserRole role) => new(Db, As(userId, role), Clock);
+    public UpdateDealCommandHandler UpdateDeal(Guid userId, DefaultRole role) => new(Db, As(userId, role), Clock);
 
-    public GetDashboardOverviewQueryHandler Dashboard(Guid userId, UserRole role) =>
+    public GetDashboardOverviewQueryHandler Dashboard(Guid userId, DefaultRole role) =>
         new(Db, As(userId, role), Clock, new ActivityFeedReader(Db, Clock), new StageAnalyticsProvider(Db));
 
-    public ListDealsQueryHandler List(Guid userId, UserRole role) => new(Db, As(userId, role));
+    public ListDealsQueryHandler List(Guid userId, DefaultRole role) => new(Db, As(userId, role));
 
     public void Dispose() => Base.Dispose();
 

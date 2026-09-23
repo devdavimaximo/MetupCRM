@@ -40,7 +40,7 @@ public sealed class ConversationsTestContext : IDisposable
 
     public Guid SdrUserId => Base.SdrUserId;
 
-    public FakeCurrentUserService As(Guid userId, UserRole role) => Base.As(userId, role);
+    public FakeCurrentUserService As(Guid userId, DefaultRole role) => Base.As(userId, role);
 
     public FakeServiceTokenUser AsServiceToken() => new(OrganizationId);
 

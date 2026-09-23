@@ -14,7 +14,7 @@ import { toMessage } from "@/features/companies/form-errors"
 import { listCompanyFilterOptions } from "@/features/companies/api"
 import { ActivityFeedSheet } from "@/features/dashboard/ActivityFeedSheet"
 import { NewTaskSheet } from "@/features/tasks/NewTaskSheet"
-import type { AuthenticatedUser } from "@/lib/auth"
+import { can, type AuthenticatedUser } from "@/lib/auth"
 import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
 import { shortcutKey, type ShortcutHelpItem } from "@/lib/shortcuts"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
@@ -69,7 +69,7 @@ const listTargetOf = (key: ColumnKey): PipelineListTarget =>
  * página rola na vertical em volta — nunca na horizontal.
  */
 export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
-  const canSeeOthers = user.role === "Admin" || user.role === "Closer"
+  const canSeeOthers = can(user, "TeamWideAccess")
   const view = useDealBoard(canSeeOthers, user.userId)
   const users = useAsyncResource((signal) => listUsers(signal), [])
   const filterOptions = useAsyncResource((signal) => listCompanyFilterOptions(signal), [])
@@ -435,7 +435,7 @@ export function PipelinePage({ user, onOpenCompany, newDealIntent }: Props) {
         <ActivityFeedSheet
           key={feedOpen ? "open" : "closed"}
           open={feedOpen}
-          role={user.role}
+          canSeeTeam={canSeeOthers}
           today={view.today}
           onOpenChange={setFeedOpen}
           onOpenDeal={openDeal}

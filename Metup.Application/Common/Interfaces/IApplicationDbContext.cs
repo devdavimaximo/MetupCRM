@@ -17,6 +17,8 @@ public interface IApplicationDbContext
 
     DbSet<User> Users { get; }
 
+    DbSet<Role> Roles { get; }
+
     DbSet<Company> Companies { get; }
 
     DbSet<Contact> Contacts { get; }

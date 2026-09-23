@@ -1,9 +1,24 @@
+/** Mesmos nomes do enum `Permission` do servidor. */
+export type Permission =
+  | "DashboardView"
+  | "TasksView"
+  | "InboxView"
+  | "PipelineView"
+  | "CompaniesView"
+  | "ReportsView"
+  | "TeamWideAccess"
+  | "UsersManage"
+  | "RolesManage"
+  | "SettingsManage"
+
 export type AuthenticatedUser = {
   userId: string
   organizationId: string
   name: string
   email: string
-  role: "Admin" | "Closer" | "Sdr"
+  roleId: string
+  roleName: string
+  permissions: Permission[]
 }
 
 export type Session = {
@@ -13,6 +28,11 @@ export type Session = {
 }
 
 const STORAGE_KEY = "metup.session"
+
+/** Só a interface: o servidor checa a permissão de novo em cada chamada. */
+export function can(user: AuthenticatedUser, permission: Permission) {
+  return user.permissions.includes(permission)
+}
 
 export function saveSession(session: Session) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
@@ -24,7 +44,8 @@ export function getSession(): Session | null {
 
   try {
     const session = JSON.parse(raw) as Session
-    if (new Date(session.expiresAtUtc).getTime() <= Date.now()) {
+    // Sessão salva antes dos cargos (sem permissões) não serve mais: pede login de novo.
+    if (new Date(session.expiresAtUtc).getTime() <= Date.now() || !Array.isArray(session.user?.permissions)) {
       clearSession()
       return null
     }

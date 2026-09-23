@@ -33,7 +33,7 @@ public class PipelineInsightsTests
 
         context.AddDeal(context.SdrUserId, Now.AddDays(-8), amount: 1_000m, path: [DealStage.Qualificacao]);
 
-        var insights = await context.Insights(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
+        var insights = await context.Insights(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
 
         var volume = Assert.IsType<PipelineVolumeInsightDto>(insights.Volume);
         // 4 nascimentos em Prospect + 3 entradas em Primeiro Contato + 1 em Qualificação = 8.
@@ -48,7 +48,7 @@ public class PipelineInsightsTests
         using var context = new PipelineTestContext();
         context.AddDeal(context.SdrUserId, Now.AddDays(-200), amount: 1_000m, path: [DealStage.Reuniao]);
 
-        var insights = await context.Insights(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
+        var insights = await context.Insights(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
 
         Assert.Null(insights.Volume);
         Assert.Null(insights.BestPassage);
@@ -77,7 +77,7 @@ public class PipelineInsightsTests
             context.AddDeal(context.SdrUserId, Now.AddDays(-11), amount: 1_000m);
         }
 
-        var insights = await context.Insights(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
+        var insights = await context.Insights(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
 
         var passage = Assert.IsType<PipelinePassageInsightDto>(insights.BestPassage);
         Assert.Equal((DealStage.Qualificacao, DealStage.Reuniao, 5, 4), (passage.FromStage, passage.ToStage, passage.Entered, passage.Advanced));
@@ -98,7 +98,7 @@ public class PipelineInsightsTests
         // No meio do funil, mas mexido agora: não é risco.
         context.AddDeal(context.SdrUserId, Now.AddDays(-2), amount: 5_000m, path: [DealStage.Reuniao]);
 
-        var insights = await context.Insights(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
+        var insights = await context.Insights(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
 
         Assert.Equal((1, 2_000m, stalledDays), (insights.Risk.Count, insights.Risk.Value, insights.Risk.StalledAfterDays));
     }
@@ -111,7 +111,7 @@ public class PipelineInsightsTests
         Assert.NotNull(outside);
         context.AddDeal(context.SdrUserId, Now.AddDays(-3), amount: 1_000m, path: [DealStage.PrimeiroContato]);
 
-        var insights = await context.Insights(context.SdrUserId, UserRole.Sdr).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
+        var insights = await context.Insights(context.SdrUserId, DefaultRole.Sdr).Handle(new GetPipelineInsightsQuery(AllOwners), Ct);
 
         Assert.Equal(context.SdrUserId, insights.OwnerUserId);
         Assert.Equal(new DateOnly(2026, 9, 15), insights.WindowEndLocal);
@@ -131,17 +131,17 @@ public class PipelineInsightsTests
         context.AddDeal(context.SdrUserId, Now.AddDays(-2), amount: 5_000m, path: [DealStage.Qualificacao]);
 
         var stalled = AllOwners with { StalledOnly = true };
-        var board = await context.Board(context.AdminUserId, UserRole.Admin).Handle(new GetDealBoardQuery(stalled), Ct);
+        var board = await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(new GetDealBoardQuery(stalled), Ct);
         var qualification = board.Columns.Single(c => c.Stage == DealStage.Qualificacao);
 
         Assert.Equal((1, 2_000m), (qualification.Count, qualification.Total));
         Assert.True(qualification.Items.Single().IsStalled);
 
-        var column = await context.Column(context.AdminUserId, UserRole.Admin)
+        var column = await context.Column(context.AdminUserId, DefaultRole.Admin)
             .Handle(new GetDealBoardColumnQuery(stalled, DealStage.Qualificacao), Ct);
         Assert.Equal(1, column.Count);
 
-        var all = await context.Board(context.AdminUserId, UserRole.Admin).Handle(new GetDealBoardQuery(AllOwners), Ct);
+        var all = await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(new GetDealBoardQuery(AllOwners), Ct);
         Assert.Equal(2, all.Columns.Single(c => c.Stage == DealStage.Qualificacao).Count);
     }
 }

@@ -13,7 +13,7 @@ public class UpdateOrganizationSettingsCommandHandler(
 {
     public async Task<OrganizationSettingsDto> Handle(UpdateOrganizationSettingsCommand request, CancellationToken cancellationToken)
     {
-        currentUserService.RequireRole(UserRole.Admin);
+        currentUserService.RequirePermission(Permission.SettingsManage);
         var organizationId = currentUserService.RequireOrganizationId();
 
         var organization = await context.Organizations

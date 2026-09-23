@@ -76,7 +76,7 @@ public class DealStageAndCloseTests
 
         // O cartão (?view=card) já mostra a etapa nova e o tempo zerado.
         var card = await new GetDealBoardCardQueryHandler(
-                context.As(context.AdminUserId, UserRole.Admin), context.Clock, context.Db, context.Reader())
+                context.As(context.AdminUserId, DefaultRole.Admin), context.Clock, context.Db, context.Reader())
             .Handle(new GetDealBoardCardQuery(deal.Id), Ct);
         Assert.Equal((DealStage.Proposta, Now, 0, false), (card.Stage, card.StageEnteredAt, card.DaysInStage, card.IsStalled));
     }
@@ -100,7 +100,7 @@ public class DealStageAndCloseTests
         using var context = new PipelineTestContext();
         var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
         var handler = new CloseDealCommandHandler(
-            context.Db, context.As(context.SdrUserId, UserRole.Sdr), context.Clock, new RecordingPublisher());
+            context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), context.Clock, new RecordingPublisher());
 
         var closed = await handler.Handle(new CloseDealCommand(deal.Id, false, null, LostReason.Preco, "  Achou caro  "), Ct);
 
@@ -149,5 +149,5 @@ public class DealStageAndCloseTests
     }
 
     private static ChangeDealStageCommandHandler Handler(PipelineTestContext context, RecordingPublisher publisher) =>
-        new(context.Db, context.As(context.AdminUserId, UserRole.Admin), context.Clock, publisher);
+        new(context.Db, context.As(context.AdminUserId, DefaultRole.Admin), context.Clock, publisher);
 }

@@ -22,7 +22,7 @@ public class ListTasksTests
     private static DateTime Utc(int day, int hour, int minute = 0) => new(2026, 9, day, hour, minute, 0, DateTimeKind.Utc);
 
     private static async Task<List<Guid>> Ids(TasksTestContext context, ListTasksQuery query, FakeOrganizationClock? clock = null) =>
-        (await context.List(context.SdrUserId, UserRole.Sdr, clock ?? SaoPauloClock).Handle(query, Ct))
+        (await context.List(context.SdrUserId, DefaultRole.Sdr, clock ?? SaoPauloClock).Handle(query, Ct))
             .Items.Select(t => t.Id).ToList();
 
     [Fact]
@@ -87,15 +87,15 @@ public class ListTasksTests
         context.AddTask(Utc(20, 15), ownerUserId: context.AdminUserId);
         context.AddTask(Utc(20, 15), ownerUserId: context.AdminUserId, organizationId: Guid.NewGuid());
 
-        var sdr = context.List(context.SdrUserId, UserRole.Sdr, SaoPauloClock);
+        var sdr = context.List(context.SdrUserId, DefaultRole.Sdr, SaoPauloClock);
         await Assert.ThrowsAsync<ForbiddenAccessException>(() => sdr.Handle(new ListTasksQuery(AllOwners: true), Ct));
         await Assert.ThrowsAsync<ForbiddenAccessException>(() => sdr.Handle(new ListTasksQuery(OwnerUserId: context.AdminUserId), Ct));
         Assert.Equal(1, (await sdr.Handle(new ListTasksQuery(OwnerUserId: context.SdrUserId), Ct)).TotalCount);
 
-        var admin = await context.List(context.AdminUserId, UserRole.Admin, SaoPauloClock).Handle(new ListTasksQuery(AllOwners: true), Ct);
+        var admin = await context.List(context.AdminUserId, DefaultRole.Admin, SaoPauloClock).Handle(new ListTasksQuery(AllOwners: true), Ct);
         Assert.Equal(2, admin.TotalCount);
 
-        var closer = await context.List(context.CloserUserId, UserRole.Closer, SaoPauloClock)
+        var closer = await context.List(context.CloserUserId, DefaultRole.Closer, SaoPauloClock)
             .Handle(new ListTasksQuery(OwnerUserId: context.SdrUserId, Scope: TaskScope.All), Ct);
         Assert.Equal(context.SdrUserId, Assert.Single(closer.Items).OwnerUserId);
     }
@@ -152,7 +152,7 @@ public class ListTasksTests
         using var context = new TasksTestContext(NowUtc);
         context.AddTask(Utc(20, 15));
 
-        var task = Assert.Single((await context.List(context.SdrUserId, UserRole.Sdr, SaoPauloClock).Handle(new ListTasksQuery(), Ct)).Items);
+        var task = Assert.Single((await context.List(context.SdrUserId, DefaultRole.Sdr, SaoPauloClock).Handle(new ListTasksQuery(), Ct)).Items);
 
         Assert.Equal(DealStage.Proposta, task.DealStage);
         Assert.Equal(12_000m, task.DealAmount);

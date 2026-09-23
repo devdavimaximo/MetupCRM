@@ -74,7 +74,7 @@ public class ConversationTagTests
         await Handler(context).Handle(new ApplyConversationTagCommand(conversation.Id, "Orçamento"), TestContext.Current.CancellationToken);
         var tagOptionId = (await context.Db.ConversationTagOptions.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Id;
 
-        await new RemoveConversationTagCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        await new RemoveConversationTagCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new RemoveConversationTagCommand(conversation.Id, tagOptionId), TestContext.Current.CancellationToken);
 
         Assert.Equal(0, await context.Db.ConversationTags.CountAsync(TestContext.Current.CancellationToken));
@@ -82,5 +82,5 @@ public class ConversationTagTests
     }
 
     private static ApplyConversationTagCommandHandler Handler(ConversationsTestContext context) =>
-        new(context.Db, context.As(context.SdrUserId, UserRole.Sdr));
+        new(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr));
 }

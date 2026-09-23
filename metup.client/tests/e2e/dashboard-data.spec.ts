@@ -84,7 +84,7 @@ test.describe("recortes de dados que quebram conta", () => {
       const raw = window.localStorage.getItem("metup.session")
       if (!raw) return
       const session = JSON.parse(raw)
-      session.user.role = "Sdr"
+      session.user.permissions = session.user.permissions.filter((p: string) => p !== "TeamWideAccess")
       window.localStorage.setItem("metup.session", JSON.stringify(session))
     })
     await gotoDashboard(page)

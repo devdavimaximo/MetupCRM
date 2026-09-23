@@ -6,7 +6,6 @@ import { Alert, Skeleton } from "@/components/ui/states"
 import { Hint, TooltipProvider } from "@/components/ui/tooltip"
 import { toMessage } from "@/features/companies/form-errors"
 import type { DealStage } from "@/features/deals/api"
-import type { AuthenticatedUser } from "@/lib/auth"
 import type { TaskItem } from "@/features/tasks/api"
 import { numberFormatter } from "@/lib/format"
 import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
@@ -48,18 +47,14 @@ import { NextTasksSection, RecentActivitySection, SideColumn } from "./dashboard
 
 type Props = {
   userName: string
-  role: AuthenticatedUser["role"]
+  /** Enxerga a equipe inteira (permissão de acesso à equipe) — o servidor decide de novo, isto é só a UI. */
+  canSeeTeam: boolean
   initialScope: string
   onOpenDeal: (dealId: string) => void
   onOpenCompany: (companyId: string) => void
   onLogActivity: (dealId: string) => void
   onOpenPipelineAtStage: (stage: DealStage) => void
   onNavigate: (view: View) => void
-}
-
-/** Só Admin e Closer alcançam a organização inteira — o servidor decide de novo, isto é só a UI. */
-function canSwitchScope(role: AuthenticatedUser["role"]) {
-  return role === "Admin" || role === "Closer"
 }
 
 const scopeLabels: Record<DealScope, string> = { Organization: "Organização", Mine: "Sua carteira" }
@@ -90,7 +85,7 @@ function runningSum(values: number[]) {
  */
 export function DashboardPage({
   userName,
-  role,
+  canSeeTeam,
   initialScope,
   onOpenDeal,
   onOpenCompany,
@@ -105,7 +100,7 @@ export function DashboardPage({
   // "Hoje" da organização: começa no do navegador e é corrigido pelo servidor na primeira resposta.
   const [orgToday, setOrgToday] = useState<LocalDate>(todayLocal)
   const [scope, setScope] = useState<DealScope>(() =>
-    !canSwitchScope(role) || initialScope === "minha" ? "Mine" : "Organization"
+    !canSeeTeam || initialScope === "minha" ? "Mine" : "Organization"
   )
 
   // O "Ver todas" da atividade fica na URL (?feed=1): recarregar ou compartilhar o link reabre o sheet.
@@ -254,7 +249,7 @@ export function DashboardPage({
                 Visão geral
               </span>
               <span aria-hidden="true">·</span>
-              <ScopeIndicator scope={overview?.scope ?? scope} canSwitch={canSwitchScope(role)} onChange={changeScope} />
+              <ScopeIndicator scope={overview?.scope ?? scope} canSwitch={canSeeTeam} onChange={changeScope} />
               <RealtimeIndicator />
             </nav>
             <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] text-fg min-[1700px]:text-4xl">
@@ -351,7 +346,7 @@ export function DashboardPage({
       <ActivityFeedSheet
         key={feedSession}
         open={feedOpen}
-        role={role}
+        canSeeTeam={canSeeTeam}
         today={orgToday}
         onOpenChange={setFeedOpen}
         returnFocusRef={feedTriggerRef}
@@ -562,7 +557,6 @@ type GridProps = {
   onOpenStage: (stage: DealStage) => void
   onNavigate: (view: View) => void
 }
-
 function MainGrid({ overview, period, stale, onOpenDeal, onOpenCompany, onLogActivity, onOpenStage, onNavigate }: GridProps) {
   const model = useOverviewModel(overview, period)
 

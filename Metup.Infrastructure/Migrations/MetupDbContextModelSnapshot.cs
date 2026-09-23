@@ -877,6 +877,49 @@ namespace Metup.Infrastructure.Migrations
                     b.ToTable("task_reschedules", (string)null);
                 });
 
+            modelBuilder.Entity("Metup.Domain.Users.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsAdministrator")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_administrator");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.PrimitiveCollection<string[]>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("permissions");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("roles", (string)null);
+                });
+
             modelBuilder.Entity("Metup.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -884,11 +927,21 @@ namespace Metup.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)")
                         .HasColumnName("email");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -905,11 +958,9 @@ namespace Metup.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("role");
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id");
 
                     b.HasKey("Id");
 
@@ -917,6 +968,8 @@ namespace Metup.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("OrganizationId");
+
+                    b.HasIndex("RoleId");
 
                     b.ToTable("users", (string)null);
                 });
@@ -1211,11 +1264,26 @@ namespace Metup.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Metup.Domain.Users.Role", b =>
+                {
+                    b.HasOne("Metup.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Metup.Domain.Users.User", b =>
                 {
                     b.HasOne("Metup.Domain.Organizations.Organization", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Metup.Domain.Users.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

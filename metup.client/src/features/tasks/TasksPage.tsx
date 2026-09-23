@@ -12,7 +12,7 @@ import { Panel } from "@/components/metrics/panel"
 import { countDelta } from "@/features/dashboard/dashboard-format"
 import { DealDrawer, type DealDrawerTarget } from "@/features/deals/DealDrawer"
 import { listUsers } from "@/features/deals/api"
-import type { AuthenticatedUser } from "@/lib/auth"
+import { can, type AuthenticatedUser } from "@/lib/auth"
 import { useAsyncResource, useMediaQuery } from "@/lib/hooks"
 import { addDays, todayLocal } from "@/lib/local-date"
 import { numberFormatter } from "@/lib/format"
@@ -72,7 +72,7 @@ const EMPTY_SELECTION: ReadonlySet<string> = new Set()
  * contra a semana anterior, filtros, ordenação e paginação — e as ações na própria linha.
  */
 export function TasksPage({ user, onOpenCompany }: Props) {
-  const canSeeOthers = user.role === "Admin" || user.role === "Closer"
+  const canSeeOthers = can(user, "TeamWideAccess")
   const view = useTasksView(canSeeOthers)
   const isDesktop = useMediaQuery("(min-width: 768px)")
 

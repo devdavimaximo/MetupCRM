@@ -119,12 +119,17 @@ static async Task SeedAsync(string connectionString)
         await db.Contacts.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
         await db.Companies.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
         await db.Users.Where(u => u.OrganizationId == id).ExecuteDeleteAsync();
+        await db.Roles.Where(r => r.OrganizationId == id).ExecuteDeleteAsync();
         await db.Organizations.Where(o => o.Id == id).ExecuteDeleteAsync();
     }
 
     var rng = new Random(20260916);
     var org = new Organization { Name = OrgName };
     db.Organizations.Add(org);
+    var roles = Role.CreateDefaults(org.Id);
+    var adminRole = roles.Single(r => r.IsAdministrator);
+    var sdrRole = roles.Single(r => r.Name == "SDR");
+    db.Roles.AddRange(roles);
 
     // O primeiro é Admin (enxerga a organização); o resto é SDR, para medir também o escopo "Mine".
     var users = Enumerable.Range(0, Owners)
@@ -134,7 +139,7 @@ static async Task SeedAsync(string connectionString)
             Name = $"Operador {i:00}",
             Email = $"perf{i:00}@exemplo.invalido",
             PasswordHash = "x",
-            Role = i == 0 ? UserRole.Admin : UserRole.Sdr,
+            RoleId = i == 0 ? adminRole.Id : sdrRole.Id,
         })
         .ToList();
     db.Users.AddRange(users);
@@ -269,8 +274,8 @@ static async Task MeasureAsync(string connectionString)
     var org = await probe.Organizations.FirstOrDefaultAsync(o => o.Name == OrgName)
         ?? throw new InvalidOperationException($"Massa não encontrada. Rode 'dotnet run -- seed' antes.");
 
-    var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Role == UserRole.Admin);
-    var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Role == UserRole.Sdr);
+    var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf00@exemplo.invalido");
+    var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf01@exemplo.invalido");
 
     Console.WriteLine($"Massa: {await probe.Deals.CountAsync(d => d.OrganizationId == org.Id):N0} negócios · "
         + $"{await probe.Activities.CountAsync(a => a.OrganizationId == org.Id):N0} atividades · "
@@ -281,10 +286,10 @@ static async Task MeasureAsync(string connectionString)
 
     foreach (var (name, days, user, role, scope) in new[]
     {
-        ("overview days=30 · organização", 30, admin, UserRole.Admin, DealScope.Organization),
-        ("overview days=180 · organização", 180, admin, UserRole.Admin, DealScope.Organization),
-        ("overview days=30 · carteira (SDR)", 30, sdr, UserRole.Sdr, DealScope.Mine),
-        ("overview days=180 · carteira (SDR)", 180, sdr, UserRole.Sdr, DealScope.Mine),
+        ("overview days=30 · organização", 30, admin, DefaultRole.Admin, DealScope.Organization),
+        ("overview days=180 · organização", 180, admin, DefaultRole.Admin, DealScope.Organization),
+        ("overview days=30 · carteira (SDR)", 30, sdr, DefaultRole.Sdr, DealScope.Mine),
+        ("overview days=180 · carteira (SDR)", 180, sdr, DefaultRole.Sdr, DealScope.Mine),
     })
     {
         var samples = new List<double>();
@@ -295,7 +300,7 @@ static async Task MeasureAsync(string connectionString)
         {
             // Contexto novo por rodada: sem cache de primeiro nível, como numa requisição de verdade.
             await using var db = OpenContext(connectionString);
-            var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
+            var currentUser = new BenchUser(user.Id, org.Id, role);
             // Provider sem cache: a medição tem que mostrar o custo do cálculo, não o de um acerto
             // de cache. O ganho do cache é a diferença entre este número e o do cenário "cache quente".
             // Um relógio só, como o escopo de DI da requisição: o fuso é lido uma vez.
@@ -318,8 +323,8 @@ static async Task MeasureAsync(string connectionString)
     // o ganho do item 22. O cache é compartilhado entre as rodadas; o contexto continua novo.
     foreach (var (name, days, user, role, scope) in new[]
     {
-        ("overview days=30 · org · cache quente", 30, admin, UserRole.Admin, DealScope.Organization),
-        ("overview days=180 · org · cache quente", 180, admin, UserRole.Admin, DealScope.Organization),
+        ("overview days=30 · org · cache quente", 30, admin, DefaultRole.Admin, DealScope.Organization),
+        ("overview days=180 · org · cache quente", 180, admin, DefaultRole.Admin, DealScope.Organization),
     })
     {
         var samples = new List<double>();
@@ -328,7 +333,7 @@ static async Task MeasureAsync(string connectionString)
         for (var run = 0; run < 33; run++)
         {
             await using var db = OpenContext(connectionString);
-            var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
+            var currentUser = new BenchUser(user.Id, org.Id, role);
             var analytics = new CachedStageAnalyticsProvider(new StageAnalyticsProvider(db), cache);
             var clock = new OrganizationClock(db, currentUser);
             var handler = new GetDashboardOverviewQueryHandler(
@@ -348,15 +353,15 @@ static async Task MeasureAsync(string connectionString)
     // O feed ("Ver todas") é a outra consulta que o item 22 manda medir.
     foreach (var (name, user, role) in new[]
     {
-        ("feed primeira página · organização", admin, UserRole.Admin),
-        ("feed primeira página · carteira (SDR)", sdr, UserRole.Sdr),
+        ("feed primeira página · organização", admin, DefaultRole.Admin),
+        ("feed primeira página · carteira (SDR)", sdr, DefaultRole.Sdr),
     })
     {
         var samples = new List<double>();
         for (var run = 0; run < 33; run++)
         {
             await using var db = OpenContext(connectionString);
-            var currentUser = new BenchUser(user.Id, org.Id, role.ToString());
+            var currentUser = new BenchUser(user.Id, org.Id, role);
             var reader = new ActivityFeedReader(db, new OrganizationClock(db, currentUser));
 
             var stopwatch = Stopwatch.StartNew();
@@ -471,8 +476,8 @@ static async Task MeasurePipelineAsync(string connectionString)
     await using var probe = OpenContext(connectionString);
     var org = await probe.Organizations.FirstOrDefaultAsync(o => o.Name == OrgName)
         ?? throw new InvalidOperationException("Massa não encontrada. Rode 'dotnet run -- seed' antes.");
-    var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Role == UserRole.Admin);
-    var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Role == UserRole.Sdr);
+    var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf00@exemplo.invalido");
+    var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf01@exemplo.invalido");
 
     Console.WriteLine($"Massa: {await probe.Deals.CountAsync(d => d.OrganizationId == org.Id):N0} negócios");
     Console.WriteLine();
@@ -481,18 +486,18 @@ static async Task MeasurePipelineAsync(string connectionString)
 
     var all = new DealPipelineFilter(AllOwners: true);
     var mine = new DealPipelineFilter();
-    var scenarios = new (string Name, Guid UserId, UserRole Role, Func<MetupDbContext, ICurrentUserService, Task> Run)[]
+    var scenarios = new (string Name, Guid UserId, DefaultRole Role, Func<MetupDbContext, ICurrentUserService, Task> Run)[]
     {
-        ("board · organização", admin.Id, UserRole.Admin, (db, user) => Board(db, user, all)),
-        ("board · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Board(db, user, mine)),
-        ("pipeline-summary 30 d · organização", admin.Id, UserRole.Admin, (db, user) => Summary(db, user, all, 30)),
-        ("pipeline-summary 90 d · organização", admin.Id, UserRole.Admin, (db, user) => Summary(db, user, all, 90)),
-        ("pipeline-summary 30 d · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Summary(db, user, mine, 30)),
-        ("pipeline-insights · organização", admin.Id, UserRole.Admin, (db, user) => Insights(db, user, all)),
-        ("pipeline-insights · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Insights(db, user, mine)),
-        ("pipeline-evolution 6 m · organização", admin.Id, UserRole.Admin, (db, user) => Evolution(db, user, all, 6)),
-        ("pipeline-evolution 12 m · organização", admin.Id, UserRole.Admin, (db, user) => Evolution(db, user, all, 12)),
-        ("pipeline-evolution 6 m · carteira (SDR)", sdr.Id, UserRole.Sdr, (db, user) => Evolution(db, user, mine, 6)),
+        ("board · organização", admin.Id, DefaultRole.Admin, (db, user) => Board(db, user, all)),
+        ("board · carteira (SDR)", sdr.Id, DefaultRole.Sdr, (db, user) => Board(db, user, mine)),
+        ("pipeline-summary 30 d · organização", admin.Id, DefaultRole.Admin, (db, user) => Summary(db, user, all, 30)),
+        ("pipeline-summary 90 d · organização", admin.Id, DefaultRole.Admin, (db, user) => Summary(db, user, all, 90)),
+        ("pipeline-summary 30 d · carteira (SDR)", sdr.Id, DefaultRole.Sdr, (db, user) => Summary(db, user, mine, 30)),
+        ("pipeline-insights · organização", admin.Id, DefaultRole.Admin, (db, user) => Insights(db, user, all)),
+        ("pipeline-insights · carteira (SDR)", sdr.Id, DefaultRole.Sdr, (db, user) => Insights(db, user, mine)),
+        ("pipeline-evolution 6 m · organização", admin.Id, DefaultRole.Admin, (db, user) => Evolution(db, user, all, 6)),
+        ("pipeline-evolution 12 m · organização", admin.Id, DefaultRole.Admin, (db, user) => Evolution(db, user, all, 12)),
+        ("pipeline-evolution 6 m · carteira (SDR)", sdr.Id, DefaultRole.Sdr, (db, user) => Evolution(db, user, mine, 6)),
     };
 
     foreach (var (name, userId, role, run) in scenarios)
@@ -502,7 +507,7 @@ static async Task MeasurePipelineAsync(string connectionString)
         for (var i = 0; i < 23; i++)
         {
             await using var db = OpenContext(connectionString);
-            var user = new BenchUser(userId, org.Id, role.ToString());
+            var user = new BenchUser(userId, org.Id, role);
             var stopwatch = Stopwatch.StartNew();
             await run(db, user);
             stopwatch.Stop();
@@ -538,4 +543,7 @@ static async Task MeasurePipelineAsync(string connectionString)
 static double Percentile(List<double> sorted, double percentile) =>
     sorted[Math.Clamp((int)Math.Ceiling(percentile * sorted.Count) - 1, 0, sorted.Count - 1)];
 
-internal sealed record BenchUser(Guid? UserId, Guid? OrganizationId, string? Role) : ICurrentUserService;
+internal sealed record BenchUser(Guid? UserId, Guid? OrganizationId, DefaultRole Role) : ICurrentUserService
+{
+    public IReadOnlySet<Permission> Permissions { get; } = new HashSet<Permission>(DefaultPermissions.For(Role));
+}

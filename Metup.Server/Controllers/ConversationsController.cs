@@ -18,6 +18,8 @@ using Metup.Domain.Conversations;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Metup.Domain.Users;
+using Metup.Server.Security;
 
 namespace Metup.Server.Controllers;
 
@@ -28,6 +30,7 @@ namespace Metup.Server.Controllers;
 /// </remarks>
 [ApiController]
 [Authorize]
+[RequirePermission(Permission.InboxView)]
 [Route("api/conversations")]
 public class ConversationsController(ISender sender) : ControllerBase
 {

@@ -33,7 +33,20 @@ export const session: Session = {
     organizationId: "22222222-2222-2222-2222-222222222222",
     name: "Davi Maximo",
     email: "davi@exemplo.test",
-    role: "Admin",
+    roleId: "33333333-3333-3333-3333-333333333333",
+    roleName: "Administrador",
+    permissions: [
+      "DashboardView",
+      "TasksView",
+      "InboxView",
+      "PipelineView",
+      "CompaniesView",
+      "ReportsView",
+      "TeamWideAccess",
+      "UsersManage",
+      "RolesManage",
+      "SettingsManage",
+    ],
   },
 }
 
@@ -305,8 +318,8 @@ export const searchResult: SearchResult = {
 }
 
 export const users: UserSummary[] = [
-  { id: "u-1", name: "Davi Maximo", role: "Admin" },
-  { id: "u-2", name: "Ana Prado", role: "Sdr" },
+  { id: "u-1", name: "Davi Maximo" },
+  { id: "u-2", name: "Ana Prado" },
 ]
 
 /** Lista paginada do Pipeline — o bastante para a tela abrir depois de clicar numa etapa. */

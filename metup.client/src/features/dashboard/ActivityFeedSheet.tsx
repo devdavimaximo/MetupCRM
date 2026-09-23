@@ -7,7 +7,6 @@ import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTit
 import { Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
 import { listUsers, type UserSummary } from "@/features/deals/api"
-import type { AuthenticatedUser } from "@/lib/auth"
 import { useAsyncResource } from "@/lib/hooks"
 import type { LocalDate } from "@/lib/local-date"
 import { cn } from "@/lib/utils"
@@ -47,14 +46,14 @@ type MoreState = { key: string; loading: boolean; error: string | null }
  */
 export function ActivityFeedSheet({
   open,
-  role,
+  canSeeTeam,
   today,
   onOpenChange,
   onOpenDeal,
   returnFocusRef,
 }: {
   open: boolean
-  role: AuthenticatedUser["role"]
+  canSeeTeam: boolean
   /** "Hoje" da organização, para os rótulos "Hoje"/"Ontem" dos grupos. */
   today: LocalDate
   onOpenChange: (open: boolean) => void
@@ -62,7 +61,7 @@ export function ActivityFeedSheet({
   /** Para onde o foco volta ao fechar (o sheet é controlado e remontado, sem gatilho do Radix). */
   returnFocusRef?: RefObject<HTMLElement | null>
 }) {
-  const canFilterOwner = role === "Admin" || role === "Closer"
+  const canFilterOwner = canSeeTeam
   const [kinds, setKinds] = useState<ActivityFeedFilter[]>([])
   const [ownerUserId, setOwnerUserId] = useState("")
   const [users, setUsers] = useState<UserSummary[]>([])

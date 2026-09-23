@@ -10,13 +10,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Metup.Application.Tests.Dashboard;
 
 /// <summary>Usuário autenticado de mentira — só as três informações que o escopo consulta.</summary>
-public sealed class FakeCurrentUserService(Guid organizationId, Guid userId, UserRole role) : ICurrentUserService
+public sealed class FakeCurrentUserService(Guid organizationId, Guid userId, DefaultRole role) : ICurrentUserService
 {
     public Guid? UserId => userId;
 
     public Guid? OrganizationId => organizationId;
 
-    public string? Role => role.ToString();
+    public IReadOnlySet<Permission> Permissions { get; } = new HashSet<Permission>(DefaultPermissions.For(role));
 }
 
 /// <summary>Publisher do MediatR que só guarda o que foi publicado, na ordem.</summary>
@@ -74,8 +74,8 @@ public sealed class DashboardOverviewTestContext : IDisposable
 
         Db.Organizations.Add(new Organization { Id = OrganizationId, Name = "Acme" });
         Db.Companies.Add(new Company { Id = CompanyId, OrganizationId = OrganizationId, Name = "Empresa Alfa" });
-        Db.Users.Add(NewUser(AdminUserId, "Ana Admin", "ana@acme.com", UserRole.Admin));
-        Db.Users.Add(NewUser(SdrUserId, "Sofia SDR", "sofia@acme.com", UserRole.Sdr));
+        Db.Users.Add(NewUser(AdminUserId, "Ana Admin", "ana@acme.com", DefaultRole.Admin));
+        Db.Users.Add(NewUser(SdrUserId, "Sofia SDR", "sofia@acme.com", DefaultRole.Sdr));
         Db.SaveChanges();
     }
 
@@ -141,18 +141,17 @@ public sealed class DashboardOverviewTestContext : IDisposable
         return deal;
     }
 
-    public FakeCurrentUserService As(Guid userId, UserRole role) => new(OrganizationId, userId, role);
+    public FakeCurrentUserService As(Guid userId, DefaultRole role) => new(OrganizationId, userId, role);
 
     public void Dispose() => Db.Dispose();
 
-    private User NewUser(Guid id, string name, string email, UserRole role) => new()
+    private User NewUser(Guid id, string name, string email, DefaultRole role) => new()
     {
         Id = id,
         OrganizationId = OrganizationId,
         Name = name,
         Email = email,
         PasswordHash = "x",
-        Role = role,
     };
 
     private static TimeZoneInfo ResolveSaoPaulo()

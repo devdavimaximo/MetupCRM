@@ -16,7 +16,7 @@ public class DashboardSummaryTests
     /// <summary>15/09/2026, 14h em São Paulo.</summary>
     private static readonly DateTime NowUtc = new(2026, 9, 15, 17, 0, 0, DateTimeKind.Utc);
 
-    private static Task<DashboardSummaryDto> RunAsync(DashboardOverviewTestContext context, Guid userId, UserRole role, DateTime? nowUtc = null) =>
+    private static Task<DashboardSummaryDto> RunAsync(DashboardOverviewTestContext context, Guid userId, DefaultRole role, DateTime? nowUtc = null) =>
         new GetDashboardSummaryQueryHandler(
                 context.Db,
                 context.As(userId, role),
@@ -48,7 +48,7 @@ public class DashboardSummaryTests
             AddTask(context, deal.Id, context.AdminUserId, NowUtc.AddHours(hours));
         }
 
-        var summary = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var summary = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(5, summary.NextTasks.Count);
         Assert.Equal(summary.NextTasks.OrderBy(t => t.DueDate).Select(t => t.Id), summary.NextTasks.Select(t => t.Id));
@@ -70,7 +70,7 @@ public class DashboardSummaryTests
         done.Complete(NowUtc);
         context.Db.SaveChanges();
 
-        var summary = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var summary = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         var only = Assert.Single(summary.NextTasks);
         Assert.Equal(NowUtc.AddHours(1), only.DueDate);
@@ -88,7 +88,7 @@ public class DashboardSummaryTests
         AddTask(context, deal.Id, context.AdminUserId, NowUtc.AddHours(3));    // hoje, mais tarde
         AddTask(context, deal.Id, context.AdminUserId, NowUtc.AddDays(2));     // depois
 
-        var summary = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var summary = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(new TaskCountsDto(Overdue: 2, Today: 1, Upcoming: 1), summary.TaskCounts);
     }
@@ -104,7 +104,7 @@ public class DashboardSummaryTests
         // 16/09 às 00h30 em São Paulo (= 03h30 UTC) já é o dia seguinte.
         AddTask(context, deal.Id, context.AdminUserId, new DateTime(2026, 9, 16, 3, 30, 0, DateTimeKind.Utc));
 
-        var summary = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var summary = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(new TaskCountsDto(Overdue: 0, Today: 1, Upcoming: 1), summary.TaskCounts);
     }
@@ -115,7 +115,7 @@ public class DashboardSummaryTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: 5_000m, ticket: null, NowUtc.AddDays(-3));
 
-        var summary = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var summary = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Empty(summary.NextTasks);
         Assert.Equal(new TaskCountsDto(0, 0, 0), summary.TaskCounts);
@@ -130,7 +130,7 @@ public class DashboardSummaryTests
         AddTask(context, deal.Id, context.SdrUserId, NowUtc.AddHours(1), ActivityType.WhatsApp);
         AddTask(context, deal.Id, context.AdminUserId, NowUtc.AddMinutes(10));
 
-        var summary = await RunAsync(context, context.SdrUserId, UserRole.Sdr);
+        var summary = await RunAsync(context, context.SdrUserId, DefaultRole.Sdr);
 
         var only = Assert.Single(summary.NextTasks);
         Assert.Equal(ActivityType.WhatsApp, only.Type);

@@ -49,12 +49,17 @@ if (previousOrg is not null)
     await db.Companies.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.IntegrationEvents.Where(e => e.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Users.Where(u => u.OrganizationId == orgId).ExecuteDeleteAsync();
+    await db.Roles.Where(r => r.OrganizationId == orgId).ExecuteDeleteAsync();
     await db.Organizations.Where(o => o.Id == orgId).ExecuteDeleteAsync();
 }
 
 Console.WriteLine("Criando organização e usuários...");
 
 var org = new Organization { Name = orgName };
+var defaultRoles = Role.CreateDefaults(org.Id);
+var adminRole = defaultRoles.Single(r => r.IsAdministrator);
+var closerRole = defaultRoles.Single(r => r.Name == "Closer");
+var sdrRole = defaultRoles.Single(r => r.Name == "SDR");
 
 var admin = new User
 {
@@ -62,7 +67,7 @@ var admin = new User
     Name = "Davi Maximo",
     Email = "admin@metup.com.br",
     PasswordHash = hasher.Hash(sharedPassword),
-    Role = UserRole.Admin,
+    RoleId = adminRole.Id,
 };
 var sdrAna = new User
 {
@@ -70,7 +75,7 @@ var sdrAna = new User
     Name = "Ana Souza",
     Email = "ana.sdr@metup.com.br",
     PasswordHash = hasher.Hash(sharedPassword),
-    Role = UserRole.Sdr,
+    RoleId = sdrRole.Id,
 };
 var sdrBruno = new User
 {
@@ -78,7 +83,7 @@ var sdrBruno = new User
     Name = "Bruno Lima",
     Email = "bruno.sdr@metup.com.br",
     PasswordHash = hasher.Hash(sharedPassword),
-    Role = UserRole.Sdr,
+    RoleId = sdrRole.Id,
 };
 var closerCarla = new User
 {
@@ -86,10 +91,11 @@ var closerCarla = new User
     Name = "Carla Ribeiro",
     Email = "carla.closer@metup.com.br",
     PasswordHash = hasher.Hash(sharedPassword),
-    Role = UserRole.Closer,
+    RoleId = closerRole.Id,
 };
 
 db.Organizations.Add(org);
+db.Roles.AddRange(defaultRoles);
 db.Users.AddRange(admin, sdrAna, sdrBruno, closerCarla);
 await db.SaveChangesAsync();
 
@@ -561,7 +567,7 @@ Console.WriteLine();
 Console.WriteLine("== Contas de login (todas com a mesma senha) ==");
 foreach (var user in users)
 {
-    Console.WriteLine($"  {user.Role,-6} | {user.Email} | senha: {sharedPassword}");
+    Console.WriteLine($"  {defaultRoles.Single(r => r.Id == user.RoleId).Name,-13} | {user.Email} | senha: {sharedPassword}");
 }
 Console.WriteLine();
 Console.WriteLine("Use a conta admin@metup.com.br para ver o sistema por inteiro (dashboard, pipeline, relatórios).");

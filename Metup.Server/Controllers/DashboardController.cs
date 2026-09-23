@@ -5,11 +5,14 @@ using Metup.Application.Dashboard.Queries.GetDashboardSummary;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Metup.Domain.Users;
+using Metup.Server.Security;
 
 namespace Metup.Server.Controllers;
 
 [ApiController]
 [Authorize]
+[RequirePermission(Permission.DashboardView)]
 [Route("api/dashboard")]
 public class DashboardController(ISender sender) : ControllerBase
 {

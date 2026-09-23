@@ -42,7 +42,7 @@ public class ExpectedCloseDateTests
             context.AdminUserId, amount: null, ticket: null, createdAtUtc: new DateTime(2026, 9, 15, 2, 30, 0, DateTimeKind.Utc));
         var handler = new UpdateDealCommandHandler(
             context.Db,
-            context.As(context.AdminUserId, UserRole.Admin),
+            context.As(context.AdminUserId, DefaultRole.Admin),
             new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, new DateTime(2026, 9, 15, 17, 0, 0, DateTimeKind.Utc)));
 
         var dto = await handler.Handle(

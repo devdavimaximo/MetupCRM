@@ -27,13 +27,13 @@ public class TaskActionsTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static BulkTaskCommandHandler Bulk(TasksTestContext context, Guid userId, UserRole role) =>
+    private static BulkTaskCommandHandler Bulk(TasksTestContext context, Guid userId, DefaultRole role) =>
         new(context.Db, context.Base.As(userId, role), Clock, new RecordingPublisher());
 
-    private static LogActivityCommandHandler Log(TasksTestContext context, Guid userId, UserRole role) =>
+    private static LogActivityCommandHandler Log(TasksTestContext context, Guid userId, DefaultRole role) =>
         new(context.Db, context.Base.As(userId, role), Clock, new RecordingPublisher());
 
-    private static ReassignTaskCommandHandler Reassign(TasksTestContext context, Guid userId, UserRole role) =>
+    private static ReassignTaskCommandHandler Reassign(TasksTestContext context, Guid userId, DefaultRole role) =>
         new(context.Db, context.Base.As(userId, role));
 
     [Fact]
@@ -42,7 +42,7 @@ public class TaskActionsTests
         using var context = new TasksTestContext(NowUtc);
         var adminTask = context.AddTask(NowUtc.AddDays(1), ownerUserId: context.AdminUserId);
         var foreign = context.AddTask(NowUtc.AddDays(1), organizationId: Guid.NewGuid());
-        var sdr = context.Base.As(context.SdrUserId, UserRole.Sdr);
+        var sdr = context.Base.As(context.SdrUserId, DefaultRole.Sdr);
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             new CompleteTaskCommandHandler(context.Db, sdr, Clock, new RecordingPublisher()).Handle(new CompleteTaskCommand(adminTask.Id), Ct));
@@ -62,7 +62,7 @@ public class TaskActionsTests
         using var context = new TasksTestContext(NowUtc);
         var toComplete = context.AddTask(NowUtc.AddDays(1));
         var toCancel = context.AddTask(NowUtc.AddDays(2));
-        var closer = context.Base.As(context.CloserUserId, UserRole.Closer);
+        var closer = context.Base.As(context.CloserUserId, DefaultRole.Closer);
 
         var completed = await new CompleteTaskCommandHandler(context.Db, closer, Clock, new RecordingPublisher())
             .Handle(new CompleteTaskCommand(toComplete.Id), Ct);
@@ -80,12 +80,12 @@ public class TaskActionsTests
         var task = context.AddTask(NowUtc.AddDays(1));
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
-            Reassign(context, context.SdrUserId, UserRole.Sdr).Handle(new ReassignTaskCommand(task.Id, context.AdminUserId), Ct));
+            Reassign(context, context.SdrUserId, DefaultRole.Sdr).Handle(new ReassignTaskCommand(task.Id, context.AdminUserId), Ct));
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            Reassign(context, context.AdminUserId, UserRole.Admin).Handle(new ReassignTaskCommand(task.Id, Guid.NewGuid()), Ct));
+            Reassign(context, context.AdminUserId, DefaultRole.Admin).Handle(new ReassignTaskCommand(task.Id, Guid.NewGuid()), Ct));
 
-        var same = await Reassign(context, context.AdminUserId, UserRole.Admin).Handle(new ReassignTaskCommand(task.Id, context.SdrUserId), Ct);
-        var moved = await Reassign(context, context.CloserUserId, UserRole.Closer).Handle(new ReassignTaskCommand(task.Id, context.CloserUserId), Ct);
+        var same = await Reassign(context, context.AdminUserId, DefaultRole.Admin).Handle(new ReassignTaskCommand(task.Id, context.SdrUserId), Ct);
+        var moved = await Reassign(context, context.CloserUserId, DefaultRole.Closer).Handle(new ReassignTaskCommand(task.Id, context.CloserUserId), Ct);
 
         Assert.Equal(context.SdrUserId, same.OwnerUserId);
         Assert.Equal(context.CloserUserId, moved.OwnerUserId);
@@ -134,7 +134,7 @@ public class TaskActionsTests
         var saves = 0;
         context.Db.SavedChanges += (_, _) => saves++;
 
-        var result = await Bulk(context, context.SdrUserId, UserRole.Sdr).Handle(
+        var result = await Bulk(context, context.SdrUserId, DefaultRole.Sdr).Handle(
             new BulkTaskCommand([mine.Id, done.Id, others.Id, foreign.Id, missing, alsoMine.Id], BulkTaskAction.Complete), Ct);
 
         Assert.Equal([mine.Id, alsoMine.Id], result.Succeeded.Select(t => t.Id));
@@ -154,8 +154,8 @@ public class TaskActionsTests
         var task = context.AddTask(NowUtc.AddDays(1));
         var command = new BulkTaskCommand([task.Id], BulkTaskAction.Complete);
 
-        await Bulk(context, context.SdrUserId, UserRole.Sdr).Handle(command, Ct);
-        var again = await Bulk(context, context.SdrUserId, UserRole.Sdr).Handle(command, Ct);
+        await Bulk(context, context.SdrUserId, DefaultRole.Sdr).Handle(command, Ct);
+        var again = await Bulk(context, context.SdrUserId, DefaultRole.Sdr).Handle(command, Ct);
 
         Assert.Empty(again.Succeeded);
         Assert.Equal(BulkTaskFailureReason.NotPending, Assert.Single(again.Failed).Reason);
@@ -169,7 +169,7 @@ public class TaskActionsTests
         var second = context.AddTask(NowUtc.AddDays(2), ownerUserId: context.AdminUserId);
         var newDue = NowUtc.AddDays(7);
 
-        var result = await Bulk(context, context.AdminUserId, UserRole.Admin)
+        var result = await Bulk(context, context.AdminUserId, DefaultRole.Admin)
             .Handle(new BulkTaskCommand([first.Id, second.Id], BulkTaskAction.Reschedule, DueDate: newDue), Ct);
 
         Assert.All(result.Succeeded, t => Assert.Equal(newDue, t.DueDate));
@@ -184,12 +184,12 @@ public class TaskActionsTests
         using var context = new TasksTestContext(NowUtc);
         var task = context.AddTask(NowUtc.AddDays(1));
 
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() => Bulk(context, context.SdrUserId, UserRole.Sdr)
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => Bulk(context, context.SdrUserId, DefaultRole.Sdr)
             .Handle(new BulkTaskCommand([task.Id], BulkTaskAction.Reassign, OwnerUserId: context.AdminUserId), Ct));
-        await Assert.ThrowsAsync<NotFoundException>(() => Bulk(context, context.AdminUserId, UserRole.Admin)
+        await Assert.ThrowsAsync<NotFoundException>(() => Bulk(context, context.AdminUserId, DefaultRole.Admin)
             .Handle(new BulkTaskCommand([task.Id], BulkTaskAction.Reassign, OwnerUserId: Guid.NewGuid()), Ct));
 
-        var result = await Bulk(context, context.AdminUserId, UserRole.Admin)
+        var result = await Bulk(context, context.AdminUserId, DefaultRole.Admin)
             .Handle(new BulkTaskCommand([task.Id], BulkTaskAction.Reassign, OwnerUserId: context.CloserUserId), Ct);
 
         Assert.Equal(context.CloserUserId, Assert.Single(result.Succeeded).OwnerUserId);
@@ -203,7 +203,7 @@ public class TaskActionsTests
         var saves = 0;
         context.Db.SavedChanges += (_, _) => saves++;
 
-        var result = await Log(context, context.SdrUserId, UserRole.Sdr).Handle(
+        var result = await Log(context, context.SdrUserId, DefaultRole.Sdr).Handle(
             new LogActivityCommand(context.Deal.Id, null, ActivityType.Call, ActivityOutcome.Atendeu, null, null,
                 ActivityType.Meeting, NowUtc.AddDays(2), null, CompletesTaskId: task.Id), Ct);
 
@@ -220,7 +220,7 @@ public class TaskActionsTests
         var otherDeal = context.Base.AddOpenDeal(context.SdrUserId, null, 5_000m, NowUtc.AddDays(-5));
         var otherDealTask = context.AddTask(NowUtc.AddDays(1), dealId: otherDeal.Id);
         var adminTask = context.AddTask(NowUtc.AddDays(1), ownerUserId: context.AdminUserId);
-        var sdr = Log(context, context.SdrUserId, UserRole.Sdr);
+        var sdr = Log(context, context.SdrUserId, DefaultRole.Sdr);
 
         LogActivityCommand Command(Guid taskId) =>
             new(context.Deal.Id, null, ActivityType.Note, null, "nota", null, null, null, null, CompletesTaskId: taskId);
@@ -238,7 +238,7 @@ public class TaskActionsTests
         using var context = new TasksTestContext(NowUtc);
         var task = context.AddTask(NowUtc.AddHours(-2));
 
-        await Log(context, context.SdrUserId, UserRole.Sdr).Handle(
+        await Log(context, context.SdrUserId, DefaultRole.Sdr).Handle(
             new LogActivityCommand(context.Deal.Id, null, ActivityType.Note, null, "nota", null, null, null, null), Ct);
 
         Assert.Equal(TaskItemStatus.Pendente, (await context.Db.Tasks.AsNoTracking().SingleAsync(t => t.Id == task.Id, Ct)).Status);

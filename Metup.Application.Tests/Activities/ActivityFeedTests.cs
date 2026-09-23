@@ -12,7 +12,7 @@ public class ActivityFeedTests
 {
     private static readonly DateTime BaseUtc = new(2026, 9, 15, 17, 0, 0, DateTimeKind.Utc);
 
-    private static ListActivityFeedQueryHandler Handler(DashboardOverviewTestContext context, Guid userId, UserRole role) =>
+    private static ListActivityFeedQueryHandler Handler(DashboardOverviewTestContext context, Guid userId, DefaultRole role) =>
         new(context.As(userId, role), new ActivityFeedReader(context.Db, new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, BaseUtc)));
 
     private static void AddActivity(DashboardOverviewTestContext context, Deal deal, Guid authorUserId, DateTime occurredAt, ActivityType type = ActivityType.Note)
@@ -67,7 +67,7 @@ public class ActivityFeedTests
 
         foreach (var pageSize in new[] { 1, 7, 20 })
         {
-            var all = await ReadAllAsync(Handler(context, context.AdminUserId, UserRole.Admin), pageSize);
+            var all = await ReadAllAsync(Handler(context, context.AdminUserId, DefaultRole.Admin), pageSize);
 
             Assert.Equal(expectedTotal, all.Count);
             Assert.Equal(all.Count, all.Select(e => e.Id).Distinct().Count());
@@ -85,7 +85,7 @@ public class ActivityFeedTests
             AddActivity(context, deal, context.AdminUserId, BaseUtc.AddMinutes(-i));
         }
 
-        var handler = Handler(context, context.AdminUserId, UserRole.Admin);
+        var handler = Handler(context, context.AdminUserId, DefaultRole.Admin);
         var first = await handler.Handle(new ListActivityFeedQuery(), TestContext.Current.CancellationToken);
         var second = await handler.Handle(new ListActivityFeedQuery(first.NextCursor), TestContext.Current.CancellationToken);
         var third = await handler.Handle(new ListActivityFeedQuery(second.NextCursor), TestContext.Current.CancellationToken);
@@ -107,7 +107,7 @@ public class ActivityFeedTests
         AddActivity(context, advanced, context.AdminUserId, BaseUtc.AddHours(-3), ActivityType.Call);
         AddActivity(context, advanced, context.AdminUserId, BaseUtc.AddHours(-2), ActivityType.Meeting);
 
-        var handler = Handler(context, context.AdminUserId, UserRole.Admin);
+        var handler = Handler(context, context.AdminUserId, DefaultRole.Admin);
 
         var wins = await ReadAllAsync(handler, 10, [ActivityFeedFilter.DealWon]);
         var item = Assert.Single(wins);
@@ -140,7 +140,7 @@ public class ActivityFeedTests
             AddActivity(context, others, context.SdrUserId, BaseUtc.AddMinutes(-i));
         }
 
-        var handler = Handler(context, context.SdrUserId, UserRole.Sdr);
+        var handler = Handler(context, context.SdrUserId, DefaultRole.Sdr);
 
         var feed = await ReadAllAsync(handler, 20);
         Assert.Equal(31, feed.Count);
@@ -161,7 +161,7 @@ public class ActivityFeedTests
 
         // O SDR só enxerga os próprios negócios em qualquer outro filtro, mas pedir um negócio
         // específico (painel de contexto das Conversas) alcança a organização inteira — item 20.
-        var handler = Handler(context, context.SdrUserId, UserRole.Sdr);
+        var handler = Handler(context, context.SdrUserId, DefaultRole.Sdr);
         var feed = await handler.Handle(new ListActivityFeedQuery(DealId: adminDeal.Id), TestContext.Current.CancellationToken);
 
         Assert.All(feed.Items, item => Assert.Equal(adminDeal.Id, item.DealId));
@@ -181,7 +181,7 @@ public class ActivityFeedTests
         context.AddOpenDeal(context.AdminUserId, amount: null, ticket: null, BaseUtc.AddDays(-3));
         AddActivity(context, sdrDeal, context.AdminUserId, BaseUtc);
 
-        var feed = await ReadAllAsync(Handler(context, context.AdminUserId, UserRole.Admin), 20, ownerUserId: context.SdrUserId);
+        var feed = await ReadAllAsync(Handler(context, context.AdminUserId, DefaultRole.Admin), 20, ownerUserId: context.SdrUserId);
 
         Assert.Equal(2, feed.Count);
         Assert.All(feed, e => Assert.Equal(sdrDeal.Id, e.DealId));
@@ -212,7 +212,7 @@ public class ActivityFeedTests
         AddActivity(context, deal, context.AdminUserId, lateNight);
         AddActivity(context, deal, context.AdminUserId, afterMidnight);
 
-        var feed = await ReadAllAsync(Handler(context, context.AdminUserId, UserRole.Admin), 20, [ActivityFeedFilter.Note]);
+        var feed = await ReadAllAsync(Handler(context, context.AdminUserId, DefaultRole.Admin), 20, [ActivityFeedFilter.Note]);
 
         Assert.Equal(new DateOnly(2026, 9, 14), feed.Single(e => e.OccurredAt == lateNight).OccurredOnLocal);
         Assert.Equal(new DateOnly(2026, 9, 15), feed.Single(e => e.OccurredAt == afterMidnight).OccurredOnLocal);

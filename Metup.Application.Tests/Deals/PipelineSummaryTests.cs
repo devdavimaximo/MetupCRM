@@ -31,9 +31,9 @@ public class PipelineSummaryTests
         context.AddDeal(context.CloserUserId, Now.AddDays(-20), amount: 9_000m, ticket: 1_000m, path: [DealStage.Proposta]);
         context.AddDeal(context.AdminUserId, Now.AddDays(-3), path: [DealStage.Reuniao]);
 
-        var dashboard = await context.Dashboard(context.AdminUserId, UserRole.Admin)
+        var dashboard = await context.Dashboard(context.AdminUserId, DefaultRole.Admin)
             .Handle(new GetDashboardOverviewQuery(30, DealScope.Organization), Ct);
-        var summary = await context.Summary(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
+        var summary = await context.Summary(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
 
         Assert.Equal(dashboard.Pipeline.Sum(p => p.Amount), summary.Kpis.PipelineTotal);
         Assert.Equal(dashboard.Pipeline.Sum(p => p.Count), summary.Kpis.OpenDeals);
@@ -57,7 +57,7 @@ public class PipelineSummaryTests
         var oldWon = context.AddDeal(context.AdminUserId, Now.AddDays(-90), amount: 3_000m);
         context.Close(oldWon, won: true, Now.AddDays(-1));
 
-        var summary = await context.Summary(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
+        var summary = await context.Summary(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
 
         Assert.Equal(0.25m, summary.Kpis.ConversionRate);
         Assert.Equal(new PipelineFunnelSummaryDto(4, 1, 0.25m), summary.FunnelSummary);
@@ -77,7 +77,7 @@ public class PipelineSummaryTests
         var lost = context.AddDeal(context.AdminUserId, Now.AddDays(-10), amount: 700m, path: [DealStage.Qualificacao]);
         context.Close(lost, won: false, Now.AddDays(-3));
 
-        var summary = await context.Summary(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
+        var summary = await context.Summary(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
 
         // Valor no fim da janela: ganho = valor fechado; aberto = valor efetivo; perdido = valor fechado.
         Assert.Equal(
@@ -99,7 +99,7 @@ public class PipelineSummaryTests
     {
         using var context = new PipelineTestContext();
         context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 1_000m);
-        var handler = context.Summary(context.AdminUserId, UserRole.Admin);
+        var handler = context.Summary(context.AdminUserId, DefaultRole.Admin);
 
         Assert.Null((await handler.Handle(new GetPipelineSummaryQuery(AllOwners), Ct)).Previous);
 
@@ -116,7 +116,7 @@ public class PipelineSummaryTests
         var deal = context.AddDeal(context.AdminUserId, Now.AddDays(-60), ticket: 1_000m);
         context.ChangeValue(deal, 5_000m, 1_000m, Now.AddDays(-10));
 
-        var summary = await context.Summary(context.AdminUserId, UserRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
+        var summary = await context.Summary(context.AdminUserId, DefaultRole.Admin).Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
 
         Assert.Equal(5_000m, summary.Kpis.PipelineTotal);
         Assert.Equal(1_000m, summary.Previous!.PipelineTotal);
@@ -133,7 +133,7 @@ public class PipelineSummaryTests
         context.Close(won, won: true, Now.AddDays(-4));
         context.AddDeal(context.AdminUserId, Now.AddDays(-12), ticket: 2_000m, path: [DealStage.Proposta]);
         context.AddDeal(context.AdminUserId, Now.AddDays(-50), amount: 600m);
-        var handler = context.Summary(context.AdminUserId, UserRole.Admin);
+        var handler = context.Summary(context.AdminUserId, DefaultRole.Admin);
 
         var month = await handler.Handle(new GetPipelineSummaryQuery(AllOwners), Ct);
         Assert.Equal("day", month.Sparklines.Granularity);

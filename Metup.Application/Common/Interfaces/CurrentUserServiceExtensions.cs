@@ -17,15 +17,39 @@ public static class CurrentUserServiceExtensions
     public static Guid RequireUserId(this ICurrentUserService currentUserService) =>
         currentUserService.UserId ?? throw new MissingUserContextException();
 
+    public static bool HasPermission(this ICurrentUserService currentUserService, Permission permission) =>
+        currentUserService.Permissions.Contains(permission);
+
     /// <summary>
-    /// Ponto único de checagem de papel nos casos de uso. O controller também restringe o papel; a
+    /// Ponto único de checagem de permissão nos casos de uso. O controller também restringe; a
     /// checagem aqui garante a regra mesmo se o caso de uso for chamado por outro caminho.
     /// </summary>
-    public static void RequireRole(this ICurrentUserService currentUserService, UserRole requiredRole)
+    public static void RequirePermission(this ICurrentUserService currentUserService, Permission permission)
     {
-        if (!Enum.TryParse<UserRole>(currentUserService.Role, out var role) || role != requiredRole)
+        if (!currentUserService.HasPermission(permission))
         {
             throw new ForbiddenAccessException("Você não tem permissão para esta ação.");
+        }
+    }
+
+    /// <summary>Exige ao menos uma das permissões (ex.: ler cargos serve a quem gerencia usuários ou cargos).</summary>
+    public static void RequireAnyPermission(this ICurrentUserService currentUserService, params Permission[] permissions)
+    {
+        if (!permissions.Any(currentUserService.HasPermission))
+        {
+            throw new ForbiddenAccessException("Você não tem permissão para esta ação.");
+        }
+    }
+
+    /// <summary>
+    /// Ninguém concede o que não tem: criar/editar cargo ou pôr alguém num cargo exige ter todas as
+    /// permissões dele. Impede que quem gerencia usuários se promova a administrador.
+    /// </summary>
+    public static void RequireCanGrant(this ICurrentUserService currentUserService, IEnumerable<Permission> permissions)
+    {
+        if (permissions.Any(p => !currentUserService.HasPermission(p)))
+        {
+            throw new ForbiddenAccessException("Você não pode conceder permissões que o seu cargo não tem.");
         }
     }
 
@@ -146,8 +170,11 @@ public static class CurrentUserServiceExtensions
         }
     }
 
-    /// <summary>Admin e Closer alcançam a organização inteira; SDR e papel desconhecido, não.</summary>
+    /// <summary>
+    /// Alcança a organização inteira quem tem <see cref="Permission.TeamWideAccess"/> (nos cargos
+    /// padrão: Administrador e Closer). Nas descrições acima, "Admin/Closer" = com essa permissão e
+    /// "SDR" = sem ela.
+    /// </summary>
     private static bool ReachesOrganization(this ICurrentUserService currentUserService) =>
-        Enum.TryParse<UserRole>(currentUserService.Role, out var role)
-            && role is UserRole.Admin or UserRole.Closer;
+        currentUserService.HasPermission(Permission.TeamWideAccess);
 }

@@ -21,7 +21,7 @@ public class ExpectedCloseAndStalledTests
     private static Task<DashboardOverviewDto> RunAsync(
         DashboardOverviewTestContext context,
         Guid userId,
-        UserRole role,
+        DefaultRole role,
         int days = 30,
         DateTime? nowUtc = null)
     {
@@ -47,7 +47,7 @@ public class ExpectedCloseAndStalledTests
         context.AddOpenDeal(context.AdminUserId, amount: 7_000m, ticket: null, created); // sem previsão
         context.AddClosedDeal(context.AdminUserId, won: true, amount: 50_000m, created, NowUtc.AddDays(-1)); // fechado não entra
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin, days: 7);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin, days: 7);
 
         var expected = overview.ExpectedClose;
         Assert.Equal(new DateOnly(2026, 9, 15), expected.WindowStartLocal);
@@ -66,7 +66,7 @@ public class ExpectedCloseAndStalledTests
 
         // 15/09 às 23h30 em SP = 16/09 02h30 UTC: a previsão de 15/09 ainda é "hoje", não vencida.
         var overview = await RunAsync(
-            context, context.AdminUserId, UserRole.Admin, days: 7, nowUtc: new DateTime(2026, 9, 16, 2, 30, 0, DateTimeKind.Utc));
+            context, context.AdminUserId, DefaultRole.Admin, days: 7, nowUtc: new DateTime(2026, 9, 16, 2, 30, 0, DateTimeKind.Utc));
 
         Assert.Equal(1, overview.ExpectedClose.ExpectedToCloseCount);
         Assert.Equal(0, overview.ExpectedClose.OverdueExpectedCount);
@@ -81,7 +81,7 @@ public class ExpectedCloseAndStalledTests
         context.AddOpenDeal(context.AdminUserId, amount: 30_000m, ticket: null, created, expectedCloseDate: new DateOnly(2026, 9, 20));
         context.AddOpenDeal(context.AdminUserId, amount: 30_000m, ticket: null, created, expectedCloseDate: new DateOnly(2026, 9, 1));
 
-        var overview = await RunAsync(context, context.SdrUserId, UserRole.Sdr);
+        var overview = await RunAsync(context, context.SdrUserId, DefaultRole.Sdr);
 
         Assert.Equal(2_000m, overview.ExpectedClose.ExpectedToCloseAmount);
         Assert.Equal(1, overview.ExpectedClose.ExpectedToCloseCount);
@@ -95,7 +95,7 @@ public class ExpectedCloseAndStalledTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: 1_000m, ticket: null, NowUtc.AddDays(-5), expectedCloseDate: new DateOnly(2026, 10, 1));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(new DateOnly(2026, 10, 1), Assert.Single(overview.FeaturedDeals).ExpectedCloseDate);
     }
@@ -106,7 +106,7 @@ public class ExpectedCloseAndStalledTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: 1_000m, ticket: null, NowUtc.AddDays(-7));
 
-        var withDefault = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var withDefault = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
         Assert.Equal(14, withDefault.StalledAfterDays);
         Assert.Equal(0, Assert.Single(withDefault.Pipeline).StalledCount);
 
@@ -114,15 +114,15 @@ public class ExpectedCloseAndStalledTests
         organization.ChangeStalledDealDays(5);
         await context.Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var withFive = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var withFive = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
         Assert.Equal(5, withFive.StalledAfterDays);
         Assert.Equal(1, Assert.Single(withFive.Pipeline).StalledCount);
     }
 
     [Theory]
-    [InlineData(UserRole.Sdr)]
-    [InlineData(UserRole.Closer)]
-    public async Task So_Admin_altera_o_limite_de_parado(UserRole role)
+    [InlineData(DefaultRole.Sdr)]
+    [InlineData(DefaultRole.Closer)]
+    public async Task So_Admin_altera_o_limite_de_parado(DefaultRole role)
     {
         using var context = new DashboardOverviewTestContext();
         var handler = new UpdateOrganizationSettingsCommandHandler(context.Db, context.As(context.SdrUserId, role));
@@ -139,7 +139,7 @@ public class ExpectedCloseAndStalledTests
     public async Task Admin_altera_o_limite_dentro_da_faixa()
     {
         using var context = new DashboardOverviewTestContext();
-        var handler = new UpdateOrganizationSettingsCommandHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin));
+        var handler = new UpdateOrganizationSettingsCommandHandler(context.Db, context.As(context.AdminUserId, DefaultRole.Admin));
 
         var dto = await handler.Handle(new UpdateOrganizationSettingsCommand(30), TestContext.Current.CancellationToken);
 

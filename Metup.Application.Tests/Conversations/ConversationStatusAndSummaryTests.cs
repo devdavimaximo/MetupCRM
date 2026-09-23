@@ -26,7 +26,7 @@ public class ConversationStatusAndSummaryTests
         var conversation = context.AddConversation();
         var publisher = new RecordingPublisher();
 
-        await new UpdateConversationStatusCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), publisher)
+        await new UpdateConversationStatusCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), publisher)
             .Handle(new UpdateConversationStatusCommand(conversation.Id, target), TestContext.Current.CancellationToken);
 
         Assert.Equal(target, (await context.Db.Conversations.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Status);
@@ -40,10 +40,10 @@ public class ConversationStatusAndSummaryTests
         using var context = new ConversationsTestContext();
         var conversation = context.AddConversation();
         context.AddInbound(conversation.Id, NowUtc);
-        await new FavoriteConversationCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), new RecordingPublisher())
+        await new FavoriteConversationCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), new RecordingPublisher())
             .Handle(new FavoriteConversationCommand(conversation.Id), TestContext.Current.CancellationToken);
 
-        var summary = await new GetConversationsSummaryQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var summary = await new GetConversationsSummaryQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetConversationsSummaryQuery(), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, summary.Total);
@@ -58,10 +58,10 @@ public class ConversationStatusAndSummaryTests
         var conversation = context.AddConversation();
         context.AddInbound(conversation.Id, NowUtc);
         var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc.AddMinutes(1));
-        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), clock)
+        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), clock)
             .Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
 
-        var summary = await new GetConversationsSummaryQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var summary = await new GetConversationsSummaryQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetConversationsSummaryQuery(), TestContext.Current.CancellationToken);
 
         Assert.Equal(0, summary.Unread);
@@ -73,7 +73,7 @@ public class ConversationStatusAndSummaryTests
         using var context = new ConversationsTestContext();
         var conversation = context.AddConversation();
 
-        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetConversationContextQuery(conversation.Id), TestContext.Current.CancellationToken);
 
         Assert.Equal(0, dto.Summary.TotalMessages);
@@ -90,7 +90,7 @@ public class ConversationStatusAndSummaryTests
         context.AddInbound(conversation.Id, NowUtc.AddMinutes(2));
         context.AddOutbound(conversation.Id, context.SdrUserId, NowUtc.AddMinutes(10));
 
-        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetConversationContextQuery(conversation.Id), TestContext.Current.CancellationToken);
 
         Assert.Equal(3, dto.Summary.TotalMessages);
@@ -106,7 +106,7 @@ public class ConversationStatusAndSummaryTests
         context.AddOutbound(conversation.Id, context.SdrUserId, NowUtc.AddMinutes(5));
         context.AddInbound(conversation.Id, NowUtc.AddMinutes(20)); // sem resposta ainda
 
-        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetConversationContextQuery(conversation.Id), TestContext.Current.CancellationToken);
 
         Assert.Equal(5, dto.Summary.AverageResponseTimeMinutes);
@@ -118,7 +118,7 @@ public class ConversationStatusAndSummaryTests
         using var context = new ConversationsTestContext();
         var conversation = context.AddConversation();
 
-        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var dto = await new GetConversationContextQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetConversationContextQuery(conversation.Id), TestContext.Current.CancellationToken);
 
         Assert.Null(dto.CompanyCnpj);

@@ -32,14 +32,28 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("password_hash")
             .IsRequired();
 
-        builder.Property(u => u.Role)
-            .HasColumnName("role")
-            .HasConversion<string>()
-            .HasMaxLength(20)
+        builder.Property(u => u.RoleId)
+            .HasColumnName("role_id")
+            .IsRequired();
+
+        builder.Property(u => u.IsActive)
+            .HasColumnName("is_active")
+            .HasDefaultValue(true)
+            .IsRequired();
+
+        builder.Property(u => u.CreatedAt)
+            .HasColumnName("created_at")
             .IsRequired();
 
         builder.HasIndex(u => u.Email).IsUnique();
         builder.HasIndex(u => u.OrganizationId);
+        builder.HasIndex(u => u.RoleId);
+
+        // Restrict: cargo com usuários não sai do banco (a regra de negócio avisa antes).
+        builder.HasOne<Role>()
+            .WithMany()
+            .HasForeignKey(u => u.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<Organization>()
             .WithMany()

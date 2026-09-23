@@ -109,12 +109,12 @@ public class AutomatedOutboundMessageTests
         using var context = new ConversationsTestContext();
         var conversation = context.AddConversation();
 
-        await new SetConversationAutomationCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        await new SetConversationAutomationCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new SetConversationAutomationCommand(conversation.Id, true), TestContext.Current.CancellationToken);
 
         Assert.True((await context.Db.Conversations.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).AutomationEnabled);
 
-        await new SetConversationAutomationCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        await new SetConversationAutomationCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new SetConversationAutomationCommand(conversation.Id, false), TestContext.Current.CancellationToken);
 
         Assert.False((await context.Db.Conversations.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).AutomationEnabled);

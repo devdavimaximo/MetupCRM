@@ -17,7 +17,7 @@ public class GetDashboardOverviewQueryHandlerTests
     private static Task<DashboardOverviewDto> RunAsync(
         DashboardOverviewTestContext context,
         Guid userId,
-        UserRole role,
+        DefaultRole role,
         int days = 30,
         DealScope scope = DealScope.Organization,
         DateTime? nowUtc = null)
@@ -40,7 +40,7 @@ public class GetDashboardOverviewQueryHandlerTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: null, ticket: 8_000m, createdAtUtc: NowUtc.AddDays(-3));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         var stage = Assert.Single(overview.Pipeline);
         Assert.Equal(8_000m, stage.Amount);
@@ -58,7 +58,7 @@ public class GetDashboardOverviewQueryHandlerTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: null, ticket: null, createdAtUtc: NowUtc.AddDays(-3));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(1, overview.OpenDealsWithoutAmount);
         Assert.Empty(overview.FeaturedDeals);
@@ -71,7 +71,7 @@ public class GetDashboardOverviewQueryHandlerTests
         context.AddWonDeal(context.AdminUserId, amount: 5_000m, createdAtUtc: NowUtc.AddDays(-10), closedAtUtc: NowUtc.AddDays(-2));
         context.AddOpenDeal(context.AdminUserId, amount: null, ticket: 99_000m, createdAtUtc: NowUtc.AddDays(-3));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(5_000m, overview.Revenue.Current);
     }
@@ -83,7 +83,7 @@ public class GetDashboardOverviewQueryHandlerTests
         context.AddOpenDeal(context.AdminUserId, amount: 50_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-5));
         context.AddOpenDeal(context.SdrUserId, amount: 7_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-5));
 
-        var overview = await RunAsync(context, context.SdrUserId, UserRole.Sdr, scope: DealScope.Organization);
+        var overview = await RunAsync(context, context.SdrUserId, DefaultRole.Sdr, scope: DealScope.Organization);
 
         Assert.Equal(DealScope.Mine, overview.Scope);
         Assert.Equal(7_000m, overview.Pipeline.Sum(p => p.Amount));
@@ -97,7 +97,7 @@ public class GetDashboardOverviewQueryHandlerTests
         context.AddOpenDeal(context.AdminUserId, amount: 50_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-5));
         context.AddOpenDeal(context.SdrUserId, amount: 7_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-5));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(DealScope.Organization, overview.Scope);
         Assert.Equal(57_000m, overview.Pipeline.Sum(p => p.Amount));
@@ -113,7 +113,7 @@ public class GetDashboardOverviewQueryHandlerTests
         var closedAtUtc = new DateTime(2026, 9, 16, 2, 0, 0, DateTimeKind.Utc);
         context.AddWonDeal(context.AdminUserId, amount: 4_000m, createdAtUtc: NowUtc.AddDays(-9), closedAtUtc: closedAtUtc);
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin, days: 7, nowUtc: closedAtUtc.AddMinutes(30));
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin, days: 7, nowUtc: closedAtUtc.AddMinutes(30));
 
         Assert.Equal(4_000m, overview.Revenue.Current);
         var point = Assert.Single(overview.RevenueSeries, p => p.Revenue > 0);
@@ -126,7 +126,7 @@ public class GetDashboardOverviewQueryHandlerTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: 1_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-1));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin, days: 30);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin, days: 30);
 
         Assert.Equal(30, (overview.PeriodStart - overview.PreviousStart).Days);
         // Início do dia local de 17/08/2026 (30 dias contando hoje) = 03h UTC.
@@ -140,7 +140,7 @@ public class GetDashboardOverviewQueryHandlerTests
         using var context = new DashboardOverviewTestContext();
         context.AddOpenDeal(context.AdminUserId, amount: null, ticket: 10_000m, createdAtUtc: NowUtc.AddDays(-2));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Null(overview.WeightedForecast);
     }
@@ -156,7 +156,7 @@ public class GetDashboardOverviewQueryHandlerTests
 
         context.AddOpenDeal(context.AdminUserId, amount: null, ticket: 10_000m, createdAtUtc: NowUtc.AddDays(-2), stage: DealStage.Prospect);
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(5_000m, overview.WeightedForecast);
     }
@@ -170,7 +170,7 @@ public class GetDashboardOverviewQueryHandlerTests
         context.AddOpenDeal(context.AdminUserId, amount: 1_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-9), stage: DealStage.Qualificacao);
         context.AddOpenDeal(context.AdminUserId, amount: 1_000m, ticket: null, createdAtUtc: NowUtc.AddDays(-9));
 
-        var overview = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var overview = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         var prospect = Assert.Single(overview.StageAdvanceRates, s => s.Stage == DealStage.Prospect);
         Assert.Equal(2, prospect.EnteredCount);

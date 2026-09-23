@@ -36,7 +36,7 @@ public class ConversationReadAndFavoriteTests
         context.AddInbound(conversation.Id, NowUtc);
         var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc.AddMinutes(1));
 
-        var handler = new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), clock);
+        var handler = new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), clock);
         await handler.Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
         await handler.Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
 
@@ -51,7 +51,7 @@ public class ConversationReadAndFavoriteTests
         var conversation = context.AddConversation();
         context.AddInbound(conversation.Id, NowUtc);
         var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc.AddMinutes(1));
-        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), clock)
+        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), clock)
             .Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
 
         context.AddInbound(conversation.Id, NowUtc.AddMinutes(5));
@@ -67,7 +67,7 @@ public class ConversationReadAndFavoriteTests
         context.AddInbound(conversation.Id, NowUtc);
         var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc.AddMinutes(1));
 
-        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), clock)
+        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), clock)
             .Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
 
         Assert.False((await SingleListItem(context, context.SdrUserId)).IsUnread);
@@ -81,11 +81,11 @@ public class ConversationReadAndFavoriteTests
         var conversation = context.AddConversation();
         context.AddInbound(conversation.Id, NowUtc);
         var clock = new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, NowUtc.AddMinutes(1));
-        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), clock)
+        await new MarkConversationReadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), clock)
             .Handle(new MarkConversationReadCommand(conversation.Id), TestContext.Current.CancellationToken);
         Assert.False((await SingleListItem(context, context.SdrUserId)).IsUnread);
 
-        var handler = new MarkConversationUnreadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr));
+        var handler = new MarkConversationUnreadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr));
         await handler.Handle(new MarkConversationUnreadCommand(conversation.Id), TestContext.Current.CancellationToken);
         await handler.Handle(new MarkConversationUnreadCommand(conversation.Id), TestContext.Current.CancellationToken);
 
@@ -100,7 +100,7 @@ public class ConversationReadAndFavoriteTests
         var conversation = context.AddConversation();
 
         var exception = await Record.ExceptionAsync(() =>
-            new MarkConversationUnreadCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+            new MarkConversationUnreadCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
                 .Handle(new MarkConversationUnreadCommand(conversation.Id), TestContext.Current.CancellationToken));
 
         Assert.Null(exception);
@@ -112,7 +112,7 @@ public class ConversationReadAndFavoriteTests
         using var context = new ConversationsTestContext();
         var conversation = context.AddConversation();
         var publisher = new RecordingPublisher();
-        var handler = new FavoriteConversationCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr), publisher);
+        var handler = new FavoriteConversationCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr), publisher);
 
         await handler.Handle(new FavoriteConversationCommand(conversation.Id), TestContext.Current.CancellationToken);
         await handler.Handle(new FavoriteConversationCommand(conversation.Id), TestContext.Current.CancellationToken);
@@ -130,7 +130,7 @@ public class ConversationReadAndFavoriteTests
         var conversation = context.AddConversation();
 
         var exception = await Record.ExceptionAsync(() =>
-            new UnfavoriteConversationCommandHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+            new UnfavoriteConversationCommandHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
                 .Handle(new UnfavoriteConversationCommand(conversation.Id), TestContext.Current.CancellationToken));
 
         Assert.Null(exception);
@@ -138,7 +138,7 @@ public class ConversationReadAndFavoriteTests
 
     private static async Task<ConversationListItemDto> SingleListItem(ConversationsTestContext context, Guid userId)
     {
-        var handler = new ListConversationsQueryHandler(context.Db, context.As(userId, UserRole.Sdr));
+        var handler = new ListConversationsQueryHandler(context.Db, context.As(userId, DefaultRole.Sdr));
         var result = await handler.Handle(new ListConversationsQuery(), TestContext.Current.CancellationToken);
         return Assert.Single(result.Items);
     }

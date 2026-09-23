@@ -8,6 +8,8 @@ import {
   LogOut,
   Menu,
   MessagesSquare,
+  ShieldCheck,
+  UserCog,
   PanelLeftClose,
   PanelLeftOpen,
   type LucideIcon,
@@ -17,8 +19,9 @@ import { BrandLockup } from "@/components/BrandLockup"
 import { ShellActions, type ShellNavigation } from "@/components/ShellActions"
 import { Monogram } from "@/components/ui/monogram"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
-import type { Session } from "@/lib/auth"
+import { can, type Session } from "@/lib/auth"
 import { brand } from "@/lib/brand"
+import { viewPermission } from "@/lib/permissions"
 import type { View } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
 
@@ -32,11 +35,6 @@ type Props = {
   children: ReactNode
 }
 
-const roleLabels: Record<Session["user"]["role"], string> = {
-  Admin: "Admin",
-  Closer: "Closer",
-  Sdr: "SDR",
-}
 
 type NavItem = { view: View; label: string; icon: LucideIcon }
 
@@ -61,7 +59,21 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Análise",
     items: [{ view: "relatorios", label: "Relatórios", icon: ChartColumn }],
   },
+  {
+    label: "Administração",
+    items: [
+      { view: "usuarios", label: "Usuários", icon: UserCog },
+      { view: "cargos", label: "Cargos", icon: ShieldCheck },
+    ],
+  },
 ]
+
+/** Só o que o cargo libera; grupo sem item some junto. O servidor recusa de novo o que não for permitido. */
+function visibleNavGroups(session: Session) {
+  return navGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => can(session.user, viewPermission[item.view])) }))
+    .filter((group) => group.items.length > 0)
+}
 
 const COLLAPSE_KEY = "metup.sidebar-collapsed"
 
@@ -177,7 +189,7 @@ function SidebarContent({
       </div>
 
       <nav aria-label="Principal" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-5">
-        {navGroups.map((group) => (
+        {visibleNavGroups(session).map((group) => (
           <div key={group.label} className="flex flex-col gap-1">
             {collapsed ? (
               <span aria-hidden="true" className="mx-auto mb-1 h-px w-5 bg-line-soft" />
@@ -202,7 +214,7 @@ function SidebarContent({
             <div className="min-w-0 flex-1">
               <p className="truncate text-base font-medium text-fg">{session.user.name}</p>
               <p className="label-mono truncate text-muted">
-                {roleLabels[session.user.role]} · {brand.name}
+                {session.user.roleName} · {brand.name}
               </p>
             </div>
           )}

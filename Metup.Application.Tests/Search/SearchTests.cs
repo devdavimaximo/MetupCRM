@@ -47,7 +47,7 @@ public class SearchTests
 {
     private static readonly DateTime NowUtc = new(2026, 9, 15, 17, 0, 0, DateTimeKind.Utc);
 
-    private static SearchQueryHandler Handler(DashboardOverviewTestContext context, Guid userId, UserRole role) =>
+    private static SearchQueryHandler Handler(DashboardOverviewTestContext context, Guid userId, DefaultRole role) =>
         new(context.Db, context.As(userId, role), new InMemoryTextSearch());
 
     private static Company AddCompany(DashboardOverviewTestContext context, string name, string? city = null, string? segment = null)
@@ -67,7 +67,7 @@ public class SearchTests
         context.Db.Contacts.Add(new Contact { OrganizationId = context.OrganizationId, CompanyId = company.Id, Name = "João Conceição" });
         context.Db.SaveChanges();
 
-        var handler = Handler(context, context.AdminUserId, UserRole.Admin);
+        var handler = Handler(context, context.AdminUserId, DefaultRole.Admin);
 
         var byCity = await handler.Handle(new SearchQuery("sao paulo"), TestContext.Current.CancellationToken);
         Assert.Equal("Padaria Pão Quente", Assert.Single(byCity.Companies).Name);
@@ -86,8 +86,8 @@ public class SearchTests
         var mine = context.AddOpenDeal(context.SdrUserId, amount: 5_000m, ticket: null, NowUtc.AddDays(-3));
         context.AddOpenDeal(context.AdminUserId, amount: 90_000m, ticket: null, NowUtc.AddDays(-3));
 
-        var sdr = await Handler(context, context.SdrUserId, UserRole.Sdr).Handle(new SearchQuery("alfa"), TestContext.Current.CancellationToken);
-        var admin = await Handler(context, context.AdminUserId, UserRole.Admin).Handle(new SearchQuery("alfa"), TestContext.Current.CancellationToken);
+        var sdr = await Handler(context, context.SdrUserId, DefaultRole.Sdr).Handle(new SearchQuery("alfa"), TestContext.Current.CancellationToken);
+        var admin = await Handler(context, context.AdminUserId, DefaultRole.Admin).Handle(new SearchQuery("alfa"), TestContext.Current.CancellationToken);
 
         Assert.Equal(mine.Id, Assert.Single(sdr.Deals).Id);
         Assert.Equal(2, admin.Deals.Count);
@@ -104,7 +104,7 @@ public class SearchTests
             AddCompany(context, $"Mercado {i}");
         }
 
-        var result = await Handler(context, context.AdminUserId, UserRole.Admin).Handle(new SearchQuery("mercado"), TestContext.Current.CancellationToken);
+        var result = await Handler(context, context.AdminUserId, DefaultRole.Admin).Handle(new SearchQuery("mercado"), TestContext.Current.CancellationToken);
 
         Assert.Equal(SearchQuery.MaxHitsPerGroup, result.Companies.Count);
     }
@@ -116,7 +116,7 @@ public class SearchTests
         var conversation = conversations.AddConversation();
         conversations.AddInbound(conversation.Id, NowUtc, "Olá, tudo bem?");
 
-        var handler = new SearchQueryHandler(conversations.Db, conversations.As(conversations.SdrUserId, UserRole.Sdr), new InMemoryTextSearch());
+        var handler = new SearchQueryHandler(conversations.Db, conversations.As(conversations.SdrUserId, DefaultRole.Sdr), new InMemoryTextSearch());
 
         var byContact = await handler.Handle(new SearchQuery("BIA"), TestContext.Current.CancellationToken);
         var hit = Assert.Single(byContact.Conversations);
@@ -143,7 +143,7 @@ public class SearchTests
             context.Db.SaveChanges();
         }
 
-        var result = await Handler(context, context.AdminUserId, UserRole.Admin).Handle(new SearchQuery("mercado"), TestContext.Current.CancellationToken);
+        var result = await Handler(context, context.AdminUserId, DefaultRole.Admin).Handle(new SearchQuery("mercado"), TestContext.Current.CancellationToken);
 
         Assert.Equal(SearchQuery.MaxHitsPerGroup, result.Conversations.Count);
     }

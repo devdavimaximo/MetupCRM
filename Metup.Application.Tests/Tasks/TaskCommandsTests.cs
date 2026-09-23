@@ -18,7 +18,7 @@ public class TaskCommandsTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static CreateTaskCommandHandler Create(TasksTestContext context, Guid userId, UserRole role) =>
+    private static CreateTaskCommandHandler Create(TasksTestContext context, Guid userId, DefaultRole role) =>
         new(context.Db, context.Base.As(userId, role));
 
     [Fact]
@@ -28,7 +28,7 @@ public class TaskCommandsTests
         var task = context.AddTask(NowUtc.AddDays(1));
         var newDue = NowUtc.AddDays(5);
 
-        var handler = new RescheduleTaskCommandHandler(context.Db, context.Base.As(context.SdrUserId, UserRole.Sdr), Clock);
+        var handler = new RescheduleTaskCommandHandler(context.Db, context.Base.As(context.SdrUserId, DefaultRole.Sdr), Clock);
         var dto = await handler.Handle(new RescheduleTaskCommand(task.Id, newDue), Ct);
 
         Assert.Equal(newDue, dto.DueDate);
@@ -57,9 +57,9 @@ public class TaskCommandsTests
     {
         using var context = new TasksTestContext(NowUtc);
 
-        var mine = await Create(context, context.SdrUserId, UserRole.Sdr)
+        var mine = await Create(context, context.SdrUserId, DefaultRole.Sdr)
             .Handle(new CreateTaskCommand(context.Deal.Id, ActivityType.Meeting, NowUtc.AddDays(1), "Alinhar escopo"), Ct);
-        var assigned = await Create(context, context.AdminUserId, UserRole.Admin)
+        var assigned = await Create(context, context.AdminUserId, DefaultRole.Admin)
             .Handle(new CreateTaskCommand(context.Deal.Id, ActivityType.Call, NowUtc.AddDays(1), null, context.SdrUserId), Ct);
 
         Assert.Equal(context.SdrUserId, mine.OwnerUserId);
@@ -82,7 +82,7 @@ public class TaskCommandsTests
     {
         using var context = new TasksTestContext(NowUtc);
         var closed = context.Base.AddClosedDeal(context.SdrUserId, won: false, amount: null, NowUtc.AddDays(-10), NowUtc.AddDays(-1));
-        var sdr = Create(context, context.SdrUserId, UserRole.Sdr);
+        var sdr = Create(context, context.SdrUserId, DefaultRole.Sdr);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             sdr.Handle(new CreateTaskCommand(Guid.NewGuid(), ActivityType.Call, NowUtc.AddDays(1), null), Ct));
@@ -91,7 +91,7 @@ public class TaskCommandsTests
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             sdr.Handle(new CreateTaskCommand(context.Deal.Id, ActivityType.Call, NowUtc.AddDays(1), null, context.AdminUserId), Ct));
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            Create(context, context.AdminUserId, UserRole.Admin)
+            Create(context, context.AdminUserId, DefaultRole.Admin)
                 .Handle(new CreateTaskCommand(context.Deal.Id, ActivityType.Call, NowUtc.AddDays(1), null, Guid.NewGuid()), Ct));
     }
 
@@ -99,7 +99,7 @@ public class TaskCommandsTests
     public async Task Criar_negocio_de_outra_organizacao_mesmo_existindo_da_404()
     {
         using var context = new TasksTestContext(NowUtc);
-        var otherOrganization = new FakeCurrentUserService(Guid.NewGuid(), context.AdminUserId, UserRole.Admin);
+        var otherOrganization = new FakeCurrentUserService(Guid.NewGuid(), context.AdminUserId, DefaultRole.Admin);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             new CreateTaskCommandHandler(context.Db, otherOrganization)

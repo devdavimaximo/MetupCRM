@@ -17,7 +17,7 @@ public sealed class FakeServiceTokenUser(Guid organizationId) : ICurrentUserServ
 
     public Guid? OrganizationId => organizationId;
 
-    public string? Role => null;
+    public IReadOnlySet<Permission> Permissions { get; } = new HashSet<Permission>();
 }
 
 /// <summary>
@@ -42,7 +42,6 @@ public sealed class TasksTestContext : IDisposable
             Name = "Carla Closer",
             Email = "carla@acme.com",
             PasswordHash = "x",
-            Role = UserRole.Closer,
         });
         Db.SaveChanges();
 
@@ -108,10 +107,10 @@ public sealed class TasksTestContext : IDisposable
         Db.SaveChanges();
     }
 
-    public ListTasksQueryHandler List(Guid userId, UserRole role, IOrganizationClock clock) =>
+    public ListTasksQueryHandler List(Guid userId, DefaultRole role, IOrganizationClock clock) =>
         new(Db, Base.As(userId, role), clock, new InMemoryTextSearch());
 
-    public GetTaskSummaryQueryHandler Summary(Guid userId, UserRole role, IOrganizationClock clock) =>
+    public GetTaskSummaryQueryHandler Summary(Guid userId, DefaultRole role, IOrganizationClock clock) =>
         new(Db, Base.As(userId, role), clock);
 
     public void Dispose() => Base.Dispose();

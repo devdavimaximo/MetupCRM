@@ -32,7 +32,7 @@ public class DealActionScopeTests
         using var context = new PipelineTestContext();
         var mine = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
         var others = context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 1_000m);
-        var handler = context.ChangeStage(context.SdrUserId, UserRole.Sdr);
+        var handler = context.ChangeStage(context.SdrUserId, DefaultRole.Sdr);
 
         var moved = await handler.Handle(new ChangeDealStageCommand(mine.Id, DealStage.Reuniao), Ct);
         Assert.Equal(DealStage.Reuniao, moved.Stage);
@@ -48,10 +48,10 @@ public class DealActionScopeTests
         using var context = new PipelineTestContext();
         var others = context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 1_000m);
 
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() => context.CloseDeal(context.SdrUserId, UserRole.Sdr)
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => context.CloseDeal(context.SdrUserId, DefaultRole.Sdr)
             .Handle(new CloseDealCommand(others.Id, true, 1_000m), Ct));
 
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() => context.UpdateDeal(context.SdrUserId, UserRole.Sdr)
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => context.UpdateDeal(context.SdrUserId, DefaultRole.Sdr)
             .Handle(new UpdateDealCommand(others.Id, null, DealSource.Sdr, context.AdminUserId, null, 2_000m, null), Ct));
 
         var stored = await context.Db.Deals.AsNoTracking().SingleAsync(d => d.Id == others.Id, Ct);
@@ -64,11 +64,11 @@ public class DealActionScopeTests
         using var context = new PipelineTestContext();
         var sdrDeal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
 
-        var moved = await context.ChangeStage(context.CloserUserId, UserRole.Closer)
+        var moved = await context.ChangeStage(context.CloserUserId, DefaultRole.Closer)
             .Handle(new ChangeDealStageCommand(sdrDeal.Id, DealStage.Proposta), Ct);
         Assert.Equal(DealStage.Proposta, moved.Stage);
 
-        var closed = await context.CloseDeal(context.AdminUserId, UserRole.Admin)
+        var closed = await context.CloseDeal(context.AdminUserId, DefaultRole.Admin)
             .Handle(new CloseDealCommand(sdrDeal.Id, true, 1_500m), Ct);
         Assert.Equal(DealStatus.Ganho, closed.Status);
     }
@@ -85,7 +85,7 @@ public class DealActionScopeTests
         await Assert.ThrowsAsync<MissingUserContextException>(() =>
             handler.Handle(new ChangeDealStageCommand(deal.Id, DealStage.Reuniao), Ct));
 
-        await Assert.ThrowsAsync<NotFoundException>(() => context.ChangeStage(context.SdrUserId, UserRole.Sdr)
+        await Assert.ThrowsAsync<NotFoundException>(() => context.ChangeStage(context.SdrUserId, DefaultRole.Sdr)
             .Handle(new ChangeDealStageCommand(Guid.NewGuid(), DealStage.Reuniao), Ct));
     }
 
@@ -95,11 +95,11 @@ public class DealActionScopeTests
         using var context = new PipelineTestContext();
         var others = context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 1_000m);
 
-        var byId = await new GetDealByIdQueryHandler(context.Db, context.As(context.SdrUserId, UserRole.Sdr))
+        var byId = await new GetDealByIdQueryHandler(context.Db, context.As(context.SdrUserId, DefaultRole.Sdr))
             .Handle(new GetDealByIdQuery(others.Id), Ct);
         Assert.Equal(others.Id, byId.Id);
 
-        var list = await context.List(context.SdrUserId, UserRole.Sdr).Handle(new ListDealsQuery(), Ct);
+        var list = await context.List(context.SdrUserId, DefaultRole.Sdr).Handle(new ListDealsQuery(), Ct);
         Assert.Contains(list.Items, d => d.Id == others.Id);
     }
 
@@ -109,11 +109,11 @@ public class DealActionScopeTests
         using var context = new PipelineTestContext();
         var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
 
-        var reassigned = await context.Reassign(context.AdminUserId, UserRole.Admin)
+        var reassigned = await context.Reassign(context.AdminUserId, DefaultRole.Admin)
             .Handle(new ReassignDealCommand(deal.Id, context.CloserUserId), Ct);
         Assert.Equal(context.CloserUserId, reassigned.OwnerUserId);
 
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() => context.Reassign(context.SdrUserId, UserRole.Sdr)
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => context.Reassign(context.SdrUserId, DefaultRole.Sdr)
             .Handle(new ReassignDealCommand(deal.Id, context.SdrUserId), Ct));
     }
 
@@ -122,7 +122,7 @@ public class DealActionScopeTests
     {
         using var context = new PipelineTestContext();
         var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
-        var handler = context.Reassign(context.AdminUserId, UserRole.Admin);
+        var handler = context.Reassign(context.AdminUserId, DefaultRole.Admin);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             handler.Handle(new ReassignDealCommand(deal.Id, Guid.NewGuid()), Ct));
@@ -139,13 +139,13 @@ public class DealActionScopeTests
         var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
 
         // SDR no próprio negócio: editar sem trocar o dono vale; trocar o dono é reatribuir → 403.
-        var sdr = context.UpdateDeal(context.SdrUserId, UserRole.Sdr);
+        var sdr = context.UpdateDeal(context.SdrUserId, DefaultRole.Sdr);
         var edited = await sdr.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.SdrUserId, null, 2_000m, null), Ct);
         Assert.Equal(2_000m, edited.Amount);
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             sdr.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.AdminUserId, null, 2_000m, null), Ct));
 
-        var admin = context.UpdateDeal(context.AdminUserId, UserRole.Admin);
+        var admin = context.UpdateDeal(context.AdminUserId, DefaultRole.Admin);
         var reassigned = await admin.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.CloserUserId, null, 2_000m, null), Ct);
         Assert.Equal(context.CloserUserId, reassigned.OwnerUserId);
     }
@@ -156,7 +156,7 @@ public class DealActionScopeTests
         using var context = new PipelineTestContext();
         var deal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_000m);
         context.Close(deal, won: true, Now.AddDays(-1), closedAmount: 1_000m);
-        var admin = context.UpdateDeal(context.AdminUserId, UserRole.Admin);
+        var admin = context.UpdateDeal(context.AdminUserId, DefaultRole.Admin);
 
         await Assert.ThrowsAsync<DomainRuleException>(() =>
             admin.Handle(new UpdateDealCommand(deal.Id, null, DealSource.Sdr, context.CloserUserId, null, 1_000m, null), Ct));
@@ -185,7 +185,7 @@ public class DealActionScopeTests
         var estimated = context.AddDeal(context.SdrUserId, Now.AddDays(-5), ticket: 800m);
         var negotiated = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 1_200m, ticket: 800m);
 
-        var reader = new GetDealByIdQueryHandler(context.Db, context.As(context.AdminUserId, UserRole.Admin));
+        var reader = new GetDealByIdQueryHandler(context.Db, context.As(context.AdminUserId, DefaultRole.Admin));
 
         var first = await reader.Handle(new GetDealByIdQuery(estimated.Id), Ct);
         Assert.Equal((800m, true), (first.Value, first.ValueIsEstimated));

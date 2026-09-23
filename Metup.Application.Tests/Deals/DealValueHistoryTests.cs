@@ -22,7 +22,7 @@ public class DealValueHistoryTests
     {
         using var context = new PipelineTestContext();
         var deal = context.AddDeal(context.AdminUserId, Now.AddDays(-10), amount: 1_000m, ticket: 800m);
-        var handler = new UpdateDealCommandHandler(context.Db, context.As(context.CloserUserId, UserRole.Closer), context.Clock);
+        var handler = new UpdateDealCommandHandler(context.Db, context.As(context.CloserUserId, DefaultRole.Closer), context.Clock);
 
         // Mesmo valor, outros campos mudando: nada a registrar.
         await handler.Handle(new UpdateDealCommand(deal.Id, null, DealSource.WhatsApp, context.SdrUserId, 800m, 1_000m), Ct);
@@ -47,7 +47,7 @@ public class DealValueHistoryTests
         var sameValue = context.AddDeal(context.AdminUserId, Now.AddDays(-10), amount: 2_000m);
         var newValue = context.AddDeal(context.AdminUserId, Now.AddDays(-10), ticket: 3_000m);
         var handler = new CloseDealCommandHandler(
-            context.Db, context.As(context.AdminUserId, UserRole.Admin), context.Clock, new RecordingPublisher());
+            context.Db, context.As(context.AdminUserId, DefaultRole.Admin), context.Clock, new RecordingPublisher());
 
         await handler.Handle(new CloseDealCommand(sameValue.Id, true, 2_000m), Ct);
         await handler.Handle(new CloseDealCommand(newValue.Id, true, 3_200m), Ct);
@@ -95,7 +95,7 @@ public class DealValueHistoryTests
         // Criado às 22h de 31/07 em São Paulo (01/08 UTC): conta no fim de julho local.
         context.AddDeal(context.AdminUserId, new DateTime(2026, 8, 1, 1, 0, 0, DateTimeKind.Utc), amount: 500m);
 
-        var evolution = await context.Evolution(context.AdminUserId, UserRole.Admin)
+        var evolution = await context.Evolution(context.AdminUserId, DefaultRole.Admin)
             .Handle(new GetPipelineEvolutionQuery(new DealPipelineFilter(AllOwners: true), 6), Ct);
 
         Assert.Equal(

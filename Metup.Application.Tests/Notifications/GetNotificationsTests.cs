@@ -15,7 +15,7 @@ public class GetNotificationsTests
     /// <summary>15/09/2026, 14h em São Paulo.</summary>
     private static readonly DateTime NowUtc = new(2026, 9, 15, 17, 0, 0, DateTimeKind.Utc);
 
-    private static Task<IReadOnlyList<NotificationDto>> RunAsync(DashboardOverviewTestContext context, Guid userId, UserRole role, DateTime? nowUtc = null) =>
+    private static Task<IReadOnlyList<NotificationDto>> RunAsync(DashboardOverviewTestContext context, Guid userId, DefaultRole role, DateTime? nowUtc = null) =>
         new GetNotificationsQueryHandler(context.Db, context.As(userId, role), new FakeOrganizationClock(DashboardOverviewTestContext.SaoPaulo, nowUtc ?? NowUtc))
             .Handle(new GetNotificationsQuery(), TestContext.Current.CancellationToken);
 
@@ -39,7 +39,7 @@ public class GetNotificationsTests
         context.Db.Tasks.Add(done);
         context.Db.SaveChanges();
 
-        var notifications = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var notifications = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         var dueSoon = Assert.Single(notifications, n => n.Kind == NotificationKind.TaskDueSoon);
         Assert.Equal(NowUtc.AddMinutes(45), dueSoon.DueAt);
@@ -62,7 +62,7 @@ public class GetNotificationsTests
         context.AddOpenDeal(context.AdminUserId, null, null, new DateTime(2026, 8, 31, 20, 0, 0, DateTimeKind.Utc)); // cruza 15/09 20:00 UTC (ainda não)
         context.AddClosedDeal(context.AdminUserId, won: false, amount: null, new DateTime(2026, 8, 1, 10, 0, 0, DateTimeKind.Utc), new DateTime(2026, 8, 31, 10, 0, 0, DateTimeKind.Utc)); // fechado
 
-        var notifications = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var notifications = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         var stalled = Assert.Single(notifications, n => n.Kind == NotificationKind.DealStalledToday);
         Assert.Equal(crossedThisMorning.Id, stalled.DealId);
@@ -78,7 +78,7 @@ public class GetNotificationsTests
         var mine = context.AddOpenDeal(context.SdrUserId, null, null, lastChange);
         context.AddOpenDeal(context.AdminUserId, null, null, lastChange);
 
-        var notifications = await RunAsync(context, context.SdrUserId, UserRole.Sdr);
+        var notifications = await RunAsync(context, context.SdrUserId, DefaultRole.Sdr);
 
         Assert.Equal(mine.Id, Assert.Single(notifications, n => n.Kind == NotificationKind.DealStalledToday).DealId);
     }
@@ -109,7 +109,7 @@ public class GetNotificationsTests
         AddConversation((MessageDirection.Inbound, NowUtc.AddHours(-2)), (MessageDirection.Outbound, NowUtc.AddHours(-1))); // já respondida
         context.Db.SaveChanges();
 
-        var notifications = await RunAsync(context, context.SdrUserId, UserRole.Sdr);
+        var notifications = await RunAsync(context, context.SdrUserId, DefaultRole.Sdr);
 
         var awaiting = Assert.Single(notifications, n => n.Kind == NotificationKind.ConversationAwaitingReply);
         Assert.Equal(waiting.Id, awaiting.ConversationId);
@@ -126,7 +126,7 @@ public class GetNotificationsTests
         AddTask(context, deal.Id, context.AdminUserId, NowUtc.AddHours(-1));
         AddTask(context, deal.Id, context.AdminUserId, NowUtc.AddMinutes(30));
 
-        var notifications = await RunAsync(context, context.AdminUserId, UserRole.Admin);
+        var notifications = await RunAsync(context, context.AdminUserId, DefaultRole.Admin);
 
         Assert.Equal(notifications.OrderByDescending(n => n.OccurredAt).Select(n => n.Id), notifications.Select(n => n.Id));
     }

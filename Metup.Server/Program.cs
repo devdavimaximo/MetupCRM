@@ -100,6 +100,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors("Client");
 app.UseAuthentication();
+app.UseMiddleware<UserAccessMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<DashboardHub>(DashboardHub.Path).RequireCors("Client");

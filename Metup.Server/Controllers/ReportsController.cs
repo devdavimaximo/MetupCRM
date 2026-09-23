@@ -9,6 +9,8 @@ using Metup.Application.Reports.Queries.GetTimeToCloseReport;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Metup.Domain.Users;
+using Metup.Server.Security;
 
 namespace Metup.Server.Controllers;
 
@@ -20,6 +22,7 @@ namespace Metup.Server.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
+[RequirePermission(Permission.ReportsView)]
 [Route("api/reports")]
 public class ReportsController(ISender sender) : ControllerBase
 {

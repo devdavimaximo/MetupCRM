@@ -1,4 +1,3 @@
-using Metup.Domain.Users;
 using MediatR;
 
 namespace Metup.Application.Auth.Commands.RegisterOrganization;
@@ -14,4 +13,4 @@ public record RegisterOrganizationResult(
     Guid UserId,
     string Name,
     string Email,
-    UserRole Role);
+    string RoleName);

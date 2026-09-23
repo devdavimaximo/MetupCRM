@@ -32,7 +32,6 @@ export type LostReason = "Preco" | "SemInteresse" | "Concorrente" | "SemResposta
 export type UserSummary = {
   id: string
   name: string
-  role: "Admin" | "Closer" | "Sdr"
 }
 
 export type StageChange = {

@@ -15,7 +15,7 @@ public class TaskCalendarTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static GetTaskCalendarQueryHandler Handler(TasksTestContext context, Guid userId, UserRole role, FakeOrganizationClock? clock = null) =>
+    private static GetTaskCalendarQueryHandler Handler(TasksTestContext context, Guid userId, DefaultRole role, FakeOrganizationClock? clock = null) =>
         new(context.Db, context.Base.As(userId, role), clock ?? Clock);
 
     [Fact]
@@ -29,7 +29,7 @@ public class TaskCalendarTests
         context.AddTask(NowUtc.AddDays(1), cancelledAtUtc: NowUtc);                  // cancelada: fora
         context.AddTask(new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc));      // outro mês: fora
 
-        var days = await Handler(context, context.SdrUserId, UserRole.Sdr).Handle(new GetTaskCalendarQuery("2026-09", null, false), Ct);
+        var days = await Handler(context, context.SdrUserId, DefaultRole.Sdr).Handle(new GetTaskCalendarQuery("2026-09", null, false), Ct);
 
         Assert.Equal(
             [new TaskCalendarDayDto(new DateOnly(2026, 9, 16), 2, 1), new TaskCalendarDayDto(new DateOnly(2026, 9, 17), 1, 0)],
@@ -46,7 +46,7 @@ public class TaskCalendarTests
         context.AddTask(new DateTime(2026, 3, 9, 4, 30, 0, DateTimeKind.Utc));  // 09/03 00:30 EDT
         context.AddTask(new DateTime(2026, 3, 8, 4, 30, 0, DateTimeKind.Utc));  // 07/03 23:30 EST
 
-        var days = await Handler(context, context.SdrUserId, UserRole.Sdr, clock).Handle(new GetTaskCalendarQuery("2026-03", null, false), Ct);
+        var days = await Handler(context, context.SdrUserId, DefaultRole.Sdr, clock).Handle(new GetTaskCalendarQuery("2026-03", null, false), Ct);
 
         Assert.Equal([7, 8, 9], days.Select(d => d.Date.Day));
         Assert.All(days, d => Assert.Equal(1, d.Open));
@@ -60,12 +60,12 @@ public class TaskCalendarTests
         context.AddTask(NowUtc.AddDays(1), ownerUserId: context.AdminUserId);
         var query = new GetTaskCalendarQuery("2026-09", null, true);
 
-        var all = await Handler(context, context.AdminUserId, UserRole.Admin).Handle(query, Ct);
-        var mine = await Handler(context, context.SdrUserId, UserRole.Sdr).Handle(query with { AllOwners = false }, Ct);
+        var all = await Handler(context, context.AdminUserId, DefaultRole.Admin).Handle(query, Ct);
+        var mine = await Handler(context, context.SdrUserId, DefaultRole.Sdr).Handle(query with { AllOwners = false }, Ct);
 
         Assert.Equal(2, Assert.Single(all).Open);
         Assert.Equal(1, Assert.Single(mine).Open);
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() => Handler(context, context.SdrUserId, UserRole.Sdr).Handle(query, Ct));
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => Handler(context, context.SdrUserId, DefaultRole.Sdr).Handle(query, Ct));
     }
 
     [Theory]

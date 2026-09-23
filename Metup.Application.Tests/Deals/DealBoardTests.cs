@@ -17,13 +17,13 @@ public class DealBoardTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Theory]
-    [InlineData(UserRole.Admin, true)]
-    [InlineData(UserRole.Sdr, false)]
-    public async Task Contagem_e_soma_de_cada_coluna_batem_com_a_listagem_e_o_DealValue(UserRole role, bool allOwners)
+    [InlineData(DefaultRole.Admin, true)]
+    [InlineData(DefaultRole.Sdr, false)]
+    public async Task Contagem_e_soma_de_cada_coluna_batem_com_a_listagem_e_o_DealValue(DefaultRole role, bool allOwners)
     {
         using var context = new PipelineTestContext();
         Seed(context);
-        var userId = role == UserRole.Admin ? context.AdminUserId : context.SdrUserId;
+        var userId = role == DefaultRole.Admin ? context.AdminUserId : context.SdrUserId;
 
         var board = await context.Board(userId, role).Handle(
             new GetDealBoardQuery(new DealPipelineFilter(AllOwners: allOwners), PerColumn: 1), Ct);
@@ -59,7 +59,7 @@ public class DealBoardTests
         var lostInPeriod = context.AddDeal(context.AdminUserId, Now.AddDays(-20), ticket: 3_000m);
         context.Close(lostInPeriod, won: false, Now.AddDays(-1), reason: LostReason.Concorrente);
 
-        var board = await context.Board(context.AdminUserId, UserRole.Admin).Handle(new GetDealBoardQuery(AllOwners), Ct);
+        var board = await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(new GetDealBoardQuery(AllOwners), Ct);
 
         Assert.Equal(old.Id, Assert.Single(board.Columns.Single(c => c.Stage == DealStage.Prospect).Items).Id);
         Assert.Equal(new DateOnly(2026, 8, 17), board.PeriodStartLocal);
@@ -82,7 +82,7 @@ public class DealBoardTests
         Assert.False(lostCard.ValueIsEstimated);
 
         // Período que cobre o ganho antigo: ele entra; o recente, não.
-        var earlier = await context.Board(context.AdminUserId, UserRole.Admin).Handle(
+        var earlier = await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(
             new GetDealBoardQuery(AllOwners, new DateOnly(2026, 7, 1), new DateOnly(2026, 8, 15)), Ct);
         Assert.Equal(wonBefore.Id, Assert.Single(earlier.Closed.Won.Items).Id);
         Assert.Equal(old.Id, Assert.Single(earlier.Columns.Single(c => c.Stage == DealStage.Prospect).Items).Id);
@@ -95,7 +95,7 @@ public class DealBoardTests
         var whatsApp = context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 100m, source: DealSource.WhatsApp);
         var retail = context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 200m, retail: true);
         context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 400m);
-        var handler = context.Board(context.AdminUserId, UserRole.Admin);
+        var handler = context.Board(context.AdminUserId, DefaultRole.Admin);
 
         async Task<IReadOnlyList<Guid>> Ids(DealPipelineFilter filter)
         {
@@ -119,7 +119,7 @@ public class DealBoardTests
         var adminDeal = context.AddDeal(context.AdminUserId, Now.AddDays(-5), amount: 100m);
         var sdrDeal = context.AddDeal(context.SdrUserId, Now.AddDays(-5), amount: 200m);
 
-        async Task AssertSees(Guid userId, UserRole role, DealPipelineFilter filter, Guid? expectedOwner, params Guid[] expectedIds)
+        async Task AssertSees(Guid userId, DefaultRole role, DealPipelineFilter filter, Guid? expectedOwner, params Guid[] expectedIds)
         {
             var board = await context.Board(userId, role).Handle(new GetDealBoardQuery(filter), Ct);
             Assert.Equal(expectedOwner, board.OwnerUserId);
@@ -127,14 +127,14 @@ public class DealBoardTests
         }
 
         // SDR: os próprios, peça o que pedir.
-        await AssertSees(context.SdrUserId, UserRole.Sdr, new DealPipelineFilter(), context.SdrUserId, sdrDeal.Id);
-        await AssertSees(context.SdrUserId, UserRole.Sdr, AllOwners, context.SdrUserId, sdrDeal.Id);
-        await AssertSees(context.SdrUserId, UserRole.Sdr, new DealPipelineFilter(context.AdminUserId), context.SdrUserId, sdrDeal.Id);
+        await AssertSees(context.SdrUserId, DefaultRole.Sdr, new DealPipelineFilter(), context.SdrUserId, sdrDeal.Id);
+        await AssertSees(context.SdrUserId, DefaultRole.Sdr, AllOwners, context.SdrUserId, sdrDeal.Id);
+        await AssertSees(context.SdrUserId, DefaultRole.Sdr, new DealPipelineFilter(context.AdminUserId), context.SdrUserId, sdrDeal.Id);
 
         // Admin/Closer: sem pedido = os próprios; todos; ou a carteira pedida.
-        await AssertSees(context.AdminUserId, UserRole.Admin, new DealPipelineFilter(), context.AdminUserId, adminDeal.Id);
-        await AssertSees(context.CloserUserId, UserRole.Closer, AllOwners, null, adminDeal.Id, sdrDeal.Id);
-        await AssertSees(context.CloserUserId, UserRole.Closer, new DealPipelineFilter(context.SdrUserId), context.SdrUserId, sdrDeal.Id);
+        await AssertSees(context.AdminUserId, DefaultRole.Admin, new DealPipelineFilter(), context.AdminUserId, adminDeal.Id);
+        await AssertSees(context.CloserUserId, DefaultRole.Closer, AllOwners, null, adminDeal.Id, sdrDeal.Id);
+        await AssertSees(context.CloserUserId, DefaultRole.Closer, new DealPipelineFilter(context.SdrUserId), context.SdrUserId, sdrDeal.Id);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class DealBoardTests
         var twins = new[] { twinA.Id, twinB.Id }.Order().ToArray();
 
         async Task<Guid[]> Order(DealBoardSort sort) =>
-            (await context.Board(context.AdminUserId, UserRole.Admin).Handle(new GetDealBoardQuery(AllOwners, Sort: sort), Ct))
+            (await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(new GetDealBoardQuery(AllOwners, Sort: sort), Ct))
             .Columns.Single(c => c.Stage == DealStage.Prospect).Items.Select(i => i.Id).ToArray();
 
         Guid[] stalledFirst = [oldest.Id, noValue.Id, .. twins, newest.Id];
@@ -179,11 +179,11 @@ public class DealBoardTests
         var won = context.AddDeal(context.AdminUserId, Now.AddDays(-20), amount: 50m);
         context.Close(won, won: true, Now.AddDays(-2));
 
-        var board = await context.Board(context.AdminUserId, UserRole.Admin).Handle(new GetDealBoardQuery(AllOwners, PerColumn: 2), Ct);
+        var board = await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(new GetDealBoardQuery(AllOwners, PerColumn: 2), Ct);
         var prospect = board.Columns.Single(c => c.Stage == DealStage.Prospect);
         Assert.Equal((3, 600m, 2, true), (prospect.Count, prospect.Total, prospect.Items.Count, prospect.HasMore));
 
-        var column = context.Column(context.AdminUserId, UserRole.Admin);
+        var column = context.Column(context.AdminUserId, DefaultRole.Admin);
         var page2 = await column.Handle(new GetDealBoardColumnQuery(AllOwners, DealStage.Prospect, Page: 2, PerColumn: 2), Ct);
         Assert.Equal((3, 600m, 2, 1, false), (page2.Count, page2.Total, page2.Page, page2.Items.Count, page2.HasMore));
         Assert.DoesNotContain(page2.Items[0].Id, prospect.Items.Select(i => i.Id));
@@ -225,7 +225,7 @@ public class DealBoardTests
 
         var fresh = context.AddDeal(context.AdminUserId, Now.AddDays(-2), amount: 1_000m, ticket: 800m);
 
-        var board = await context.Board(context.AdminUserId, UserRole.Admin).Handle(new GetDealBoardQuery(AllOwners), Ct);
+        var board = await context.Board(context.AdminUserId, DefaultRole.Admin).Handle(new GetDealBoardQuery(AllOwners), Ct);
         var card = Assert.Single(board.Columns.Single(c => c.Stage == DealStage.Qualificacao).Items);
 
         Assert.Equal("Empresa Alfa", card.CompanyName);
