@@ -44,10 +44,12 @@ type Props = {
   isLoading: boolean
   error: string | null
   onMessageSent: (message: Message) => void
+  /** Mensagens que chegaram agora pelo tempo real (item 25): realce breve de 2–3s. */
+  highlightedMessageIds?: ReadonlySet<string>
 }
 
 /** Thread da conversa — inbound à esquerda, outbound (SDR ou automação) à direita, agrupado por dia. */
-export function MessageThread({ conversationId, messages, isLoading, error, onMessageSent }: Props) {
+export function MessageThread({ conversationId, messages, isLoading, error, onMessageSent, highlightedMessageIds }: Props) {
   const [body, setBody] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -123,7 +125,7 @@ export function MessageThread({ conversationId, messages, isLoading, error, onMe
                     <span className="h-px flex-1 bg-line-soft" />
                   </div>
                 )}
-                <MessageBubble message={message} />
+                <MessageBubble message={message} highlight={highlightedMessageIds?.has(message.id) ?? false} />
               </Fragment>
             )
           })}
@@ -195,22 +197,23 @@ export function MessageThread({ conversationId, messages, isLoading, error, onMe
   )
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, highlight = false }: { message: Message; highlight?: boolean }) {
   const isOutbound = message.direction === "Outbound"
   const isBot = message.authorKind === "Bot"
   const authorLabel = isBot ? "Assistente Metup" : message.authorUserName
 
   return (
-    <div className={cn("flex flex-col gap-1", isOutbound ? "items-end" : "items-start")}>
+    <div data-highlight={highlight || undefined} className={cn("flex flex-col gap-1", isOutbound ? "items-end" : "items-start")}>
       {message.body && (
         <div
           className={cn(
-            "max-w-[min(34rem,85%)] rounded-sm border px-3.5 py-2.5 text-base whitespace-pre-wrap text-fg",
+            "max-w-[min(34rem,85%)] rounded-sm border px-3.5 py-2.5 text-base whitespace-pre-wrap text-fg transition-colors duration-700 motion-reduce:transition-none",
             isOutbound
               ? isBot
                 ? "rounded-br-xs border-line-strong/40 bg-surface-3"
                 : "rounded-br-xs border-accent/25 bg-accent/10"
-              : "rounded-bl-xs border-line-soft bg-surface-2"
+              : "rounded-bl-xs border-line-soft bg-surface-2",
+            highlight && "border-accent/60 bg-accent/20"
           )}
         >
           {message.body}

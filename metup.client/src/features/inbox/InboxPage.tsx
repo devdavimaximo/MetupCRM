@@ -8,7 +8,8 @@ import { EmptyState } from "@/components/ui/states"
 import { Hint, TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/toast"
 import type { DealDrawerSection } from "@/features/deals/deal-section"
-import { useDebouncedValue } from "@/lib/hooks"
+import { useDebouncedValue, useMediaQuery } from "@/lib/hooks"
+import { useRealtime } from "@/lib/realtime"
 import { useToasts } from "@/lib/toasts"
 import { readUrlState, writeUrlState } from "@/lib/url-state"
 import { cn } from "@/lib/utils"
@@ -18,6 +19,7 @@ import { ConversationMenu } from "./ConversationMenu"
 import { ContextPanel } from "./ContextPanel"
 import { InboxHeader } from "./InboxHeader"
 import { MessageThread } from "./MessageThread"
+import { useInboxShortcuts } from "./useInboxShortcuts"
 import {
   applyConversationTag,
   favoriteConversation,
@@ -46,6 +48,12 @@ type Props = {
 }
 
 const PAGE_SIZE = 50
+/** Curto de propósito (item 25): agrupa rajadas de mensagens sem deixar a thread "atrasada". */
+const REALTIME_DEBOUNCE_MS = 500
+/** Quanto tempo a mensagem chegada agora fica realçada. */
+const MESSAGE_HIGHLIGHT_MS = 2_500
+/** Abaixo de `lg` a thread cobre a lista (mestre-detalhe) — o mesmo ponto de corte do grid e do botão "Voltar". */
+const MOBILE_THREAD_QUERY = "(max-width: 1023px)"
 
 const TAB_FROM_URL: Record<string, ConversationTab> = { "nao-lidas": "unread", favoritas: "favorite" }
 const TAB_TO_URL: Record<ConversationTab, string> = { all: "", unread: "nao-lidas", favorite: "favoritas" }
@@ -91,6 +99,23 @@ export function InboxPage({ onOpenDeal, onOpenCompany }: Props) {
   const [isContextLoading, setIsContextLoading] = useState(false)
   const [contextError, setContextError] = useState<string | null>(null)
   const [isAutomationPending, setIsAutomationPending] = useState(false)
+
+  // ── Tempo real (item 25) ──────────────────────────────────────────────────────
+  const [highlightedMessageIds, setHighlightedMessageIds] = useState<ReadonlySet<string>>(() => new Set())
+  const messageHighlightTimer = useRef<number | undefined>(undefined)
+  const realtimeTimer = useRef<number | undefined>(undefined)
+  const pendingThreadRefresh = useRef(false)
+  const pendingContextRefresh = useRef(false)
+  const pendingListItemIds = useRef<Set<string>>(new Set())
+  const pendingRevalidate = useRef(false)
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(messageHighlightTimer.current)
+      window.clearTimeout(realtimeTimer.current)
+    },
+    []
+  )
 
   const isLoadingMoreRef = useRef(false)
   const filterKeyRef = useRef("")
@@ -258,7 +283,152 @@ export function InboxPage({ onOpenDeal, onOpenCompany }: Props) {
     })
   }
 
+  // ── Tempo real (item 25) ──────────────────────────────────────────────────────
+  // O evento do hub só diz "isto mudou" (sem o valor novo — ver `RealtimeEventMessage` no back).
+  // Cada tipo refaz a consulta certa; tudo é agrupado por um debounce curto para rajadas de mensagem.
+
+  /** Mensagem nova na thread aberta: busca de novo, realça o que chegou e marca como lida se for inbound. */
+  async function refreshThread() {
+    if (!selectedId) return
+    const id = selectedId
+    try {
+      const fresh = await listMessages(id)
+      const known = new Set(messages.map((m) => m.id))
+      const added = fresh.filter((m) => !known.has(m.id))
+      setMessages(fresh)
+
+      if (added.length > 0) {
+        setHighlightedMessageIds(new Set(added.map((m) => m.id)))
+        window.clearTimeout(messageHighlightTimer.current)
+        messageHighlightTimer.current = window.setTimeout(() => setHighlightedMessageIds(new Set()), MESSAGE_HIGHLIGHT_MS)
+
+        if (added.some((m) => m.direction === "Inbound")) {
+          // O SDR está olhando a conversa agora — não deixa o badge de não lida acender para ele.
+          markConversationRead(id).catch(() => {})
+          setConversations((current) => current.map((c) => (c.id === id ? { ...c, isUnread: false } : c)))
+        }
+      }
+    } catch {
+      /* falha silenciosa: o próximo evento tenta de novo */
+    }
+  }
+
+  /** Status/automação/tags da conversa aberta podem ter mudado em outra aba. */
+  async function refreshContext() {
+    if (!selectedId) return
+    const id = selectedId
+    try {
+      setContext(await getConversationContext(id))
+    } catch {
+      /* falha silenciosa */
+    }
+  }
+
+  /**
+   * Atualiza só o item de uma conversa na lista, sem reordenar (evita a linha "pular" embaixo do
+   * cursor de quem está navegando). Se ela não estiver carregada, só revalida os contadores das
+   * abas — sem forçar a lista a recarregar.
+   */
+  async function refreshListItem(conversationId: string) {
+    if (!conversations.some((c) => c.id === conversationId)) {
+      getConversationsSummary().then(setCounts).catch(() => {})
+      return
+    }
+
+    try {
+      const result = await listConversations({
+        search: debouncedSearch,
+        channel: channels,
+        status: statuses,
+        unread: tab === "unread" ? true : undefined,
+        favorite: tab === "favorite" ? true : undefined,
+        page: 1,
+        pageSize: Math.max(conversations.length, PAGE_SIZE),
+      })
+      const fresh = result.items.find((c) => c.id === conversationId)
+      setConversations((current) =>
+        fresh ? current.map((c) => (c.id === conversationId ? fresh : c)) : current.filter((c) => c.id !== conversationId)
+      )
+      if (!fresh) setTotalCount((total) => Math.max(0, total - 1))
+    } catch {
+      /* falha silenciosa: o próximo evento tenta de novo */
+    }
+    getConversationsSummary().then(setCounts).catch(() => {})
+  }
+
+  /** Reconexão, foco sem conexão ou 60s sem eventos: refaz a página 1, os contadores e a thread aberta. */
+  function revalidateAll() {
+    listConversations({
+      search: debouncedSearch,
+      channel: channels,
+      status: statuses,
+      unread: tab === "unread" ? true : undefined,
+      favorite: tab === "favorite" ? true : undefined,
+      page: 1,
+      pageSize: PAGE_SIZE,
+    })
+      .then((result) => {
+        setConversations(result.items)
+        setTotalCount(result.totalCount)
+        setPage(1)
+      })
+      .catch(() => {})
+    getConversationsSummary().then(setCounts).catch(() => {})
+    if (selectedId) {
+      void refreshThread()
+      void refreshContext()
+    }
+  }
+
+  function flushRealtime() {
+    if (pendingRevalidate.current) {
+      pendingRevalidate.current = false
+      pendingThreadRefresh.current = false
+      pendingContextRefresh.current = false
+      pendingListItemIds.current.clear()
+      revalidateAll()
+      return
+    }
+    if (pendingThreadRefresh.current) {
+      pendingThreadRefresh.current = false
+      void refreshThread()
+    }
+    if (pendingContextRefresh.current) {
+      pendingContextRefresh.current = false
+      void refreshContext()
+    }
+    const ids = pendingListItemIds.current
+    pendingListItemIds.current = new Set()
+    ids.forEach((id) => void refreshListItem(id))
+  }
+
+  useRealtime((event) => {
+    if (event.type === "revalidate") {
+      pendingRevalidate.current = true
+    } else if (
+      event.conversationId &&
+      (event.type === "conversation.messageReceived" ||
+        event.type === "conversation.messageSent" ||
+        event.type === "conversation.statusChanged" ||
+        event.type === "conversation.favorited")
+    ) {
+      const id = event.conversationId
+      const isMessageEvent = event.type === "conversation.messageReceived" || event.type === "conversation.messageSent"
+      if (id === selectedId && isMessageEvent) pendingThreadRefresh.current = true
+      if (id === selectedId && event.type === "conversation.statusChanged") pendingContextRefresh.current = true
+      pendingListItemIds.current.add(id)
+    } else {
+      return
+    }
+    window.clearTimeout(realtimeTimer.current)
+    realtimeTimer.current = window.setTimeout(flushRealtime, REALTIME_DEBOUNCE_MS)
+  })
+
   useEffect(() => {
+    // Realce é por id de mensagem: trocar de conversa invalida qualquer realce pendente da anterior.
+    setHighlightedMessageIds(new Set())
+    window.clearTimeout(messageHighlightTimer.current)
+
     if (!selectedId) {
       setMessages([])
       setContext(null)
@@ -326,6 +496,17 @@ export function InboxPage({ onOpenDeal, onOpenCompany }: Props) {
   const activeChannel = context?.channel ?? selectedConversation?.channel ?? null
   const activeStatus = context?.status ?? selectedConversation?.status ?? null
   const activePhone = context?.contactWhatsApp ?? context?.contactPhone ?? null
+
+  // ── Atalhos de teclado (item 23) ──────────────────────────────────────────────
+  const isMobileThread = useMediaQuery(MOBILE_THREAD_QUERY) && isThreadOpen
+  useInboxShortcuts({
+    conversations,
+    selectedId,
+    isThreadOpenOnMobile: isMobileThread,
+    onSelect: setSelectedId,
+    onFocusSearch: () => document.getElementById("conversation-search")?.focus(),
+    onBack: () => setSelectedId(null),
+  })
 
   return (
     <TooltipProvider>
@@ -429,6 +610,7 @@ export function InboxPage({ onOpenDeal, onOpenCompany }: Props) {
                   isLoading={isThreadLoading}
                   error={threadError}
                   onMessageSent={(message) => setMessages((current) => [...current, message])}
+                  highlightedMessageIds={highlightedMessageIds}
                 />
               </>
             ) : (

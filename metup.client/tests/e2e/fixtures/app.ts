@@ -1,6 +1,7 @@
 import { test as base, expect, type Page, type Route } from "@playwright/test"
 
 import * as data from "./data"
+import { ConversationStore } from "./conversations"
 import { BoardStore } from "./pipeline"
 import { NOW, TaskStore } from "./tasks"
 
@@ -50,6 +51,17 @@ export type ApiPath =
   | "pipelineInsights"
   | "pipelineEvolution"
   | "companyFilterOptions"
+  | "conversations"
+  | "conversationsSummary"
+  | "conversationTagOptions"
+  | "conversationMessages"
+  | "conversationContext"
+  | "conversationStatus"
+  | "conversationAutomation"
+  | "conversationRead"
+  | "conversationFavorite"
+  | "conversationTagsApply"
+  | "conversationTagsRemove"
 
 const ROUTES: Record<ApiPath, string> = {
   overview: "**/api/dashboard/overview**",
@@ -84,6 +96,18 @@ const ROUTES: Record<ApiPath, string> = {
   changeStage: "**/api/deals/*/stage**",
   closeDeal: "**/api/deals/*/close",
   companyFilterOptions: "**/api/companies/filter-options",
+  // A lista exige "?" logo depois de "conversations": não casa com "/summary" nem "/tag-options".
+  conversations: "**/api/conversations?**",
+  conversationsSummary: "**/api/conversations/summary**",
+  conversationTagOptions: "**/api/conversations/tag-options**",
+  conversationMessages: "**/api/conversations/*/messages",
+  conversationContext: "**/api/conversations/*/context",
+  conversationStatus: "**/api/conversations/*/status",
+  conversationAutomation: "**/api/conversations/*/automation",
+  conversationRead: "**/api/conversations/*/read",
+  conversationFavorite: "**/api/conversations/*/favorite",
+  conversationTagsApply: "**/api/conversations/*/tags",
+  conversationTagsRemove: "**/api/conversations/*/tags/*",
 }
 
 /** Resposta de erro no formato que o `apiFetch` sabe traduzir. */
@@ -114,6 +138,7 @@ function defaults(): Record<ApiPath, Handler | ResponseBody> {
     company: data.company,
     ...store.routes(),
     ...new BoardStore().routes(),
+    ...new ConversationStore().routes(),
     // O dashboard conclui a tarefa-1 da própria fila (não da loja): a resposta fixa de antes continua.
     completeTask: data.task({ status: "Concluida", completedAt: "2026-09-15T17:05:00Z" }),
   }
@@ -179,5 +204,13 @@ export async function gotoPipeline(page: Page, query = "") {
   await expect(page.getByRole("heading", { level: 1, name: "Pipeline Comercial" })).toBeVisible()
 }
 
+/**
+ * Abre a Inbox. `query` entra depois de `vista=inbox` (ex.: `&conversa=conv-1`).
+ */
+export async function gotoConversas(page: Page, query = "") {
+  await page.goto(`/?vista=inbox${query}`)
+  await expect(page.getByRole("heading", { level: 1, name: "Conversas" })).toBeVisible()
+}
+
 export const test = base
-export { expect, data, TaskStore, BoardStore }
+export { expect, data, TaskStore, BoardStore, ConversationStore }

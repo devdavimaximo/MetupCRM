@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react"
 
+import { RealtimeIndicator } from "@/components/RealtimeIndicator"
 import { Button } from "@/components/ui/button"
 import { ToggleChips } from "@/components/ui/choice-chips"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -32,6 +33,9 @@ export function InboxHeader({ channels, onChannelsChange, statuses, onStatusesCh
           <li aria-hidden="true">/</li>
           <li aria-current="page" className="text-accent">
             Conversas
+          </li>
+          <li>
+            <RealtimeIndicator />
           </li>
         </ol>
       </nav>

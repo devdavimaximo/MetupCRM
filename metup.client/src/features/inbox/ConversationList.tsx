@@ -91,12 +91,16 @@ export function ConversationList({
             placeholder="Buscar por contato ou empresa…"
             autoComplete="off"
             spellCheck={false}
+            aria-describedby="conversation-shortcuts-hint"
           />
         </div>
         <p className="sr-only" aria-live="polite">
           {isLoading && conversations.length === 0
             ? "Carregando conversas…"
             : pluralize(totalCount, "conversa encontrada", "conversas encontradas")}
+        </p>
+        <p id="conversation-shortcuts-hint" className="sr-only">
+          Atalhos de teclado: barra foca esta busca, J e K navegam entre as conversas da lista, Esc volta para a lista no celular.
         </p>
       </div>
 
