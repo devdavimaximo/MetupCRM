@@ -1,7 +1,19 @@
+using FluentValidation;
+using Metup.Application.Common.Interfaces;
 using Metup.Application.Reports.Common;
 using MediatR;
 
 namespace Metup.Application.Reports.Queries.GetSalesPerformanceBySegment;
 
-/// <summary>Período opcional sobre Deal.CreatedAt — sem período, considera todo o histórico da organização.</summary>
-public record GetSalesPerformanceBySegmentQuery(DateTime? From, DateTime? To) : IRequest<SalesPerformanceReportDto>;
+/// <summary>
+/// Desempenho por segmento de empresa na janela pedida (recorte por <c>Deal.CreatedAt</c>), com a janela anterior
+/// de mesma duração como base de comparação.
+/// </summary>
+public record GetSalesPerformanceBySegmentQuery(int Days = IReportPeriodRequest.DefaultDays, DateOnly? From = null, DateOnly? To = null)
+    : IReportPeriodRequest, IRequest<SalesPerformanceReportDto>;
+
+public class GetSalesPerformanceBySegmentQueryValidator : AbstractValidator<GetSalesPerformanceBySegmentQuery>
+{
+    public GetSalesPerformanceBySegmentQueryValidator(IOrganizationClock organizationClock) =>
+        this.AddReportPeriodRules(organizationClock);
+}

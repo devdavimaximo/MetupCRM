@@ -1,9 +1,11 @@
 namespace Metup.Application.Reports.Common;
 
 /// <summary>
-/// Tempo ponta a ponta do funil (V3, quarta fatia — seção 7 do CLAUDE.md): dias entre
-/// <c>Deal.CreatedAt</c> e <c>Deal.ClosedAt</c> nos negócios ganhos do período — diferente de
-/// <see cref="StageDurationDto"/>, que mede tempo por estágio. Dias em <c>double</c>, não
-/// <c>decimal</c>, porque não é dinheiro (regra 4.7 é sobre valores monetários).
+/// Tempo até fechamento como relatório próprio. A UI lê esse número dentro do funil (é lá que ele
+/// ganha sentido, ao lado do tempo por estágio), mas o endpoint segue existindo isolado para quem
+/// consome a API sem a tela — o n8n, por exemplo.
+///
+/// O conteúdo é o mesmo <see cref="TimeToCloseDto"/> do relatório de funil: uma definição só de
+/// "quanto tempo leva para fechar", nunca duas que possam divergir.
 /// </summary>
-public record TimeToCloseReportDto(int WonDealsCount, double? AverageDaysToClose);
+public record TimeToCloseReportDto(ReportPeriodDto Period, TimeToCloseDto TimeToClose);

@@ -21,4 +21,4 @@ public record CohortGroupDto(
     decimal TotalRevenue,
     double? AverageDaysToClose);
 
-public record CohortReportDto(IReadOnlyList<CohortGroupDto> Cohorts);
+public record CohortReportDto(ReportPeriodDto Period, IReadOnlyList<CohortGroupDto> Cohorts);

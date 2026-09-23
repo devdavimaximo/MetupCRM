@@ -1,48 +1,20 @@
-using Metup.Application.Common.Interfaces;
 using Metup.Application.Reports.Common;
-using Metup.Domain.Deals;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace Metup.Application.Reports.Queries.GetTimeToCloseReport;
 
 /// <summary>
-/// Tempo até fechamento (V3, quarta fatia — seção 7 do CLAUDE.md): tempo médio, em dias, entre a
-/// criação do negócio e o fechamento como ganho — ponta a ponta, não por estágio (isso já é
-/// respondido por <c>GetFunnelReportQuery.AverageDaysInStage</c>, via StageChange). O período
-/// (quando informado) escopa por Deal.CreatedAt, igual aos demais relatórios.
+/// Tempo ponta a ponta do funil (V3, seção 7 do CLAUDE.md) — da criação do negócio ao fechamento
+/// como ganho, não por estágio (isso é do relatório de funil, via StageChange). O cálculo é o de
+/// <see cref="TimeToCloseReader"/>: uma definição só, compartilhada com o funil.
 /// </summary>
 public class GetTimeToCloseReportQueryHandler(
-    IApplicationDbContext context,
-    ICurrentUserService currentUserService) : IRequestHandler<GetTimeToCloseReportQuery, TimeToCloseReportDto>
+    ReportPeriodResolver periodResolver,
+    TimeToCloseReader reader) : IRequestHandler<GetTimeToCloseReportQuery, TimeToCloseReportDto>
 {
     public async Task<TimeToCloseReportDto> Handle(GetTimeToCloseReportQuery request, CancellationToken cancellationToken)
     {
-        var organizationId = currentUserService.RequireOrganizationId();
-
-        var deals = context.Deals
-            .AsNoTracking()
-            .Where(d => d.OrganizationId == organizationId);
-
-        if (request.From.HasValue)
-        {
-            deals = deals.Where(d => d.CreatedAt >= request.From.Value);
-        }
-
-        if (request.To.HasValue)
-        {
-            deals = deals.Where(d => d.CreatedAt <= request.To.Value);
-        }
-
-        var wonDeals = await deals
-            .Where(d => d.Status == DealStatus.Ganho && d.ClosedAt != null)
-            .Select(d => new { d.CreatedAt, ClosedAt = d.ClosedAt!.Value })
-            .ToListAsync(cancellationToken);
-
-        var averageDaysToClose = wonDeals.Count > 0
-            ? wonDeals.Average(d => (d.ClosedAt - d.CreatedAt).TotalDays)
-            : (double?)null;
-
-        return new TimeToCloseReportDto(wonDeals.Count, averageDaysToClose);
+        var window = await periodResolver.ResolveAsync(request, cancellationToken);
+        return new TimeToCloseReportDto(window.Period, await reader.ReadAsync(window, cancellationToken));
     }
 }

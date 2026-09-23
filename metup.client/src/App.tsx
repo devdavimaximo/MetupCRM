@@ -8,6 +8,7 @@ import { dealSectionToUrl, type DealDrawerSection } from "@/features/deals/deal-
 import { PipelinePage } from "@/features/deals/PipelinePage"
 import { InboxPage } from "@/features/inbox/InboxPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
+import { readInitialReportsPeriod, reportsPeriodUrlPatch, storeReportsPeriod } from "@/features/reports/reports-period"
 import { TasksPage } from "@/features/tasks/TasksPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { clearSession, getSession, type Session } from "@/lib/auth"
@@ -25,7 +26,7 @@ function App() {
   const [newDealIntent, setNewDealIntent] = useState<NewDealIntent>(null)
   const [reportState] = useState(() => {
     const initial = readUrlState()
-    return { from: initial.reportFrom, to: initial.reportTo, tab: initial.reportTab }
+    return { period: readInitialReportsPeriod(initial), tab: initial.reportTab }
   })
   const [initialDashboardScope] = useState(() => readUrlState().dashboardScope)
 
@@ -123,10 +124,12 @@ function App() {
       {view === "relatorios" && (
         <ReportsPage
           key={`relatorios-${navSeed}`}
-          initialFrom={reportState.from}
-          initialTo={reportState.to}
+          initialPeriod={reportState.period}
           initialTab={reportState.tab}
-          onStateChange={({ from, to, tab }) => writeUrlState({ reportFrom: from, reportTo: to, reportTab: tab === "funil" ? "" : tab })}
+          onStateChange={({ period, tab }) => {
+            storeReportsPeriod(period)
+            writeUrlState({ ...reportsPeriodUrlPatch(period), reportTab: tab === "visao-geral" ? "" : tab })
+          }}
         />
       )}
     </AppShell>

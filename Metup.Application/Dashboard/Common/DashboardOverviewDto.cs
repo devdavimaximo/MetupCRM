@@ -5,9 +5,6 @@ using Metup.Domain.Deals;
 
 namespace Metup.Application.Dashboard.Common;
 
-/// <summary>Um número do período e o mesmo número na janela imediatamente anterior, de mesmo tamanho.</summary>
-public record PeriodValueDto(decimal Current, decimal Previous);
-
 /// <summary>
 /// Receita ganha e fechamentos (ganhos/perdidos) num intervalo da série. <c>BucketStart</c> é a
 /// data <b>local</b> da organização — o front desenha o rótulo como veio, sem reconverter fuso.

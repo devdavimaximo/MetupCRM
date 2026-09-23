@@ -29,6 +29,7 @@ export function readUrlState() {
     tasksPage: params.get("pagina") ?? "",
     tasksPageSize: params.get("porPagina") ?? "",
     tasksDate: params.get("data") ?? "",
+    reportPeriod: params.get("relatorioPeriodo") ?? "",
     reportFrom: params.get("relatorioDe") ?? "",
     reportTo: params.get("relatorioAte") ?? "",
     reportTab: params.get("relatorioAba") ?? "",
@@ -73,6 +74,7 @@ type UrlStatePatch = {
   tasksPage?: string
   tasksPageSize?: string
   tasksDate?: string
+  reportPeriod?: string
   reportFrom?: string
   reportTo?: string
   reportTab?: string
@@ -112,6 +114,7 @@ const STRING_KEYS = [
   ["tasksPage", "pagina"],
   ["tasksPageSize", "porPagina"],
   ["tasksDate", "data"],
+  ["reportPeriod", "relatorioPeriodo"],
   ["reportFrom", "relatorioDe"],
   ["reportTo", "relatorioAte"],
   ["reportTab", "relatorioAba"],

@@ -3,6 +3,7 @@ using Metup.Application.Activities.Common;
 using Metup.Application.Common.Behaviors;
 using Metup.Application.Deals.Analytics;
 using Metup.Application.Deals.Common;
+using Metup.Application.Reports.Common;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,11 @@ public static class DependencyInjection
 
         services.AddScoped<ActivityFeedReader>();
         services.AddScoped<DealBoardReader>();
+
+        // "Que período este relatório está olhando" é decidido num lugar só (seção 7 do CLAUDE.md).
+        services.AddScoped<ReportPeriodResolver>();
+        services.AddScoped<SalesPerformanceReader>();
+        services.AddScoped<TimeToCloseReader>();
 
         // A leitura histórica do funil é a parte cara do dashboard e envelhece devagar: o cálculo
         // fica no provider, e o cache por escopo entra como decorador por cima dele.
