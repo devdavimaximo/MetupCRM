@@ -130,6 +130,11 @@ app.UseHttpsRedirection();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// Explícito e depois dos estáticos: sem isso o roteamento roda no início do pipeline, o fallback
+// do SPA casa com /assets/*.js e o middleware de estáticos (que ignora requisições com endpoint
+// já escolhido) devolve index.html no lugar do bundle.
+app.UseRouting();
+
 app.UseCors("Client");
 app.UseAuthentication();
 app.UseMiddleware<UserAccessMiddleware>();
