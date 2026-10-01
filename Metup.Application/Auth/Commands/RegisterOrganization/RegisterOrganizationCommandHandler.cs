@@ -1,18 +1,30 @@
+using Metup.Application.Common.Exceptions;
 using Metup.Application.Common.Interfaces;
 using Metup.Application.Users.Common;
 using Metup.Domain.Organizations;
 using Metup.Domain.Users;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Metup.Application.Auth.Commands.RegisterOrganization;
 
-/// <remarks>A organização nasce com os cargos padrão (Administrador, Closer, SDR); quem cadastra é o administrador.</remarks>
+/// <remarks>
+/// A organização nasce com os cargos padrão (Administrador, Closer, SDR); quem cadastra é o administrador.
+/// Com o cadastro público fechado (<see cref="IRegistrationPolicy"/>), só a primeira organização passa.
+/// </remarks>
 public class RegisterOrganizationCommandHandler(
     IApplicationDbContext context,
-    IPasswordHasher passwordHasher) : IRequestHandler<RegisterOrganizationCommand, RegisterOrganizationResult>
+    IPasswordHasher passwordHasher,
+    IRegistrationPolicy registrationPolicy) : IRequestHandler<RegisterOrganizationCommand, RegisterOrganizationResult>
 {
     public async Task<RegisterOrganizationResult> Handle(RegisterOrganizationCommand request, CancellationToken cancellationToken)
     {
+        if (!registrationPolicy.AllowsAdditionalOrganizations
+            && await context.Organizations.AnyAsync(cancellationToken))
+        {
+            throw new ForbiddenAccessException("Cadastro de novas organizações está desativado.");
+        }
+
         var email = UserEmail.Normalize(request.AdminEmail);
         await context.EnsureEmailAvailableAsync(email, exceptUserId: null, nameof(request.AdminEmail), cancellationToken);
 

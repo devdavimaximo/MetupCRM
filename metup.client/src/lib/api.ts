@@ -1,6 +1,8 @@
 import { getSession } from "@/lib/auth"
 
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5100"
+// Em dev o Vite (5173) fala com a API em outra porta; no build de produção o front é servido pela
+// própria API, então as chamadas são relativas à mesma origem.
+export const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:5100" : "")
 
 export class ApiError extends Error {
   status: number

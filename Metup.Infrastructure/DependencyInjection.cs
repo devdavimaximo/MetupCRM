@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<ITokenService, JwtTokenService>();
+        services.Configure<RegistrationSettings>(configuration.GetSection(RegistrationSettings.SectionName));
+        services.AddSingleton<IRegistrationPolicy, RegistrationPolicy>();
         services.AddScoped<IOrganizationClock, OrganizationClock>();
         services.AddScoped<ITextSearch, NpgsqlTextSearch>();
 

@@ -5,6 +5,7 @@ using Hangfire.PostgreSql;
 using Metup.Application;
 using Metup.Application.Common.Interfaces;
 using Metup.Infrastructure;
+using Metup.Infrastructure.Persistence;
 using Metup.Infrastructure.Realtime;
 using Metup.Infrastructure.Security;
 using Metup.Server.Middleware;
@@ -12,6 +13,7 @@ using Metup.Server.Security;
 using Metup.Server.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,6 +46,24 @@ builder.Services.AddCors(options =>
 
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
     ?? throw new InvalidOperationException("Jwt settings not configured.");
+
+// HMAC-SHA256 exige chave de pelo menos 256 bits; falhar no boot é melhor que um 500 no primeiro login.
+if (Encoding.UTF8.GetByteCount(jwtSettings.Secret ?? string.Empty) < 32)
+{
+    throw new InvalidOperationException("Jwt:Secret must be at least 32 bytes long.");
+}
+
+// Em produção a aplicação roda atrás do proxy do EasyPanel (Traefik), que termina o HTTPS. Os
+// cabeçalhos X-Forwarded-* restauram esquema e IP do cliente; a rede do proxy não é fixa dentro
+// do Docker, por isso as listas de confiança são limpas (o container só é exposto pelo proxy).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+builder.Services.AddHealthChecks();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -90,6 +110,12 @@ builder.Services.AddHangfireServer();
 
 var app = builder.Build();
 
+if (app.Configuration.GetValue("Database:MigrateOnStartup", defaultValue: true))
+{
+    await app.Services.MigrateDatabaseAsync();
+}
+
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -98,6 +124,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Em produção o build do front (metup.client/dist) é copiado para wwwroot: mesma origem que a
+// API e o hub, então não há CORS nem URL de API embutida no bundle.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseCors("Client");
 app.UseAuthentication();
 app.UseMiddleware<UserAccessMiddleware>();
@@ -105,9 +137,15 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<DashboardHub>(DashboardHub.Path).RequireCors("Client");
 
+app.MapHealthChecks("/health");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseHangfireDashboard();
 }
 
-app.Run();
+// Rotas do React Router caem no index.html; /api e /hubs ficam de fora para que um endpoint
+// inexistente continue respondendo 404 em vez de devolver a página.
+app.MapFallbackToFile("{*path:regex(^(?!api/|hubs/).*$)}", "index.html");
+
+await app.RunAsync();
