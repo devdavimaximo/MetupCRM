@@ -16,7 +16,11 @@ public class LoginCommandHandler(
     {
         var email = UserEmail.Normalize(request.Email);
 
+        // Login é o único momento em que a organização ainda não é conhecida: o e-mail é global e é
+        // ele que a revela. As duas leituras atravessam o filtro de organização e, achado o usuário,
+        // o cargo é buscado presa à organização dele.
         var user = await context.Users
+            .AcrossOrganizations()
             .FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
 
         if (user is null || !user.IsActive || !passwordHasher.Verify(user.PasswordHash, request.Password))
@@ -24,7 +28,10 @@ public class LoginCommandHandler(
             throw new InvalidCredentialsException();
         }
 
-        var role = await context.GetRoleAsync(user.OrganizationId, user.RoleId, cancellationToken);
+        var role = await context.Roles
+            .AcrossOrganizations()
+            .FirstOrDefaultAsync(r => r.Id == user.RoleId && r.OrganizationId == user.OrganizationId, cancellationToken)
+            ?? throw new NotFoundException("Cargo");
         var (token, expiresAtUtc) = tokenService.GenerateToken(user);
 
         return new LoginResult(

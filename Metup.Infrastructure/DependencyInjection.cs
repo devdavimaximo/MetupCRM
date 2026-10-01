@@ -19,6 +19,7 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not configured.");
 
+        services.AddScoped<ITenantContext, CurrentUserTenantContext>();
         services.AddDbContext<MetupDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<MetupDbContext>());
 

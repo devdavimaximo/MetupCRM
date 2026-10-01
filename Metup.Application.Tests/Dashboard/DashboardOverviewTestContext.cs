@@ -70,7 +70,7 @@ public sealed class DashboardOverviewTestContext : IDisposable
             .UseInMemoryDatabase($"dashboard-{Guid.NewGuid()}")
             .Options;
 
-        Db = new MetupDbContext(options);
+        Db = new MetupDbContext(options, new FixedTenantContext(OrganizationId));
 
         Db.Organizations.Add(new Organization { Id = OrganizationId, Name = "Acme" });
         Db.Companies.Add(new Company { Id = CompanyId, OrganizationId = OrganizationId, Name = "Empresa Alfa" });

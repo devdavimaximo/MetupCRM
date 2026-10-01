@@ -68,10 +68,21 @@ switch (command)
         return 1;
 }
 
-static MetupDbContext OpenContext(string connectionString)
+/// <summary>
+/// Contexto preso a uma organização, como o de uma requisição. Nulo só serve para ler
+/// <c>Organization</c> (fora do filtro) e gravar.
+/// </summary>
+static MetupDbContext OpenContext(string connectionString, Guid? organizationId)
 {
     var options = new DbContextOptionsBuilder<MetupDbContext>().UseNpgsql(connectionString).Options;
-    return new MetupDbContext(options);
+    return new MetupDbContext(options, new FixedTenantContext(organizationId));
+}
+
+static async Task<Organization> FindBenchOrganizationAsync(string connectionString)
+{
+    await using var db = OpenContext(connectionString, null);
+    return await db.Organizations.FirstOrDefaultAsync(o => o.Name == OrgName)
+        ?? throw new InvalidOperationException("Massa não encontrada. Rode 'dotnet run -- seed' antes.");
 }
 
 /// <summary>Cria o banco se ele não existir, para a medição não depender de um passo manual.</summary>
@@ -101,7 +112,9 @@ static async Task SeedAsync(string connectionString)
 {
     await EnsureDatabaseAsync(connectionString);
 
-    await using var db = OpenContext(connectionString);
+    // Só lê Organization e grava: o filtro de organização não interfere. A limpeza abre um contexto
+    // preso à organização anterior.
+    await using var db = OpenContext(connectionString, null);
     Console.WriteLine("Aplicando migrations…");
     await db.Database.MigrateAsync();
 
@@ -110,17 +123,18 @@ static async Task SeedAsync(string connectionString)
     {
         Console.WriteLine("Removendo a massa anterior…");
         var id = previous.Id;
-        await db.Activities.Where(a => a.OrganizationId == id).ExecuteDeleteAsync();
-        await db.StageChanges.Where(s => s.OrganizationId == id).ExecuteDeleteAsync();
-        await db.TaskReschedules.Where(r => r.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Tasks.Where(t => t.OrganizationId == id).ExecuteDeleteAsync();
-        await db.DealValueChanges.Where(v => v.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Deals.Where(d => d.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Contacts.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Companies.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Users.Where(u => u.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Roles.Where(r => r.OrganizationId == id).ExecuteDeleteAsync();
-        await db.Organizations.Where(o => o.Id == id).ExecuteDeleteAsync();
+        await using var cleanup = OpenContext(connectionString, id);
+        await cleanup.Activities.Where(a => a.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.StageChanges.Where(s => s.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.TaskReschedules.Where(r => r.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Tasks.Where(t => t.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.DealValueChanges.Where(v => v.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Deals.Where(d => d.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Contacts.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Companies.Where(c => c.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Users.Where(u => u.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Roles.Where(r => r.OrganizationId == id).ExecuteDeleteAsync();
+        await cleanup.Organizations.Where(o => o.Id == id).ExecuteDeleteAsync();
     }
 
     var rng = new Random(20260916);
@@ -270,9 +284,8 @@ static async Task CopyAsync<T>(NpgsqlConnection connection, string copyCommand, 
 
 static async Task MeasureAsync(string connectionString)
 {
-    await using var probe = OpenContext(connectionString);
-    var org = await probe.Organizations.FirstOrDefaultAsync(o => o.Name == OrgName)
-        ?? throw new InvalidOperationException($"Massa não encontrada. Rode 'dotnet run -- seed' antes.");
+    var org = await FindBenchOrganizationAsync(connectionString);
+    await using var probe = OpenContext(connectionString, org.Id);
 
     var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf00@exemplo.invalido");
     var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf01@exemplo.invalido");
@@ -299,7 +312,7 @@ static async Task MeasureAsync(string connectionString)
         for (var run = 0; run < 33; run++)
         {
             // Contexto novo por rodada: sem cache de primeiro nível, como numa requisição de verdade.
-            await using var db = OpenContext(connectionString);
+            await using var db = OpenContext(connectionString, org.Id);
             var currentUser = new BenchUser(user.Id, org.Id, role);
             // Provider sem cache: a medição tem que mostrar o custo do cálculo, não o de um acerto
             // de cache. O ganho do cache é a diferença entre este número e o do cenário "cache quente".
@@ -332,7 +345,7 @@ static async Task MeasureAsync(string connectionString)
 
         for (var run = 0; run < 33; run++)
         {
-            await using var db = OpenContext(connectionString);
+            await using var db = OpenContext(connectionString, org.Id);
             var currentUser = new BenchUser(user.Id, org.Id, role);
             var analytics = new CachedStageAnalyticsProvider(new StageAnalyticsProvider(db), cache);
             var clock = new OrganizationClock(db, currentUser);
@@ -360,7 +373,7 @@ static async Task MeasureAsync(string connectionString)
         var samples = new List<double>();
         for (var run = 0; run < 33; run++)
         {
-            await using var db = OpenContext(connectionString);
+            await using var db = OpenContext(connectionString, org.Id);
             var currentUser = new BenchUser(user.Id, org.Id, role);
             var reader = new ActivityFeedReader(db, new OrganizationClock(db, currentUser));
 
@@ -385,8 +398,8 @@ static async Task MeasureAsync(string connectionString)
 /// </summary>
 static async Task ProfileAsync(string connectionString)
 {
-    await using var probe = OpenContext(connectionString);
-    var org = await probe.Organizations.FirstAsync(o => o.Name == OrgName);
+    var org = await FindBenchOrganizationAsync(connectionString);
+    await using var probe = OpenContext(connectionString, org.Id);
     var now = DateTime.UtcNow;
     var periodStart = now.AddDays(-30);
 
@@ -440,7 +453,7 @@ static async Task ProfileAsync(string connectionString)
         var samples = new List<double>();
         for (var run = 0; run < 13; run++)
         {
-            await using var db = OpenContext(connectionString);
+            await using var db = OpenContext(connectionString, org.Id);
             var stopwatch = Stopwatch.StartNew();
             await work(db);
             stopwatch.Stop();
@@ -473,9 +486,8 @@ static async Task ProfileAsync(string connectionString)
 /// </summary>
 static async Task MeasurePipelineAsync(string connectionString)
 {
-    await using var probe = OpenContext(connectionString);
-    var org = await probe.Organizations.FirstOrDefaultAsync(o => o.Name == OrgName)
-        ?? throw new InvalidOperationException("Massa não encontrada. Rode 'dotnet run -- seed' antes.");
+    var org = await FindBenchOrganizationAsync(connectionString);
+    await using var probe = OpenContext(connectionString, org.Id);
     var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf00@exemplo.invalido");
     var sdr = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf01@exemplo.invalido");
 
@@ -506,7 +518,7 @@ static async Task MeasurePipelineAsync(string connectionString)
         // Como no overview: contexto novo por rodada e as três primeiras fora (plano e JIT).
         for (var i = 0; i < 23; i++)
         {
-            await using var db = OpenContext(connectionString);
+            await using var db = OpenContext(connectionString, org.Id);
             var user = new BenchUser(userId, org.Id, role);
             var stopwatch = Stopwatch.StartNew();
             await run(db, user);

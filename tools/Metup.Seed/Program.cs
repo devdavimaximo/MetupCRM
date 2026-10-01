@@ -27,7 +27,9 @@ var now = DateTime.UtcNow;
 var optionsBuilder = new DbContextOptionsBuilder<MetupDbContext>();
 optionsBuilder.UseNpgsql(connectionString);
 
-await using var db = new MetupDbContext(optionsBuilder.Options);
+// Gravar não passa pelo filtro de organização; ler e apagar passam. Este contexto só lê Organization
+// (fora do filtro) e grava — a limpeza da massa anterior abre um contexto preso àquela organização.
+await using var db = new MetupDbContext(optionsBuilder.Options, FixedTenantContext.None);
 
 Console.WriteLine("Aplicando migrations pendentes...");
 await db.Database.MigrateAsync();
@@ -37,20 +39,21 @@ if (previousOrg is not null)
 {
     Console.WriteLine("Removendo massa anterior da organização 'Metup Demo'...");
     var orgId = previousOrg.Id;
-    await db.Messages.Where(m => m.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Conversations.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.TaskReschedules.Where(r => r.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Tasks.Where(t => t.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Activities.Where(a => a.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.StageChanges.Where(s => s.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.DealValueChanges.Where(v => v.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Deals.Where(d => d.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Contacts.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Companies.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.IntegrationEvents.Where(e => e.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Users.Where(u => u.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Roles.Where(r => r.OrganizationId == orgId).ExecuteDeleteAsync();
-    await db.Organizations.Where(o => o.Id == orgId).ExecuteDeleteAsync();
+    await using var cleanup = new MetupDbContext(optionsBuilder.Options, new FixedTenantContext(orgId));
+    await cleanup.Messages.Where(m => m.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Conversations.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.TaskReschedules.Where(r => r.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Tasks.Where(t => t.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Activities.Where(a => a.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.StageChanges.Where(s => s.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.DealValueChanges.Where(v => v.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Deals.Where(d => d.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Contacts.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Companies.Where(c => c.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.IntegrationEvents.Where(e => e.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Users.Where(u => u.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Roles.Where(r => r.OrganizationId == orgId).ExecuteDeleteAsync();
+    await cleanup.Organizations.Where(o => o.Id == orgId).ExecuteDeleteAsync();
 }
 
 Console.WriteLine("Criando organização e usuários...");

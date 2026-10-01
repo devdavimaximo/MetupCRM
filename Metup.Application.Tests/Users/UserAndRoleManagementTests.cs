@@ -58,7 +58,7 @@ public sealed class UserManagementTestContext : IDisposable
     {
         Db = new MetupDbContext(new DbContextOptionsBuilder<MetupDbContext>()
             .UseInMemoryDatabase($"users-{Guid.NewGuid()}")
-            .Options);
+            .Options, new FixedTenantContext(OrganizationId));
 
         Db.Organizations.Add(new Organization { Id = OrganizationId, Name = "Acme" });
 

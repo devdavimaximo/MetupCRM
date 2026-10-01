@@ -163,7 +163,7 @@ public class SearchTests
     {
         // Só gera o SQL: nenhuma conexão é aberta.
         var options = new DbContextOptionsBuilder<MetupDbContext>().UseNpgsql("Host=localhost;Database=never").Options;
-        using var db = new MetupDbContext(options);
+        using var db = new MetupDbContext(options, FixedTenantContext.None);
 
         var sql = new NpgsqlTextSearch()
             .WhereAnyContains(db.Companies, "50%_x", c => c.Name, c => c.City)

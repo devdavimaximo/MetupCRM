@@ -1,4 +1,5 @@
 using Metup.Application.Activities.Commands.LogActivity;
+using Metup.Application.Common.Interfaces;
 using Metup.Application.Common.Realtime;
 using Metup.Application.Deals.Commands.ChangeDealStage;
 using Metup.Application.Deals.Commands.CloseDeal;
@@ -18,7 +19,8 @@ using Xunit;
 namespace Metup.Application.Tests.Realtime;
 
 /// <summary>Banco que falha no SaveChanges: o aviso de tempo real não pode sair de um comando que não gravou.</summary>
-public sealed class FailingSaveDbContext(DbContextOptions<MetupDbContext> options) : MetupDbContext(options)
+public sealed class FailingSaveDbContext(DbContextOptions<MetupDbContext> options, ITenantContext tenantContext)
+    : MetupDbContext(options, tenantContext)
 {
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         throw new DbUpdateException("falha simulada");
@@ -79,14 +81,14 @@ public class RealtimeNotificationTests
         // Semeia com o contexto normal e roda o comando com um que falha ao gravar, no mesmo banco.
         using var seed = new DashboardOverviewTestContext();
         var deal = seed.AddOpenDeal(seed.AdminUserId, null, null, NowUtc.AddDays(-1));
-        await using (var copy = new MetupDbContext(options))
+        await using (var copy = new MetupDbContext(options, new FixedTenantContext(seed.OrganizationId)))
         {
             // Sem responsável: o comando falha ao gravar, e o Admin age sem recorte por dono.
             copy.Deals.Add(new Deal { Id = deal.Id, OrganizationId = seed.OrganizationId, CompanyId = seed.CompanyId, CreatedAt = deal.CreatedAt });
             await copy.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using var failing = new FailingSaveDbContext(options);
+        await using var failing = new FailingSaveDbContext(options, new FixedTenantContext(seed.OrganizationId));
         var publisher = new RecordingPublisher();
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>

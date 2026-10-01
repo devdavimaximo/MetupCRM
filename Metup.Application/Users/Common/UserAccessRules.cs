@@ -11,7 +11,10 @@ namespace Metup.Application.Users.Common;
 /// <summary>Regras que envolvem mais de um usuário/cargo — o que a entidade sozinha não enxerga.</summary>
 public static class UserAccessRules
 {
-    /// <summary>E-mail é único no sistema inteiro (é a chave de login), não só na organização.</summary>
+    /// <summary>
+    /// E-mail é único no sistema inteiro (é a chave de login), não só na organização — por isso a
+    /// leitura atravessa o filtro de organização. Devolve só "existe ou não", nunca o usuário de fora.
+    /// </summary>
     public static async Task EnsureEmailAvailableAsync(
         this IApplicationDbContext context,
         string normalizedEmail,
@@ -20,6 +23,7 @@ public static class UserAccessRules
         CancellationToken cancellationToken)
     {
         var inUse = await context.Users
+            .AcrossOrganizations()
             .AnyAsync(u => u.Email.ToLower() == normalizedEmail && u.Id != exceptUserId, cancellationToken);
 
         if (inUse)
