@@ -19,6 +19,14 @@ using Metup.Application.Deals.Queries.GetDealBoard;
 using Metup.Application.Deals.Queries.GetPipelineEvolution;
 using Metup.Application.Deals.Queries.GetPipelineInsights;
 using Metup.Application.Deals.Queries.GetPipelineSummary;
+using Metup.Application.Reports.Common;
+using Metup.Application.Reports.Queries.GetCohortReport;
+using Metup.Application.Reports.Queries.GetForecastReport;
+using Metup.Application.Reports.Queries.GetFunnelReport;
+using Metup.Application.Reports.Queries.GetSalesPerformanceByOwner;
+using Metup.Application.Reports.Queries.GetSalesPerformanceBySegment;
+using Metup.Application.Reports.Queries.GetSalesPerformanceBySource;
+using Metup.Application.Reports.Queries.GetTimeToCloseReport;
 using Metup.Domain.Activities;
 using Metup.Domain.Companies;
 using Metup.Domain.Contacts;
@@ -63,8 +71,11 @@ switch (command)
     case "pipeline":
         await MeasurePipelineAsync(connectionString);
         return 0;
+    case "reports":
+        await MeasureReportsAsync(connectionString);
+        return 0;
     default:
-        Console.Error.WriteLine($"Comando desconhecido: {command}. Use 'seed', 'measure', 'profile' ou 'pipeline'.");
+        Console.Error.WriteLine($"Comando desconhecido: {command}. Use 'seed', 'measure', 'profile', 'pipeline' ou 'reports'.");
         return 1;
 }
 
@@ -550,6 +561,69 @@ static async Task MeasurePipelineAsync(string connectionString)
     static Task Evolution(MetupDbContext db, ICurrentUserService user, DealPipelineFilter filter, int months) =>
         new GetPipelineEvolutionQueryHandler(db, user, new OrganizationClock(db, user), Reader(db), new StageAnalyticsProvider(db))
             .Handle(new GetPipelineEvolutionQuery(filter, months), CancellationToken.None);
+}
+
+/// <summary>
+/// Linha de base dos relatórios (F0.7, roadmap-ondas-detalhado.md): os sete handlers de
+/// <c>/api/reports</c> no volume da massa, com a janela padrão da tela (180 dias) e a máxima (366).
+/// Todos leem em memória e agregam no C# — é o número contra o qual a camada analítica (R2/R4) vai
+/// ser comparada. Administrador, porque relatório hoje é sempre da organização inteira.
+/// </summary>
+static async Task MeasureReportsAsync(string connectionString)
+{
+    var org = await FindBenchOrganizationAsync(connectionString);
+    await using var probe = OpenContext(connectionString, org.Id);
+    var admin = await probe.Users.FirstAsync(u => u.OrganizationId == org.Id && u.Email == "perf00@exemplo.invalido");
+
+    Console.WriteLine($"Massa: {await probe.Deals.CountAsync():N0} negócios · "
+        + $"{await probe.Activities.CountAsync():N0} atividades · "
+        + $"{await probe.StageChanges.CountAsync():N0} transições");
+    Console.WriteLine();
+    Console.WriteLine($"{"cenário",-34}{"mín",8}{"p50",8}{"p95",8}");
+    Console.WriteLine(new string('─', 58));
+
+    var scenarios = new List<(string Name, Func<MetupDbContext, ICurrentUserService, Task> Run)>();
+    foreach (var days in new[] { 180, 366 })
+    {
+        scenarios.AddRange(
+        [
+            ($"funnel {days} d", (db, user) => new GetFunnelReportQueryHandler(db, Resolver(db, user))
+                .Handle(new GetFunnelReportQuery(days), CancellationToken.None)),
+            ($"sales-by-owner {days} d", (db, user) => new GetSalesPerformanceByOwnerQueryHandler(db, Resolver(db, user), new SalesPerformanceReader(db))
+                .Handle(new GetSalesPerformanceByOwnerQuery(days), CancellationToken.None)),
+            ($"sales-by-segment {days} d", (db, user) => new GetSalesPerformanceBySegmentQueryHandler(Resolver(db, user), new SalesPerformanceReader(db))
+                .Handle(new GetSalesPerformanceBySegmentQuery(days), CancellationToken.None)),
+            ($"sales-by-source {days} d", (db, user) => new GetSalesPerformanceBySourceQueryHandler(Resolver(db, user), new SalesPerformanceReader(db))
+                .Handle(new GetSalesPerformanceBySourceQuery(days), CancellationToken.None)),
+            ($"time-to-close {days} d", (db, user) => new GetTimeToCloseReportQueryHandler(Resolver(db, user), new TimeToCloseReader(db))
+                .Handle(new GetTimeToCloseReportQuery(days), CancellationToken.None)),
+            ($"cohorts {days} d", (db, user) => new GetCohortReportQueryHandler(Resolver(db, user))
+                .Handle(new GetCohortReportQuery(days), CancellationToken.None)),
+            ($"forecast {days} d", (db, user) => new GetForecastReportQueryHandler(db, Resolver(db, user), new StageAnalyticsProvider(db))
+                .Handle(new GetForecastReportQuery(days), CancellationToken.None)),
+        ]);
+    }
+
+    foreach (var (name, run) in scenarios)
+    {
+        var samples = new List<double>();
+        // Como no overview: contexto novo por rodada e as três primeiras fora (plano e JIT).
+        for (var i = 0; i < 13; i++)
+        {
+            await using var db = OpenContext(connectionString, org.Id);
+            var user = new BenchUser(admin.Id, org.Id, DefaultRole.Admin);
+            var stopwatch = Stopwatch.StartNew();
+            await run(db, user);
+            stopwatch.Stop();
+            if (i >= 3) samples.Add(stopwatch.Elapsed.TotalMilliseconds);
+        }
+
+        samples.Sort();
+        Console.WriteLine($"{name,-34}{samples[0],7:N0}ms{Percentile(samples, 0.50),7:N0}ms{Percentile(samples, 0.95),7:N0}ms");
+    }
+
+    static ReportPeriodResolver Resolver(MetupDbContext db, ICurrentUserService user) =>
+        new(db, user, new OrganizationClock(db, user));
 }
 
 static double Percentile(List<double> sorted, double percentile) =>

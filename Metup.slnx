@@ -3,5 +3,6 @@
   <Project Path="Metup.Application.Tests/Metup.Application.Tests.csproj" />
   <Project Path="Metup.Domain/Metup.Domain.csproj" />
   <Project Path="Metup.Infrastructure/Metup.Infrastructure.csproj" />
+  <Project Path="Metup.Integration.Tests/Metup.Integration.Tests.csproj" />
   <Project Path="Metup.Server/Metup.Server.csproj" />
 </Solution>
