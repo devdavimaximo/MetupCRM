@@ -6,6 +6,7 @@ export type Permission =
   | "PipelineView"
   | "CompaniesView"
   | "ReportsView"
+  | "LeadFinderView"
   | "TeamWideAccess"
   | "UsersManage"
   | "RolesManage"

@@ -12,4 +12,5 @@ public static class IntegrationEventTypes
     public const string DealCreated = "deal.created";
     public const string StageChanged = "stage.changed";
     public const string ActivityLogged = "activity.logged";
+    public const string LeadSearchRequested = "lead_search.requested";
 }

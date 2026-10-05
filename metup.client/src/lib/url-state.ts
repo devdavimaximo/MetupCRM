@@ -1,6 +1,6 @@
-export type View = "dashboard" | "empresas" | "pipeline" | "tarefas" | "inbox" | "relatorios" | "usuarios" | "cargos"
+export type View = "dashboard" | "empresas" | "leads" | "pipeline" | "tarefas" | "inbox" | "relatorios" | "usuarios" | "cargos"
 
-const VIEWS: View[] = ["dashboard", "empresas", "pipeline", "tarefas", "inbox", "relatorios", "usuarios", "cargos"]
+const VIEWS: View[] = ["dashboard", "empresas", "leads", "pipeline", "tarefas", "inbox", "relatorios", "usuarios", "cargos"]
 
 /**
  * Estado navegável na URL (aba ativa, busca, filtros e fichas abertas), para o SDR poder
@@ -51,6 +51,8 @@ export function readUrlState() {
     pipelineStalled: params.get("parados") ?? "",
     pipelineList: params.get("lista") ?? "",
     pipelineMonths: params.get("evolucao") ?? "",
+    leadSearchId: params.get("garimpo") ?? "",
+    leadTab: params.get("leadsAba") ?? "",
   }
 }
 
@@ -96,6 +98,8 @@ type UrlStatePatch = {
   pipelineStalled?: string
   pipelineList?: string
   pipelineMonths?: string
+  leadSearchId?: string
+  leadTab?: string
 }
 
 const STRING_KEYS = [
@@ -136,6 +140,8 @@ const STRING_KEYS = [
   ["pipelineStalled", "parados"],
   ["pipelineList", "lista"],
   ["pipelineMonths", "evolucao"],
+  ["leadSearchId", "garimpo"],
+  ["leadTab", "leadsAba"],
 ] as const
 
 /** Só mexe nas chaves informadas — cada tela cuida do próprio pedaço da URL sem apagar o resto. */

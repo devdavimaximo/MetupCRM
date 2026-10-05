@@ -15,6 +15,7 @@ export type RealtimeEventType =
   | "conversation.messageSent"
   | "conversation.statusChanged"
   | "conversation.favorited"
+  | "leadSearch.updated"
   | "revalidate"
 
 /** Só o que mudou e onde: as telas refazem as próprias queries, que aplicam o escopo de quem vê. */
@@ -23,6 +24,7 @@ export type RealtimeEvent = {
   dealId: string | null
   ownerUserId: string | null
   conversationId?: string | null
+  leadSearchId?: string | null
 }
 
 export type RealtimeStatus = "connecting" | "connected" | "reconnecting" | "disconnected"

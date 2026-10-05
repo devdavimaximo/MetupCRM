@@ -12,6 +12,7 @@ import {
   UserCog,
   PanelLeftClose,
   PanelLeftOpen,
+  Radar,
   type LucideIcon,
 } from "lucide-react"
 
@@ -53,6 +54,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { view: "pipeline", label: "Pipeline", icon: Columns3 },
       { view: "empresas", label: "Empresas", icon: Building2 },
+      { view: "leads", label: "Buscar leads", icon: Radar },
     ],
   },
   {

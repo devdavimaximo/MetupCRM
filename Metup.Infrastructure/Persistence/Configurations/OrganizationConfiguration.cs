@@ -33,6 +33,10 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
             .HasDefaultValue(Organization.DefaultStalledDealDays)
             .IsRequired();
 
+        builder.Property(o => o.LeadSearchWebhookUrl)
+            .HasColumnName("lead_search_webhook_url")
+            .HasMaxLength(Organization.WebhookUrlMaxLength);
+
         builder.Property(o => o.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

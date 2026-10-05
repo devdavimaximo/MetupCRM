@@ -23,6 +23,7 @@ export type DealSource =
   | "Outbound"
   | "Evento"
   | "Outro"
+  | "LeadFinder"
 
 export type DealStatus = "Aberto" | "Ganho" | "Perdido"
 

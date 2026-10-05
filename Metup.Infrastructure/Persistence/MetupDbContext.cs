@@ -7,6 +7,7 @@ using Metup.Domain.Contacts;
 using Metup.Domain.Conversations;
 using Metup.Domain.Deals;
 using Metup.Domain.Integrations;
+using Metup.Domain.LeadFinder;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
 using Metup.Domain.Users;
@@ -67,6 +68,10 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options, ITenantCon
     public DbSet<ConversationTag> ConversationTags => Set<ConversationTag>();
 
     public DbSet<IntegrationEvent> IntegrationEvents => Set<IntegrationEvent>();
+
+    public DbSet<LeadSearch> LeadSearches => Set<LeadSearch>();
+
+    public DbSet<FoundLead> FoundLeads => Set<FoundLead>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

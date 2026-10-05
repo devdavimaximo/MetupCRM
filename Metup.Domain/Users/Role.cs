@@ -92,6 +92,7 @@ public static class DefaultPermissions
         Permission.PipelineView,
         Permission.CompaniesView,
         Permission.ReportsView,
+        Permission.LeadFinderView,
     ];
 
     public static IReadOnlyList<Permission> Sdr { get; } = Pages;

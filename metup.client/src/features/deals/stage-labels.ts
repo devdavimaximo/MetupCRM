@@ -32,6 +32,7 @@ export const stageLabels: Record<DealStage, string> = {
 export const sourceLabels: Record<DealSource, string> = {
   Sdr: "SDR",
   Outbound: "Outbound",
+  LeadFinder: "Buscador de leads",
   WhatsApp: "WhatsApp",
   MetaAds: "Meta Ads",
   Indicacao: "Indicação",

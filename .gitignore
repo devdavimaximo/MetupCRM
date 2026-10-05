@@ -2,6 +2,7 @@
 docs/
 .env
 .env.*
+.mcp.json
 
 # .NET
 bin/

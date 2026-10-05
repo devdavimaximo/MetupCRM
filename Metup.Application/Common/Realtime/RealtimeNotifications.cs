@@ -48,6 +48,7 @@ public static class RealtimeEventTypes
     public const string ConversationMessageSent = "conversation.messageSent";
     public const string ConversationStatusChanged = "conversation.statusChanged";
     public const string ConversationFavorited = "conversation.favorited";
+    public const string LeadSearchUpdated = "leadSearch.updated";
 }
 
 public sealed record DealCreatedNotification(Guid OrganizationId, Guid DealId, Guid OwnerUserId) : IRealtimeNotification
@@ -124,4 +125,22 @@ public sealed record ConversationFavoritedNotification(Guid OrganizationId, Guid
     Guid? IRealtimeNotification.DealId => null;
     Guid? IRealtimeNotification.OwnerUserId => UserId;
     public bool UserScoped => true;
+}
+
+/// <summary>Implementada pelos avisos do buscador de leads — carregam a busca que mudou.</summary>
+public interface ILeadSearchRealtimeNotification : IRealtimeNotification
+{
+    Guid LeadSearchId { get; }
+}
+
+/// <summary>
+/// Busca pedida, lote de resultados chegou, busca terminou ou leads foram triados — vai para a
+/// organização inteira (qualquer SDR pode estar olhando a mesma busca).
+/// </summary>
+public sealed record LeadSearchUpdatedNotification(Guid OrganizationId, Guid LeadSearchId) : ILeadSearchRealtimeNotification
+{
+    public string Type => RealtimeEventTypes.LeadSearchUpdated;
+    Guid? IRealtimeNotification.DealId => null;
+    Guid? IRealtimeNotification.OwnerUserId => null;
+    public bool UserScoped => false;
 }

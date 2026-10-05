@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
  */
 function Table({ className, minWidth, ...props }: React.ComponentProps<"table"> & { minWidth?: string }) {
   return (
-    <div className="overflow-x-auto">
+    // `relative`: textos sr-only (absolutos) das células ficam presos ao rolador em vez de alargar a página.
+    <div className="relative overflow-x-auto">
       <table
         data-slot="table"
         style={minWidth ? { minWidth } : undefined}

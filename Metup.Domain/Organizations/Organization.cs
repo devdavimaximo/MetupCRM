@@ -41,5 +41,33 @@ public class Organization
         StalledDealDays = days;
     }
 
+    /// <summary>
+    /// Webhook do n8n que recebe na hora os pedidos de busca de leads (<c>lead_search.requested</c>).
+    /// Nulo = sem entrega imediata: o pedido fica na fila de eventos para o n8n consultar. É o
+    /// endereço da automação, não um segredo de integração (as chaves de mapas/IA ficam só no n8n).
+    /// </summary>
+    public string? LeadSearchWebhookUrl { get; private set; }
+
+    public const int WebhookUrlMaxLength = 500;
+
+    public void ChangeLeadSearchWebhookUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            LeadSearchWebhookUrl = null;
+            return;
+        }
+
+        var trimmed = url.Trim();
+        if (trimmed.Length > WebhookUrlMaxLength
+            || !Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw new DomainRuleException("Informe um endereço http(s) válido para o webhook da automação.");
+        }
+
+        LeadSearchWebhookUrl = trimmed;
+    }
+
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }

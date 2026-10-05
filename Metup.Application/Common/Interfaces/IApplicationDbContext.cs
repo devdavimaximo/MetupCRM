@@ -4,6 +4,7 @@ using Metup.Domain.Contacts;
 using Metup.Domain.Conversations;
 using Metup.Domain.Deals;
 using Metup.Domain.Integrations;
+using Metup.Domain.LeadFinder;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
 using Metup.Domain.Users;
@@ -50,6 +51,10 @@ public interface IApplicationDbContext
     DbSet<ConversationTag> ConversationTags { get; }
 
     DbSet<IntegrationEvent> IntegrationEvents { get; }
+
+    DbSet<LeadSearch> LeadSearches { get; }
+
+    DbSet<FoundLead> FoundLeads { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

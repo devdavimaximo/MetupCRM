@@ -115,6 +115,7 @@ export const SOURCE_COLORS: Record<DealSource, string> = {
   LinkedIn: "#dcd7cf",
   Evento: "#6e6a64",
   Outro: "#4f4d4a",
+  LeadFinder: "#f0d9a8",
 }
 
 /** A fatia que junta as menores origens quando há mais origens do que o donut mostra. */

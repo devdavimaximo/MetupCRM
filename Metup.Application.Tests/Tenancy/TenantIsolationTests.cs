@@ -10,6 +10,7 @@ using Metup.Domain.Contacts;
 using Metup.Domain.Conversations;
 using Metup.Domain.Deals;
 using Metup.Domain.Integrations;
+using Metup.Domain.LeadFinder;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
 using Metup.Domain.Users;
@@ -222,6 +223,16 @@ public class TenantIsolationTests
             organizationId, deal.Id, contact.Id, ActivityType.Call, ActivityOutcome.Atendeu, null, admin.Id, NowUtc));
         db.Tasks.Add(task);
         db.TaskReschedules.Add(reschedule);
+        var leadSearch = LeadSearch.Request(organizationId, "clínicas", "Curitiba", 50, admin.Id, NowUtc);
+        db.LeadSearches.Add(leadSearch);
+        db.FoundLeads.Add(new FoundLead
+        {
+            OrganizationId = organizationId,
+            LeadSearchId = leadSearch.Id,
+            DedupeKey = "tel:4133334444",
+            Name = "Clínica",
+            FoundAt = NowUtc,
+        });
         db.Conversations.Add(conversation);
         db.Messages.Add(message);
         db.MessageAttachments.Add(new MessageAttachment

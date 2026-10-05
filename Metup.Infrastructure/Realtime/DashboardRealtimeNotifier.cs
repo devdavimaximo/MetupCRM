@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace Metup.Infrastructure.Realtime;
 
 /// <summary>Mensagem enxuta do hub: o que mudou e em qual negócio/conversa. Nada além disso sai do servidor.</summary>
-public sealed record RealtimeEventMessage(string Type, Guid? DealId, Guid? OwnerUserId, Guid? ConversationId = null);
+public sealed record RealtimeEventMessage(string Type, Guid? DealId, Guid? OwnerUserId, Guid? ConversationId = null, Guid? LeadSearchId = null);
 
 /// <summary>
 /// Leva os avisos in-process dos comandos até as telas abertas: eventos de negócio/conversa vão
@@ -27,7 +27,8 @@ public sealed class DashboardRealtimeNotifier(
     INotificationHandler<ConversationMessageReceivedNotification>,
     INotificationHandler<ConversationMessageSentNotification>,
     INotificationHandler<ConversationStatusChangedNotification>,
-    INotificationHandler<ConversationFavoritedNotification>
+    INotificationHandler<ConversationFavoritedNotification>,
+    INotificationHandler<LeadSearchUpdatedNotification>
 {
     public Task Handle(DealCreatedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
 
@@ -47,10 +48,13 @@ public sealed class DashboardRealtimeNotifier(
 
     public Task Handle(ConversationFavoritedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
 
+    public Task Handle(LeadSearchUpdatedNotification notification, CancellationToken cancellationToken) => SendAsync(notification, cancellationToken);
+
     private async Task SendAsync(IRealtimeNotification notification, CancellationToken cancellationToken)
     {
         var conversationId = (notification as IConversationRealtimeNotification)?.ConversationId;
-        var message = new RealtimeEventMessage(notification.Type, notification.DealId, notification.OwnerUserId, conversationId);
+        var leadSearchId = (notification as ILeadSearchRealtimeNotification)?.LeadSearchId;
+        var message = new RealtimeEventMessage(notification.Type, notification.DealId, notification.OwnerUserId, conversationId, leadSearchId);
         var group = notification.UserScoped && notification.OwnerUserId is { } ownerUserId
             ? DashboardHub.UserGroup(ownerUserId)
             : DashboardHub.OrganizationGroup(notification.OrganizationId);

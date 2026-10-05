@@ -13,6 +13,7 @@ import type { DealStage } from "@/features/deals/api"
 import { dealSectionToUrl, type DealDrawerSection } from "@/features/deals/deal-section"
 import { PipelinePage } from "@/features/deals/PipelinePage"
 import { InboxPage } from "@/features/inbox/InboxPage"
+import { LeadFinderPage } from "@/features/lead-finder/LeadFinderPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
 import { readInitialReportsPeriod, reportsPeriodUrlPatch, storeReportsPeriod } from "@/features/reports/reports-period"
 import { TasksPage } from "@/features/tasks/TasksPage"
@@ -144,6 +145,9 @@ function App() {
           onOpenDeal={openDeal}
           onNewDealForCompany={openNewDealForCompany}
         />
+      )}
+      {currentView === "leads" && (
+        <LeadFinderPage key={`leads-${navSeed}`} user={session.user} onOpenDeal={(dealId) => openDeal(dealId)} onNavigate={navigate} />
       )}
       {currentView === "pipeline" && (
         <PipelinePage

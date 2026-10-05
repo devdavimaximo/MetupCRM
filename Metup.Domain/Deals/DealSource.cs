@@ -16,4 +16,7 @@ public enum DealSource
     Outbound,
     Evento,
     Outro,
+
+    /// <summary>Garimpado pelo buscador de leads (automação de mapas/IA no n8n) e importado pelo SDR.</summary>
+    LeadFinder,
 }

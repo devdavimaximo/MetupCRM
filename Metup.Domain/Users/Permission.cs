@@ -14,6 +14,9 @@ public enum Permission
     CompaniesView,
     ReportsView,
 
+    /// <summary>Buscador de leads: pedir buscas à automação, triar e importar os resultados.</summary>
+    LeadFinderView,
+
     /// <summary>
     /// Ver e agir nos negócios e tarefas de toda a equipe (reatribuir inclusive). Sem ela, o
     /// usuário fica restrito à própria carteira — o antigo "SDR".
