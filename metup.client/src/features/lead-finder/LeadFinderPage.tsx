@@ -35,7 +35,7 @@ import {
 } from "./api"
 import { AutomationSettingsSheet } from "./AutomationSettingsSheet"
 import { isSearchActive, searchProgress, searchState, searchTitle } from "./lead-format"
-import { LeadBulkBar, type ImportOptions } from "./LeadBulkBar"
+import { LeadBulkBar, type BulkBusy, type ImportOptions } from "./LeadBulkBar"
 import { LeadTable, type RowActions } from "./LeadTable"
 import { SearchComposer } from "./SearchComposer"
 import { SearchHistory } from "./SearchHistory"
@@ -85,10 +85,13 @@ export function LeadFinderPage({
   user,
   onOpenDeal,
   onNavigate,
+  onStartDialer,
 }: {
   user: AuthenticatedUser
   onOpenDeal: (dealId: string) => void
   onNavigate: (view: View) => void
+  /** Abre o discador só com estes negócios. Ausente = o cargo não tem o discador. */
+  onStartDialer?: (dealIds: string[]) => void
 }) {
   const canAssignOthers = can(user, "TeamWideAccess")
   const canConfigure = can(user, "SettingsManage")
@@ -103,7 +106,7 @@ export function LeadFinderPage({
   const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>({ key: "", ids: new Set() })
   const lastToggled = useRef<string | null>(null)
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
-  const [bulkBusy, setBulkBusy] = useState<"import" | "discard" | "restore" | null>(null)
+  const [bulkBusy, setBulkBusy] = useState<BulkBusy>(null)
   const [importOptions, setImportOptions] = useState<ImportOptions>(() => ({
     ownerUserId: null,
     scheduleCall: readSchedulePreference(),
@@ -285,6 +288,35 @@ export function LeadFinderPage({
           })
         }
       }),
+  }
+
+  /**
+   * "Importar e discar": o lote vira negócio na carteira de quem clicou, com a ligação de hoje, e o
+   * discador abre só com ele. Na aba Importados os negócios já existem — só abre o discador. O
+   * responsável é sempre o próprio usuário: a fila do discador é a dele.
+   */
+  async function dialSelected() {
+    if (!onStartDialer) return
+    const chosen = (leads.data?.items ?? []).filter((lead) => selected.has(lead.id))
+    if (tab === "Imported") {
+      onStartDialer(chosen.map((lead) => lead.dealId).filter((id): id is string => id !== null))
+      return
+    }
+
+    setBulkBusy("dial")
+    try {
+      const result = await importFoundLeads({ ids: chosen.map((lead) => lead.id), ownerUserId: null, scheduleCall: true })
+      if (result.dealIds.length === 0) {
+        toasts.show({ message: "Nada a discar: os leads selecionados já estavam no pipeline." })
+        refreshAfterChange()
+        return
+      }
+      onStartDialer(result.dealIds)
+    } catch (err) {
+      toasts.show({ message: toMessage(err, "Não foi possível importar os leads para discar."), tone: "danger" })
+    } finally {
+      setBulkBusy(null)
+    }
   }
 
   async function runBulk(kind: "import" | "discard" | "restore") {
@@ -507,6 +539,7 @@ export function LeadFinderPage({
                   importOptions={importOptions}
                   onImportOptionsChange={setImportOptions}
                   onImport={() => runBulk("import")}
+                  onDial={onStartDialer ? () => void dialSelected() : undefined}
                   onDiscard={() => void runBulk("discard")}
                   onRestore={() => void runBulk("restore")}
                   onClear={() => setSelected(new Set())}

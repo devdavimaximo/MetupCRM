@@ -23,6 +23,10 @@ public class LogActivityCommandValidator : AbstractValidator<LogActivityCommand>
             .NotNull().WithMessage("Toda ligação precisa de um desfecho estruturado.")
             .When(x => x.Type == ActivityType.Call);
 
+        RuleFor(x => x.PhoneLineId)
+            .Null().WithMessage("Só ligações registram a linha usada.")
+            .When(x => x.Type != ActivityType.Call);
+
         RuleFor(x => x.Note)
             .MaximumLength(MaxNoteLength).WithMessage($"A nota pode ter no máximo {MaxNoteLength} caracteres.");
 

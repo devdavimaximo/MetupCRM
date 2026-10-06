@@ -2,6 +2,7 @@ using Metup.Domain.Activities;
 using Metup.Domain.Contacts;
 using Metup.Domain.Deals;
 using Metup.Domain.Organizations;
+using Metup.Domain.Telephony;
 using Metup.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -47,6 +48,9 @@ public class ActivityConfiguration : IEntityTypeConfiguration<Activity>
             .HasColumnName("author_user_id")
             .IsRequired();
 
+        builder.Property(a => a.PhoneLineId)
+            .HasColumnName("phone_line_id");
+
         builder.Property(a => a.OccurredAt)
             .HasColumnName("occurred_at")
             .IsRequired();
@@ -79,6 +83,12 @@ public class ActivityConfiguration : IEntityTypeConfiguration<Activity>
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(a => a.AuthorUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Linha não se exclui (só desativa): o histórico de "de onde ligou" fica.
+        builder.HasOne<PhoneLine>()
+            .WithMany()
+            .HasForeignKey(a => a.PhoneLineId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

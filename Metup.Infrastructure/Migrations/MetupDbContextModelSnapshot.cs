@@ -64,6 +64,10 @@ namespace Metup.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("outcome");
 
+                    b.Property<Guid?>("PhoneLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("phone_line_id");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -75,6 +79,8 @@ namespace Metup.Infrastructure.Migrations
                     b.HasIndex("AuthorUserId");
 
                     b.HasIndex("ContactId");
+
+                    b.HasIndex("PhoneLineId");
 
                     b.HasIndex("DealId", "OccurredAt");
 
@@ -1112,6 +1118,76 @@ namespace Metup.Infrastructure.Migrations
                     b.ToTable("task_reschedules", (string)null);
                 });
 
+            modelBuilder.Entity("Metup.Domain.Telephony.PhoneLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("label");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("number");
+
+                    b.Property<string>("NumberE164")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("number_e164");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("OrganizationId", "NumberE164")
+                        .IsUnique()
+                        .HasFilter("is_active");
+
+                    b.HasIndex("OrganizationId", "UserId", "IsActive");
+
+                    b.ToTable("phone_lines", (string)null);
+                });
+
             modelBuilder.Entity("Metup.Domain.Users.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1233,6 +1309,11 @@ namespace Metup.Infrastructure.Migrations
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Metup.Domain.Telephony.PhoneLine", null)
+                        .WithMany()
+                        .HasForeignKey("PhoneLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Metup.Domain.Companies.Company", b =>
@@ -1539,6 +1620,27 @@ namespace Metup.Infrastructure.Migrations
                     b.HasOne("Metup.Domain.Tasks.TaskItem", null)
                         .WithMany()
                         .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Metup.Domain.Telephony.PhoneLine", b =>
+                {
+                    b.HasOne("Metup.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Metup.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Metup.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

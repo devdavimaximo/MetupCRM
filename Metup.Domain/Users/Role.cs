@@ -93,6 +93,7 @@ public static class DefaultPermissions
         Permission.CompaniesView,
         Permission.ReportsView,
         Permission.LeadFinderView,
+        Permission.DialerView,
     ];
 
     public static IReadOnlyList<Permission> Sdr { get; } = Pages;

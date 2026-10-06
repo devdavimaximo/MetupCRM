@@ -23,6 +23,12 @@ public class Activity : BaseEntity
 
     public Guid AuthorUserId { get; set; }
 
+    /// <summary>
+    /// Linha de onde a ligação saiu (discador). Só em <see cref="ActivityType.Call"/>; nula nas
+    /// ligações registradas à mão, sem linha escolhida.
+    /// </summary>
+    public Guid? PhoneLineId { get; set; }
+
     public DateTime OccurredAt { get; set; }
 
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
@@ -35,11 +41,17 @@ public class Activity : BaseEntity
         ActivityOutcome? outcome,
         string? note,
         Guid authorUserId,
-        DateTime occurredAt)
+        DateTime occurredAt,
+        Guid? phoneLineId = null)
     {
         if (type == ActivityType.Call && outcome is null)
         {
             throw new DomainRuleException("Toda ligação precisa de um desfecho estruturado.");
+        }
+
+        if (phoneLineId is not null && type != ActivityType.Call)
+        {
+            throw new DomainRuleException("Só ligações registram a linha usada.");
         }
 
         return new Activity
@@ -51,6 +63,7 @@ public class Activity : BaseEntity
             Outcome = outcome,
             Note = note,
             AuthorUserId = authorUserId,
+            PhoneLineId = phoneLineId,
             OccurredAt = occurredAt,
         };
     }

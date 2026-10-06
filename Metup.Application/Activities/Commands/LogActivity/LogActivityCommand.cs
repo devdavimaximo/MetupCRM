@@ -10,6 +10,7 @@ namespace Metup.Application.Activities.Commands.LogActivity;
 /// junto com a atividade — "registrar é rápido" (seção 3 do CLAUDE.md), sem um segundo passo.
 /// <c>CompletesTaskId</c> (aditivo): conclui a tarefa de origem na mesma transação — a tela de
 /// Tarefas registra a atividade "a partir da tarefa". Sem ele nada muda (dashboard, n8n).
+/// <c>PhoneLineId</c> (aditivo, só em ligação): a linha do próprio usuário de onde o discador ligou.
 /// </remarks>
 public record LogActivityCommand(
     Guid DealId,
@@ -21,4 +22,5 @@ public record LogActivityCommand(
     ActivityType? NextActionType,
     DateTime? NextActionDueDate,
     string? NextActionNote,
-    Guid? CompletesTaskId = null) : IRequest<LogActivityResultDto>;
+    Guid? CompletesTaskId = null,
+    Guid? PhoneLineId = null) : IRequest<LogActivityResultDto>;

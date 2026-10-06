@@ -37,6 +37,8 @@ export type LogActivityInput = {
   nextActionNote: string | null
   /** Conclui a tarefa de origem na mesma transação (aditivo). */
   completesTaskId?: string
+  /** Só em ligação: a linha do próprio usuário de onde o discador ligou. */
+  phoneLineId?: string
 }
 
 export type LogActivityResult = {

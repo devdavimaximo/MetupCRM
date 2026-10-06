@@ -42,6 +42,17 @@ public class LogActivityCommandHandler(
             }
         }
 
+        // A linha é de quem liga: só uma linha ativa do próprio autor (404 genérico para as demais).
+        if (request.PhoneLineId is { } phoneLineId)
+        {
+            var lineIsAuthors = await context.PhoneLines
+                .AnyAsync(l => l.Id == phoneLineId && l.OrganizationId == organizationId && l.UserId == userId && l.IsActive, cancellationToken);
+            if (!lineIsAuthors)
+            {
+                throw new NotFoundException("Linha telefônica");
+            }
+        }
+
         var completedTask = request.CompletesTaskId is { } completesTaskId
             ? await CompleteOriginTaskAsync(completesTaskId, request.DealId, cancellationToken)
             : null;
@@ -54,7 +65,8 @@ public class LogActivityCommandHandler(
             request.Outcome,
             request.Note,
             userId,
-            request.OccurredAt ?? DateTime.UtcNow);
+            request.OccurredAt ?? DateTime.UtcNow,
+            request.PhoneLineId);
 
         context.Activities.Add(activity);
 
@@ -82,6 +94,7 @@ public class LogActivityCommandHandler(
             type = activity.Type.ToString(),
             outcome = activity.Outcome?.ToString(),
             authorUserId = activity.AuthorUserId,
+            phoneLineId = activity.PhoneLineId,
             occurredAt = activity.OccurredAt,
         });
 

@@ -5,6 +5,7 @@ import type { View } from "@/lib/url-state"
 export const viewPermission: Record<View, Permission> = {
   dashboard: "DashboardView",
   tarefas: "TasksView",
+  discador: "DialerView",
   inbox: "InboxView",
   pipeline: "PipelineView",
   empresas: "CompaniesView",
@@ -24,6 +25,7 @@ export const permissionGroups: { label: string; description: string; items: Perm
     items: [
       { permission: "DashboardView", label: "Dashboard", description: "O que fazer hoje e os números do funil." },
       { permission: "TasksView", label: "Tarefas", description: "Follow-ups, ligações e próximas ações." },
+      { permission: "DialerView", label: "Discador", description: "Sessão de ligações da própria fila, pelas linhas do usuário." },
       { permission: "InboxView", label: "Conversas", description: "Inbox de WhatsApp ligada aos negócios." },
       { permission: "PipelineView", label: "Pipeline", description: "Quadro de negócios por etapa." },
       { permission: "CompaniesView", label: "Empresas", description: "Empresas, contatos e fichas." },
@@ -49,6 +51,7 @@ export const permissionGroups: { label: string; description: string; items: Perm
       { permission: "UsersManage", label: "Usuários", description: "Criar usuários, trocar cargo, redefinir senha e desativar." },
       { permission: "RolesManage", label: "Cargos", description: "Criar cargos e definir as permissões de cada um." },
       { permission: "SettingsManage", label: "Configurações", description: "Configurações da organização e token de integração." },
+      { permission: "PhoneLinesManage", label: "Linhas telefônicas", description: "Cadastrar o número de cada usuário para o discador." },
     ],
   },
 ]

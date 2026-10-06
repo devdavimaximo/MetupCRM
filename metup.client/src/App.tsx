@@ -12,6 +12,7 @@ import { DashboardPage } from "@/features/dashboard/DashboardPage"
 import type { DealStage } from "@/features/deals/api"
 import { dealSectionToUrl, type DealDrawerSection } from "@/features/deals/deal-section"
 import { PipelinePage } from "@/features/deals/PipelinePage"
+import { DialerPage, type DialerIntent } from "@/features/dialer/DialerPage"
 import { InboxPage } from "@/features/inbox/InboxPage"
 import { LeadFinderPage } from "@/features/lead-finder/LeadFinderPage"
 import { ReportsPage } from "@/features/reports/ReportsPage"
@@ -33,6 +34,7 @@ function App() {
   const [view, setView] = useState<View>(() => readUrlState().view)
   const [navSeed, setNavSeed] = useState(0)
   const [newDealIntent, setNewDealIntent] = useState<NewDealIntent>(null)
+  const [dialerIntent, setDialerIntent] = useState<DialerIntent | null>(null)
   const [reportState] = useState(() => {
     const initial = readUrlState()
     return { period: readInitialReportsPeriod(initial), tab: initial.reportTab }
@@ -76,6 +78,7 @@ function App() {
   function navigate(nextView: View) {
     writeUrlState({ view: nextView, companyId: null, dealId: null, ...ARRIVAL_CLEARED })
     setNewDealIntent(null)
+    setDialerIntent(null)
     setView(nextView)
     setNavSeed((seed) => seed + 1)
   }
@@ -105,6 +108,15 @@ function App() {
     writeUrlState({ view: "inbox", conversationId, dealId: null, companyId: null, search: "", ...ARRIVAL_CLEARED })
     setNewDealIntent(null)
     setView("inbox")
+    setNavSeed((seed) => seed + 1)
+  }
+
+  /** Chegada no discador com um lote (ex.: "Importar e discar"). Vale só para esta navegação. */
+  function startDialer(dealIds: string[]) {
+    writeUrlState({ view: "discador", companyId: null, dealId: null, ...ARRIVAL_CLEARED })
+    setNewDealIntent(null)
+    setDialerIntent({ dealIds })
+    setView("discador")
     setNavSeed((seed) => seed + 1)
   }
 
@@ -147,7 +159,21 @@ function App() {
         />
       )}
       {currentView === "leads" && (
-        <LeadFinderPage key={`leads-${navSeed}`} user={session.user} onOpenDeal={(dealId) => openDeal(dealId)} onNavigate={navigate} />
+        <LeadFinderPage
+          key={`leads-${navSeed}`}
+          user={session.user}
+          onOpenDeal={(dealId) => openDeal(dealId)}
+          onNavigate={navigate}
+          onStartDialer={can(session.user, "DialerView") ? startDialer : undefined}
+        />
+      )}
+      {currentView === "discador" && (
+        <DialerPage
+          key={`discador-${navSeed}`}
+          user={session.user}
+          intent={dialerIntent}
+          onOpenDeal={openDeal}
+        />
       )}
       {currentView === "pipeline" && (
         <PipelinePage

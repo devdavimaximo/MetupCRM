@@ -10,6 +10,7 @@ using Metup.Domain.Integrations;
 using Metup.Domain.LeadFinder;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
+using Metup.Domain.Telephony;
 using Metup.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -72,6 +73,8 @@ public class MetupDbContext(DbContextOptions<MetupDbContext> options, ITenantCon
     public DbSet<LeadSearch> LeadSearches => Set<LeadSearch>();
 
     public DbSet<FoundLead> FoundLeads => Set<FoundLead>();
+
+    public DbSet<PhoneLine> PhoneLines => Set<PhoneLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

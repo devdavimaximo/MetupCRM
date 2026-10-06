@@ -17,6 +17,9 @@ public enum Permission
     /// <summary>Buscador de leads: pedir buscas à automação, triar e importar os resultados.</summary>
     LeadFinderView,
 
+    /// <summary>Discador: a fila de ligações do próprio usuário, discada pelas linhas dele.</summary>
+    DialerView,
+
     /// <summary>
     /// Ver e agir nos negócios e tarefas de toda a equipe (reatribuir inclusive). Sem ela, o
     /// usuário fica restrito à própria carteira — o antigo "SDR".
@@ -26,4 +29,7 @@ public enum Permission
     UsersManage,
     RolesManage,
     SettingsManage,
+
+    /// <summary>Cadastrar, editar e desativar as linhas telefônicas de qualquer usuário.</summary>
+    PhoneLinesManage,
 }

@@ -33,7 +33,8 @@ public class ActivitiesController(ISender sender) : ControllerBase
             request.NextActionType,
             request.NextActionDueDate,
             request.NextActionNote,
-            request.CompletesTaskId);
+            request.CompletesTaskId,
+            request.PhoneLineId);
 
         return Ok(await sender.Send(command, cancellationToken));
     }
@@ -54,4 +55,5 @@ public record LogActivityRequest(
     ActivityType? NextActionType,
     DateTime? NextActionDueDate,
     string? NextActionNote,
-    Guid? CompletesTaskId = null);
+    Guid? CompletesTaskId = null,
+    Guid? PhoneLineId = null);

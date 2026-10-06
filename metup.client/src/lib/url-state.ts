@@ -1,6 +1,6 @@
-export type View = "dashboard" | "empresas" | "leads" | "pipeline" | "tarefas" | "inbox" | "relatorios" | "usuarios" | "cargos"
+export type View = "dashboard" | "empresas" | "leads" | "pipeline" | "tarefas" | "discador" | "inbox" | "relatorios" | "usuarios" | "cargos"
 
-const VIEWS: View[] = ["dashboard", "empresas", "leads", "pipeline", "tarefas", "inbox", "relatorios", "usuarios", "cargos"]
+const VIEWS: View[] = ["dashboard", "empresas", "leads", "pipeline", "tarefas", "discador", "inbox", "relatorios", "usuarios", "cargos"]
 
 /**
  * Estado navegável na URL (aba ativa, busca, filtros e fichas abertas), para o SDR poder

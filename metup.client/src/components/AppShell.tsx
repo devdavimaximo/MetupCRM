@@ -5,6 +5,7 @@ import {
   Columns3,
   LayoutGrid,
   ListChecks,
+  PhoneCall,
   LogOut,
   Menu,
   MessagesSquare,
@@ -46,6 +47,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { view: "dashboard", label: "Dashboard", icon: LayoutGrid },
       { view: "tarefas", label: "Tarefas", icon: ListChecks },
+      { view: "discador", label: "Discador", icon: PhoneCall },
       { view: "inbox", label: "Conversas", icon: MessagesSquare },
     ],
   },

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Ban, Check, Loader2, Undo2, X } from "lucide-react"
+import { Ban, Check, Loader2, PhoneCall, Undo2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,8 @@ import { numberFormatter } from "@/lib/format"
 import type { FoundLeadStatus } from "./api"
 
 export type ImportOptions = { ownerUserId: string | null; scheduleCall: boolean }
+
+export type BulkBusy = "import" | "dial" | "discard" | "restore" | null
 
 /**
  * Aparece com leads selecionados (só da página atual). Importar abre um painel curto: responsável
@@ -26,19 +28,22 @@ export function LeadBulkBar({
   importOptions,
   onImportOptionsChange,
   onImport,
+  onDial,
   onDiscard,
   onRestore,
   onClear,
 }: {
   count: number
   tab: FoundLeadStatus
-  busy: "import" | "discard" | "restore" | null
+  busy: BulkBusy
   canAssignOthers: boolean
   users: UserSummary[]
   currentUserId: string
   importOptions: ImportOptions
   onImportOptionsChange: (options: ImportOptions) => void
   onImport: () => Promise<void>
+  /** Importa (se preciso) para a própria carteira e abre o discador com o lote. Ausente = sem discador. */
+  onDial?: () => void
   onDiscard: () => void
   onRestore: () => void
   onClear: () => void
@@ -119,6 +124,20 @@ export function LeadBulkBar({
             </div>
           </PopoverContent>
         </Popover>
+      )}
+
+      {onDial && tab !== "Discarded" && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={disabled}
+          onClick={onDial}
+          title={tab === "Imported" ? "Abre o discador com estes negócios" : "Importa para a sua carteira, agenda a ligação de hoje e abre o discador"}
+        >
+          {busy === "dial" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <PhoneCall aria-hidden="true" />}
+          {tab === "Imported" ? "Discar" : "Importar e discar"}
+        </Button>
       )}
 
       {tab === "New" && (

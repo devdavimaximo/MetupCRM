@@ -7,6 +7,7 @@ using Metup.Domain.Integrations;
 using Metup.Domain.LeadFinder;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
+using Metup.Domain.Telephony;
 using Metup.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,6 +56,8 @@ public interface IApplicationDbContext
     DbSet<LeadSearch> LeadSearches { get; }
 
     DbSet<FoundLead> FoundLeads { get; }
+
+    DbSet<PhoneLine> PhoneLines { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

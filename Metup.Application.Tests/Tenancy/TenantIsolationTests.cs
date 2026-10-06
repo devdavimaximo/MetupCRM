@@ -13,6 +13,7 @@ using Metup.Domain.Integrations;
 using Metup.Domain.LeadFinder;
 using Metup.Domain.Organizations;
 using Metup.Domain.Tasks;
+using Metup.Domain.Telephony;
 using Metup.Domain.Users;
 using Metup.Infrastructure.Persistence;
 using Metup.Infrastructure.Security;
@@ -263,6 +264,8 @@ public class TenantIsolationTests
             TagOptionId = tagOption.Id,
         });
         db.IntegrationEvents.Add(IntegrationEvent.Create(organizationId, IntegrationEventTypes.DealCreated, "{}"));
+        db.PhoneLines.Add(PhoneLine.Create(
+            organizationId, admin.Id, PhoneLineKind.Device, "Celular", "(41) 99999-0000", "+5541999990000", true, admin.Id, NowUtc));
 
         db.SaveChanges();
     }

@@ -7,10 +7,12 @@ export type Permission =
   | "CompaniesView"
   | "ReportsView"
   | "LeadFinderView"
+  | "DialerView"
   | "TeamWideAccess"
   | "UsersManage"
   | "RolesManage"
   | "SettingsManage"
+  | "PhoneLinesManage"
 
 export type AuthenticatedUser = {
   userId: string
