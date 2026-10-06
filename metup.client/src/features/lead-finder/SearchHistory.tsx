@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { Bot, Layers, Loader2 } from "lucide-react"
 
-import { Card, CardHeader, CardTitle } from "@/components/ui/card"
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { SkeletonRows } from "@/components/ui/states"
 import { formatRelative } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -17,10 +17,41 @@ const toneDot: Record<SearchTone, string> = {
 }
 
 /**
- * Histórico de buscas: escolher uma filtra a tabela por ela; "Todas" mostra a base inteira de leads
- * garimpados. Buscas em andamento mostram o contador subindo em tempo real.
+ * Histórico de buscas numa gaveta lateral: fora do caminho, para a tabela de leads ocupar a tela.
+ * Escolher uma busca filtra a tabela por ela; "Todas" mostra a base inteira de leads garimpados.
+ * Buscas em andamento mostram o contador subindo em tempo real.
  */
-export function SearchHistory({
+export function SearchHistorySheet({
+  open,
+  onOpenChange,
+  searches,
+  isLoading,
+  selectedId,
+  onSelect,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  searches: LeadSearch[] | null
+  isLoading: boolean
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent size="sm" className="sm:max-w-sm">
+        <SheetHeader>
+          <SheetTitle>Histórico de buscas</SheetTitle>
+          <SheetDescription>Escolha uma busca para ver só os leads dela.</SheetDescription>
+        </SheetHeader>
+        <SheetBody>
+          <SearchHistoryList searches={searches} isLoading={isLoading} selectedId={selectedId} onSelect={onSelect} />
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function SearchHistoryList({
   searches,
   isLoading,
   selectedId,
@@ -32,11 +63,7 @@ export function SearchHistory({
   onSelect: (id: string | null) => void
 }) {
   return (
-    <Card className="min-w-0">
-      <CardHeader>
-        <CardTitle>Buscas</CardTitle>
-      </CardHeader>
-      <nav aria-label="Buscas de leads" className="flex max-h-[32rem] flex-col overflow-y-auto p-1.5 max-lg:max-h-64">
+      <nav aria-label="Buscas de leads" className="flex flex-col p-2">
         <HistoryItem selected={selectedId === null} onClick={() => onSelect(null)}>
           <Layers className="size-4 shrink-0 text-muted" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">Todas as buscas</span>
@@ -75,7 +102,6 @@ export function SearchHistory({
           )
         })}
       </nav>
-    </Card>
   )
 }
 

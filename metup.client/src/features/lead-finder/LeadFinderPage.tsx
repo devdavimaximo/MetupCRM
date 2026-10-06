@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, Loader2, Plug, Radar, RotateCw, Search, SearchX, Smartphone, XCircle, Globe } from "lucide-react"
+import { ChevronLeft, ChevronRight, Globe, History, Loader2, Plug, Radar, RotateCw, Search, SearchX, Smartphone, X, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -38,7 +38,7 @@ import { isSearchActive, searchProgress, searchState, searchTitle } from "./lead
 import { LeadBulkBar, type BulkBusy, type ImportOptions } from "./LeadBulkBar"
 import { LeadTable, type RowActions } from "./LeadTable"
 import { SearchComposer } from "./SearchComposer"
-import { SearchHistory } from "./SearchHistory"
+import { SearchHistorySheet } from "./SearchHistory"
 
 const PAGE_SIZE = 50
 /** Enquanto houver busca andando, relê o histórico de tempos em tempos: "sem resposta" depende do relógio. */
@@ -112,6 +112,7 @@ export function LeadFinderPage({
     scheduleCall: readSchedulePreference(),
   }))
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [searchActionBusy, setSearchActionBusy] = useState(false)
   const toasts = useToasts()
 
@@ -391,7 +392,7 @@ export function LeadFinderPage({
 
   return (
     <TooltipProvider>
-      <Page width="wide">
+      <Page width="full">
         <PageHeader
           eyebrow="Prospecção ativa"
           title="Buscar leads"
@@ -415,10 +416,19 @@ export function LeadFinderPage({
           }}
         />
 
-        <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <SearchHistory searches={searches.data} isLoading={searches.isLoading} selectedId={searchId} onSelect={setSearchId} />
+        <SearchHistorySheet
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          searches={searches.data}
+          isLoading={searches.isLoading}
+          selectedId={searchId}
+          onSelect={(id) => {
+            setSearchId(id)
+            setHistoryOpen(false)
+          }}
+        />
 
-          <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
             {selectedSearch && (
               <SearchBanner
                 search={selectedSearch}
@@ -430,7 +440,32 @@ export function LeadFinderPage({
 
             <Card className="min-w-0">
               <div className="flex flex-col gap-3 border-b border-line-soft px-4 py-3 sm:px-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">
+                    <span className="relative inline-flex">
+                      <History aria-hidden="true" />
+                      {anyActive && (
+                        <span aria-hidden="true" className="absolute -top-1 -right-1 size-2 animate-pulse rounded-full bg-accent" />
+                      )}
+                    </span>
+                    Histórico
+                    {anyActive && <span className="sr-only"> (há busca em andamento)</span>}
+                  </Button>
+                  {selectedSearch ? (
+                    <span className="inline-flex h-8 max-w-full min-w-0 items-center gap-1.5 rounded-xs border border-accent/40 bg-accent/10 pr-1 pl-2.5 text-sm text-fg">
+                      <span className="truncate first-letter:uppercase">{searchTitle(selectedSearch)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSearchId(null)}
+                        aria-label="Mostrar leads de todas as buscas"
+                        className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-xs text-muted hover:bg-surface-3 hover:text-fg focus-visible:focus-ring"
+                      >
+                        <X className="size-3.5" aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted">Todas as buscas</span>
+                  )}
                   <SegmentedControl
                     label="Situação dos leads"
                     value={tab}
@@ -449,7 +484,7 @@ export function LeadFinderPage({
                       },
                     ]}
                   />
-                  <div className="relative w-full sm:w-64">
+                  <div className="relative w-full sm:ml-auto sm:w-64">
                     <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
                     <input
                       type="search"
@@ -557,7 +592,6 @@ export function LeadFinderPage({
                 />
               )}
             </Card>
-          </div>
         </div>
 
         {canConfigure && <AutomationSettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} />}

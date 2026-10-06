@@ -1,10 +1,10 @@
-import { ArrowUpRight, Ban, Check, Globe, Loader2, MapPin, MessageCircle, Phone, Star, Undo2 } from "lucide-react"
+import { ArrowUpRight, AtSign, Ban, Check, Globe, Loader2, MapPin, MessageCircle, Phone, Star, Undo2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Hint } from "@/components/ui/tooltip"
-import { telHref, whatsAppHref } from "@/lib/contact-links"
+import { instagramHref, telHref, whatsAppHref } from "@/lib/contact-links"
 import { cn } from "@/lib/utils"
 import type { FoundLead } from "./api"
 import { formatRating, formatReviewCount, isLikelyMobile, mapsHref, shortAddress, websiteLabel } from "./lead-format"
@@ -82,6 +82,47 @@ function WebsiteCell({ lead }: { lead: FoundLead }) {
       <Globe className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
       <span className="truncate">{websiteLabel(lead.website)}</span>
       <span className="sr-only">(abre em nova aba)</span>
+    </a>
+  )
+}
+
+/** "@sorrisocuritiba", vindo como @handle ou como URL do perfil. */
+function instagramHandle(value: string) {
+  const handle = value.trim().replace(/\/+$/, "")
+  const fromUrl = /instagram\.com\/([^/?#]+)/i.exec(handle)?.[1]
+  return `@${(fromUrl ?? handle).replace(/^@/, "")}`
+}
+
+function InstagramCell({ lead }: { lead: FoundLead }) {
+  const href = instagramHref(lead.instagram)
+  if (!lead.instagram || !href) return <span className="text-sm text-faint">—</span>
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-xs text-sm text-fg-muted decoration-line-strong underline-offset-4 hover:text-fg hover:underline focus-visible:focus-ring"
+    >
+      <AtSign className="size-3.5 shrink-0 text-muted" aria-hidden="true" />
+      <span className="truncate">{instagramHandle(lead.instagram).slice(1)}</span>
+      <span className="sr-only">(Instagram, abre em nova aba)</span>
+    </a>
+  )
+}
+
+function AddressLink({ lead }: { lead: FoundLead }) {
+  const address = shortAddress(lead)
+  return (
+    <a
+      href={mapsHref(lead)}
+      target="_blank"
+      rel="noreferrer"
+      title={address ?? undefined}
+      className="flex max-w-full min-w-0 items-center gap-1.5 rounded-xs text-xs text-muted hover:text-fg focus-visible:focus-ring min-[1680px]:text-sm"
+    >
+      <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{address ?? "Ver no mapa"}</span>
+      <span className="sr-only">(abre o mapa em nova aba)</span>
     </a>
   )
 }
@@ -172,9 +213,9 @@ export function LeadTable({ leads, selected, onToggle, onToggleAll, actions }: P
   return (
     <>
       <div className="max-lg:hidden">
-        {/* Cabe sem rolar a partir de 1280px com o histórico ao lado: o site vai na linha do nome, o
-            endereço só ganha coluna em tela larga (abaixo disso, o botão do mapa leva até ele). */}
-        <Table minWidth="46rem" className="table-fixed">
+        {/* Tabela na largura toda: cada informação na sua coluna. O endereço ganha coluna própria
+            a partir de 1680px; abaixo disso vai na linha do nome, como link para o mapa. */}
+        <Table minWidth="62rem" className="table-fixed">
           <TableHeader>
             <tr>
               <TableHead className="w-12">
@@ -182,9 +223,11 @@ export function LeadTable({ leads, selected, onToggle, onToggleAll, actions }: P
               </TableHead>
               <TableHead>Empresa</TableHead>
               <TableHead className="w-52">Telefone</TableHead>
-              <TableHead className="w-36">Avaliação</TableHead>
-              <TableHead className="w-64 max-2xl:hidden">Endereço</TableHead>
-              <TableHead className="w-48 text-right">
+              <TableHead className="w-36">Instagram</TableHead>
+              <TableHead className="w-40">Site</TableHead>
+              <TableHead className="w-32">Avaliação</TableHead>
+              <TableHead className="hidden w-64 min-[1680px]:table-cell">Endereço</TableHead>
+              <TableHead className="w-40 text-right">
                 <span className="sr-only">Ações</span>
               </TableHead>
             </tr>
@@ -195,30 +238,29 @@ export function LeadTable({ leads, selected, onToggle, onToggleAll, actions }: P
                 <TableCell>
                   <SelectBox label={`Selecionar ${lead.name}`} checked={selected.has(lead.id)} onChange={(shift) => onToggle(lead.id, shift)} />
                 </TableCell>
-                <TableCell className="h-auto py-2.5 whitespace-normal">
+                <TableCell className="h-auto py-3 whitespace-normal">
                   <LeadName lead={lead} />
-                  <div className="mt-1">
-                    <WebsiteCell lead={lead} />
+                  <div className="mt-1 min-[1680px]:hidden">
+                    <AddressLink lead={lead} />
                   </div>
                 </TableCell>
                 <TableCell>
                   <ContactLinks lead={lead} />
                 </TableCell>
                 <TableCell>
-                  <RatingCell lead={lead} />
-                </TableCell>
-                <TableCell className="max-2xl:hidden">
-                  <span className="block truncate text-sm text-fg-muted" title={shortAddress(lead) ?? undefined}>
-                    {shortAddress(lead) ?? "—"}
-                  </span>
+                  <InstagramCell lead={lead} />
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center justify-end gap-1.5">
-                    <a href={mapsHref(lead)} target="_blank" rel="noreferrer" className={iconLink} aria-label={`Ver ${lead.name} no mapa (abre em nova aba)`}>
-                      <MapPin className="size-4" aria-hidden="true" />
-                    </a>
-                    <RowAction lead={lead} actions={actions} />
-                  </div>
+                  <WebsiteCell lead={lead} />
+                </TableCell>
+                <TableCell>
+                  <RatingCell lead={lead} />
+                </TableCell>
+                <TableCell className="hidden min-[1680px]:table-cell">
+                  <AddressLink lead={lead} />
+                </TableCell>
+                <TableCell>
+                  <RowAction lead={lead} actions={actions} />
                 </TableCell>
               </TableRow>
             ))}
@@ -241,6 +283,7 @@ export function LeadTable({ leads, selected, onToggle, onToggleAll, actions }: P
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-7">
               <ContactLinks lead={lead} />
               <WebsiteCell lead={lead} />
+              {lead.instagram && <InstagramCell lead={lead} />}
               <a href={mapsHref(lead)} target="_blank" rel="noreferrer" className={iconLink} aria-label={`Ver ${lead.name} no mapa (abre em nova aba)`}>
                 <MapPin className="size-4" aria-hidden="true" />
               </a>
