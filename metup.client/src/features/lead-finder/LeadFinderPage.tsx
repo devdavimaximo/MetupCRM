@@ -516,6 +516,7 @@ export function LeadFinderPage({
                     tab={tab}
                     filtersActive={filtersActive}
                     activeSearch={selectedSearch && isSearchActive(selectedSearch) ? selectedSearch : null}
+                    selectedSearch={selectedSearch}
                     hasSearches={(searches.data?.length ?? 0) > 0}
                     onClearFilters={() => {
                       setText("")
@@ -637,12 +638,14 @@ function LeadsEmpty({
   tab,
   filtersActive,
   activeSearch,
+  selectedSearch,
   hasSearches,
   onClearFilters,
 }: {
   tab: FoundLeadStatus
   filtersActive: boolean
   activeSearch: LeadSearch | null
+  selectedSearch: LeadSearch | null
   hasSearches: boolean
   onClearFilters: () => void
 }) {
@@ -667,6 +670,21 @@ function LeadsEmpty({
         icon={Spinner}
         title="A automação está garimpando"
         description={`Os leads de "${activeSearch.query}" aparecem aqui conforme chegam — não precisa recarregar.`}
+      />
+    )
+  }
+
+  // Busca escolhida que nunca trouxe nada (sem resposta, falhou, ou a fonte não achou ninguém).
+  if (tab === "New" && selectedSearch && selectedSearch.receivedCount === 0) {
+    return (
+      <EmptyState
+        icon={SearchX}
+        title="Esta busca ainda não trouxe leads"
+        description={
+          selectedSearch.status === "Completed"
+            ? "A automação não encontrou nada. Tente um termo mais amplo ou uma cidade vizinha."
+            : "Use o aviso acima para reenviar a busca à automação, ou peça uma nova."
+        }
       />
     )
   }
