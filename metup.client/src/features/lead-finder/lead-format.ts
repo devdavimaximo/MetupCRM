@@ -26,9 +26,9 @@ export function searchState(search: Pick<LeadSearch, "status" | "isStalled">): {
   }
 }
 
-/** "clínicas odontológicas · Curitiba, PR". */
-export function searchTitle(search: Pick<LeadSearch, "query" | "location">) {
-  return search.location ? `${search.query} · ${search.location}` : search.query
+/** "clínicas odontológicas · Curitiba, PR" — com "· sem site" quando a busca pediu só esses. */
+export function searchTitle(search: Pick<LeadSearch, "query" | "location"> & Partial<Pick<LeadSearch, "withoutWebsite">>) {
+  return [search.query, search.location, search.withoutWebsite ? "sem site" : null].filter(Boolean).join(" · ")
 }
 
 /** "48 encontrados · 30 novos" — o que já estava na base não conta como novo. */

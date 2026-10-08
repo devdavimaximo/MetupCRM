@@ -30,6 +30,10 @@ public class LeadSearchConfiguration : IEntityTypeConfiguration<LeadSearch>
 
         builder.Property(s => s.MaxResults).HasColumnName("max_results");
 
+        builder.Property(s => s.WithoutWebsite)
+            .HasColumnName("without_website")
+            .IsRequired();
+
         builder.Property(s => s.Status)
             .HasColumnName("status")
             .HasConversion<string>()

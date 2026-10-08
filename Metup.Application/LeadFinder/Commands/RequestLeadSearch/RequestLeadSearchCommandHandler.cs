@@ -30,6 +30,7 @@ public class RequestLeadSearchCommandHandler(
             request.Query.NormalizeRequired(),
             request.Location.NormalizeOptional(),
             request.MaxResults,
+            request.WithoutWebsite,
             userId,
             nowUtc);
         context.LeadSearches.Add(search);

@@ -40,6 +40,7 @@ public class ReceiveLeadSearchResultsCommandHandler(
 
         var candidates = new Dictionary<string, FoundLead>();
         var rejected = 0;
+        var filtered = 0;
         var duplicatesInBatch = 0;
         foreach (var incoming in request.Leads)
         {
@@ -47,6 +48,10 @@ public class ReceiveLeadSearchResultsCommandHandler(
             if (lead is null)
             {
                 rejected++;
+            }
+            else if (!search.Accepts(lead.Website))
+            {
+                filtered++;
             }
             else if (!candidates.TryAdd(lead.DedupeKey, lead))
             {
@@ -96,7 +101,8 @@ public class ReceiveLeadSearchResultsCommandHandler(
             fresh.Count,
             known.Count + duplicatesInBatch,
             rejected,
-            search.Status);
+            search.Status,
+            filtered);
     }
 
     private static FoundLead? Normalize(IncomingLead incoming, LeadSearch search, DateTime nowUtc)

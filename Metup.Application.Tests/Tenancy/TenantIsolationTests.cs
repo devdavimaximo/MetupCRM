@@ -224,7 +224,7 @@ public class TenantIsolationTests
             organizationId, deal.Id, contact.Id, ActivityType.Call, ActivityOutcome.Atendeu, null, admin.Id, NowUtc));
         db.Tasks.Add(task);
         db.TaskReschedules.Add(reschedule);
-        var leadSearch = LeadSearch.Request(organizationId, "clínicas", "Curitiba", 50, admin.Id, NowUtc);
+        var leadSearch = LeadSearch.Request(organizationId, "clínicas", "Curitiba", 50, false, admin.Id, NowUtc);
         db.LeadSearches.Add(leadSearch);
         db.FoundLeads.Add(new FoundLead
         {

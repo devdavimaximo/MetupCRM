@@ -11,6 +11,7 @@ export type LeadSearch = {
   query: string
   location: string | null
   maxResults: number | null
+  withoutWebsite: boolean
   status: LeadSearchStatus
   origin: LeadSearchOrigin
   requestedByUserId: string | null
@@ -78,7 +79,12 @@ export function listLeadSearches(signal?: AbortSignal) {
   return apiFetch<LeadSearch[]>("/api/lead-finder/searches?limit=30", { signal })
 }
 
-export function requestLeadSearch(input: { query: string; location: string | null; maxResults: number | null }) {
+export function requestLeadSearch(input: {
+  query: string
+  location: string | null
+  maxResults: number | null
+  withoutWebsite: boolean
+}) {
   return apiFetch<LeadSearch>("/api/lead-finder/searches", { method: "POST", body: JSON.stringify(input) })
 }
 

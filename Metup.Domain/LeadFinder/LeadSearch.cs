@@ -27,6 +27,12 @@ public class LeadSearch : BaseEntity
     /// <summary>Teto de resultados pedido à automação (custo de API é dela, o limite é do CRM).</summary>
     public int? MaxResults { get; private set; }
 
+    /// <summary>
+    /// Só empresas sem site (público de quem vende presença digital). A automação filtra no garimpo, e
+    /// o CRM confere de novo no recebimento — o filtro não depende de o n8n acertar.
+    /// </summary>
+    public bool WithoutWebsite { get; private set; }
+
     public LeadSearchStatus Status { get; private set; } = LeadSearchStatus.Requested;
 
     public LeadSearchOrigin Origin { get; private set; }
@@ -61,6 +67,7 @@ public class LeadSearch : BaseEntity
         string query,
         string? location,
         int? maxResults,
+        bool withoutWebsite,
         Guid requestedByUserId,
         DateTime nowUtc) =>
         new()
@@ -69,6 +76,7 @@ public class LeadSearch : BaseEntity
             Query = query,
             Location = location,
             MaxResults = maxResults,
+            WithoutWebsite = withoutWebsite,
             Origin = LeadSearchOrigin.Crm,
             RequestedByUserId = requestedByUserId,
             RequestedAt = nowUtc,
@@ -111,6 +119,9 @@ public class LeadSearch : BaseEntity
         NewCount += inserted;
         LastActivityAt = nowUtc;
     }
+
+    /// <summary>O lead cabe nos filtros pedidos? Lead fora deles é descartado no recebimento.</summary>
+    public bool Accepts(string? website) => !WithoutWebsite || website is null;
 
     public void MarkRunning(DateTime nowUtc)
     {

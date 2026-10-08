@@ -108,7 +108,7 @@ public class DialerQueueTests
         context.Db.Activities.Add(Activity.Log(context.OrganizationId, context.Deal.Id, null, ActivityType.Call, ActivityOutcome.PediuRetorno, null, context.AdminUserId, NowUtc.AddDays(-1)));
         context.Db.Activities.Add(Activity.Log(context.OrganizationId, context.Deal.Id, null, ActivityType.Note, null, "nota", context.SdrUserId, NowUtc.AddHours(-1)));
 
-        var search = LeadSearch.Request(context.OrganizationId, "pizzaria", "Curitiba", 50, context.SdrUserId, NowUtc.AddDays(-3));
+        var search = LeadSearch.Request(context.OrganizationId, "pizzaria", "Curitiba", 50, false, context.SdrUserId, NowUtc.AddDays(-3));
         var lead = new FoundLead
         {
             OrganizationId = context.OrganizationId,

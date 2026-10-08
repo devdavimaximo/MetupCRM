@@ -8,6 +8,7 @@ public record LeadSearchDto(
     string Query,
     string? Location,
     int? MaxResults,
+    bool WithoutWebsite,
     LeadSearchStatus Status,
     LeadSearchOrigin Origin,
     Guid? RequestedByUserId,
@@ -60,6 +61,7 @@ public record FoundLeadPageDto(
 /// <param name="Duplicates">Já estavam na base (de outra busca ou reenvio do mesmo lote).</param>
 /// <param name="Rejected">Sem nome — não dá para prospectar. Ignorados sem derrubar o lote.</param>
 /// <param name="Status">Situação da busca depois do lote — <c>Cancelled</c> diz ao n8n que pode parar.</param>
-public record LeadBatchResultDto(int Received, int Inserted, int Duplicates, int Rejected, LeadSearchStatus Status);
+/// <param name="Filtered">Fora dos filtros da busca (ex.: com site numa busca "sem site"). Descartados.</param>
+public record LeadBatchResultDto(int Received, int Inserted, int Duplicates, int Rejected, LeadSearchStatus Status, int Filtered = 0);
 
 public record LeadFinderSettingsDto(string? WebhookUrl, bool ServiceTokenConfigured);

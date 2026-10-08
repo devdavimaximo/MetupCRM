@@ -113,6 +113,31 @@ public class LeadFinderTests(LeadFinderDatabase fixture) : IClassFixture<LeadFin
     }
 
     [Fact]
+    public async Task Busca_so_sem_site_descarta_no_recebimento_quem_tem_site_e_avisa_o_n8n()
+    {
+        var org = await fixture.NewOrganizationAsync();
+        var search = await RequestAsync(org, "pet shops", "Londrina", withoutWebsite: true);
+
+        var result = await IngestAsync(org, search,
+        [
+            Lead("Pet Amigo", phone: "43 3000-0001"),
+            Lead("Pet Center", phone: "43 3000-0002", website: "petcenter.com.br"),
+            Lead("Bicho Feliz", phone: "43 3000-0003", website: "javascript:alert(1)"), // site inválido = sem site
+        ]);
+
+        Assert.Equal(2, result.Inserted);
+        Assert.Equal(1, result.Filtered);
+
+        await using var check = fixture.Database.Open(org.Id);
+        Assert.Equal(["Bicho Feliz", "Pet Amigo"], await check.FoundLeads.OrderBy(l => l.Name).Select(l => l.Name).ToListAsync());
+        Assert.True((await check.LeadSearches.SingleAsync(s => s.Id == search)).WithoutWebsite);
+
+        var requested = await check.IntegrationEvents.SingleAsync(e => e.Type == IntegrationEventTypes.LeadSearchRequested);
+        using var payload = System.Text.Json.JsonDocument.Parse(requested.Payload);
+        Assert.True(payload.RootElement.GetProperty("filters").GetProperty("withoutWebsite").GetBoolean());
+    }
+
+    [Fact]
     public async Task Lista_filtra_sem_site_busca_sem_acento_ordena_nota_com_nulos_no_fim_e_conta_por_situacao()
     {
         var org = await fixture.NewOrganizationAsync();
@@ -250,11 +275,11 @@ public class LeadFinderTests(LeadFinderDatabase fixture) : IClassFixture<LeadFin
         string? address = null) =>
         new(placeId, name, category, phone, website, null, null, address, null, null, rating, reviews, null);
 
-    private async Task<Guid> RequestAsync(TestOrganization org, string query, string location)
+    private async Task<Guid> RequestAsync(TestOrganization org, string query, string location, bool withoutWebsite = false)
     {
         await using var db = fixture.Database.Open(org.Id);
         var handler = new RequestLeadSearchCommandHandler(db, org.Sdr, new NoDispatch(), new NullPublisher());
-        return (await handler.Handle(new RequestLeadSearchCommand(query, location, 50), default)).Id;
+        return (await handler.Handle(new RequestLeadSearchCommand(query, location, 50, withoutWebsite), default)).Id;
     }
 
     private async Task<Guid> StartFromAutomationAsync(TestOrganization org, string externalId, string query)

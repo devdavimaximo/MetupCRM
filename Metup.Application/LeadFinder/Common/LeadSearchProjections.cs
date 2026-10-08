@@ -35,6 +35,7 @@ public static class LeadSearchProjections
             s.Query,
             s.Location,
             s.MaxResults,
+            s.WithoutWebsite,
             s.Status,
             s.Origin,
             s.RequestedByUserId,

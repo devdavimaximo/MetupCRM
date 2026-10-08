@@ -18,6 +18,7 @@ public static class LeadSearchRequests
             query = search.Query,
             location = search.Location,
             maxResults = search.MaxResults,
+            filters = new { withoutWebsite = search.WithoutWebsite },
             requestedAt = search.RequestedAt,
             resultsPath = $"/api/integrations/lead-searches/{search.Id}/results",
             completePath = $"/api/integrations/lead-searches/{search.Id}/complete",

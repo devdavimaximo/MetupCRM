@@ -30,13 +30,17 @@ export function SearchComposer({
   const [query, setQuery] = useState("")
   const [location, setLocation] = useState("")
   const [maxResults, setMaxResults] = useState<number>(50)
+  const [withoutWebsite, setWithoutWebsite] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [queryError, setQueryError] = useState<string | null>(null)
 
   // Repetir uma busca recente: as combinações distintas mais novas, sem duplicar.
   const repeatable = recent
-    .filter((s, index, all) => all.findIndex((o) => o.query === s.query && o.location === s.location) === index)
+    .filter(
+      (s, index, all) =>
+        all.findIndex((o) => o.query === s.query && o.location === s.location && o.withoutWebsite === s.withoutWebsite) === index,
+    )
     .slice(0, 4)
 
   async function submit(event: FormEvent) {
@@ -50,7 +54,12 @@ export function SearchComposer({
     setError(null)
     setQueryError(null)
     try {
-      const search = await requestLeadSearch({ query: query.trim(), location: location.trim() || null, maxResults })
+      const search = await requestLeadSearch({
+        query: query.trim(),
+        location: location.trim() || null,
+        maxResults,
+        withoutWebsite,
+      })
       onRequested(search)
       setQuery("")
     } catch (err) {
@@ -117,6 +126,19 @@ export function SearchComposer({
           </Button>
         </div>
 
+        <label className="-mt-1 inline-flex w-fit cursor-pointer items-start gap-2 text-sm text-fg-muted">
+          <input
+            type="checkbox"
+            checked={withoutWebsite}
+            onChange={(e) => setWithoutWebsite(e.target.checked)}
+            className="mt-0.5 size-4 accent-accent"
+          />
+          <span>
+            <span className="font-medium text-fg">Só empresas sem site</span>
+            <span className="block text-xs text-muted">A busca demora mais e pode trazer menos que o pedido.</span>
+          </span>
+        </label>
+
         {queryError && (
           <p id="lead-query-error" role="alert" className="-mt-2 text-xs font-medium text-danger">
             {queryError}
@@ -139,6 +161,7 @@ export function SearchComposer({
                     setQuery(s.query)
                     setLocation(s.location ?? "")
                     if (s.maxResults) setMaxResults(s.maxResults)
+                    setWithoutWebsite(s.withoutWebsite)
                   }}
                   className="inline-flex h-8 max-w-full cursor-pointer items-center gap-1.5 rounded-xs border border-line-soft bg-surface-2 px-2.5 text-sm text-fg-muted transition-colors hover:border-line-strong hover:text-fg focus-visible:focus-ring"
                 >

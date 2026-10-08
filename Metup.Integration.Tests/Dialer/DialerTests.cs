@@ -111,7 +111,7 @@ public class DialerTests(LeadFinderDatabase fixture) : IClassFixture<LeadFinderD
     private async Task<Guid> SeedFoundLeadAsync(TestOrganization org)
     {
         await using var db = fixture.Database.Open(org.Id);
-        var search = LeadSearch.Request(org.Id, "pizzaria", "Curitiba", 20, org.SdrId, NowUtc.AddHours(-2));
+        var search = LeadSearch.Request(org.Id, "pizzaria", "Curitiba", 20, false, org.SdrId, NowUtc.AddHours(-2));
         var lead = new FoundLead
         {
             OrganizationId = org.Id,
