@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowUpRight, Phone, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Monogram } from "@/components/ui/monogram"
 import { Eyebrow, SectionTitle } from "@/components/ui/page"
-import { instagramHref, telHref } from "@/lib/contact-links"
+import { instagramHref, telHref, websiteHref } from "@/lib/contact-links"
 import { cn } from "@/lib/utils"
 import { CompanyDealList } from "./CompanyDealList"
 import { CompanyForm } from "./CompanyForm"
@@ -36,6 +36,7 @@ export function CompanySheet({
 
   const instagramUrl = instagramHref(company?.instagram ?? null)
   const phoneUrl = telHref(company?.phone ?? null)
+  const websiteUrl = websiteHref(company?.website ?? null)
 
   function handleContactSaved(saved: Contact) {
     if (!company) return
@@ -90,6 +91,18 @@ export function CompanySheet({
                     {company.instagram}
                     <ArrowUpRight className="size-3" aria-hidden="true" />
                     <span className="sr-only">(abre em nova aba)</span>
+                  </a>
+                )}
+                {websiteUrl && (
+                  <a
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-w-0 items-center gap-1 rounded-xs text-fg-muted underline decoration-line-strong underline-offset-4 hover:text-fg hover:decoration-accent focus-visible:focus-ring"
+                  >
+                    <span className="max-w-[16rem] truncate">{company.website!.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "")}</span>
+                    <ArrowUpRight className="size-3" aria-hidden="true" />
+                    <span className="sr-only">(site, abre em nova aba)</span>
                   </a>
                 )}
               </div>

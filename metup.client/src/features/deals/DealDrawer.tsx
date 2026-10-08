@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react"
-import { ArrowUpRight, Building2, CalendarCheck, Search } from "lucide-react"
+import { ArrowUpRight, AtSign, Building2, CalendarCheck, Globe, Phone, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,8 @@ import { Eyebrow, SectionTitle } from "@/components/ui/page"
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Alert, Skeleton } from "@/components/ui/states"
 import { toMessage } from "@/features/companies/form-errors"
-import { getCompany } from "@/features/companies/api"
+import { getCompany, type Company } from "@/features/companies/api"
+import { instagramHref, telHref, websiteHref } from "@/lib/contact-links"
 import { activityTypeLabels } from "@/features/activities/activity-labels"
 import { ActivityTimeline } from "@/features/activities/ActivityTimeline"
 import { LogActivityForm } from "@/features/activities/LogActivityForm"
@@ -47,6 +48,7 @@ type Props = {
 export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved, onTouched, canReassign }: Props) {
   const [deal, setDeal] = useState<Deal | null>(null)
   const [companyName, setCompanyName] = useState("")
+  const [channels, setChannels] = useState<CompanyChannels | null>(null)
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -78,6 +80,7 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
     if (target.mode === "new" && !companyId) {
       setDeal(null)
       setCompanyName("")
+      setChannels(null)
       setContacts([])
       setIsLoading(false)
       return
@@ -90,12 +93,14 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
           const company = await getCompany(loadedDeal.companyId, controller.signal)
           setDeal(loadedDeal)
           setCompanyName(loadedDeal.companyName)
+          setChannels(company)
           setContacts(company.contacts.map((c) => ({ id: c.id, name: c.name })))
           await loadActivities(target!.id, controller.signal)
         } else {
           const company = await getCompany(companyId!, controller.signal)
           setDeal(null)
           setCompanyName(company.name)
+          setChannels(company)
           setContacts(company.contacts.map((c) => ({ id: c.id, name: c.name })))
           setActivities([])
         }
@@ -193,6 +198,8 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
               )}
             </div>
           </SheetDescription>
+
+          {channels && <CompanyChannelLinks channels={channels} />}
 
           {deal && (
             <dl className="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-line-soft bg-line-soft sm:grid-cols-4">
@@ -299,6 +306,50 @@ export function DealDrawer({ target, users, onOpenChange, onOpenCompany, onSaved
         </SheetBody>
       </SheetContent>
     </Sheet>
+  )
+}
+
+type CompanyChannels = Pick<Company, "phone" | "instagram" | "website">
+
+/** Telefone, Instagram e site da empresa à mão na ficha do negócio — o SDR não precisa abrir a empresa. */
+function CompanyChannelLinks({ channels }: { channels: CompanyChannels }) {
+  const phoneUrl = telHref(channels.phone)
+  const instagramUrl = instagramHref(channels.instagram)
+  const websiteUrl = websiteHref(channels.website)
+  if (!channels.phone && !instagramUrl && !websiteUrl) return null
+
+  const linkClass =
+    "inline-flex min-w-0 items-center gap-1.5 rounded-xs text-fg-muted hover:text-fg focus-visible:focus-ring"
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+      {channels.phone &&
+        (phoneUrl ? (
+          <a href={phoneUrl} className={cn(linkClass, "tabular")}>
+            <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+            {channels.phone}
+          </a>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-fg-muted tabular">
+            <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+            {channels.phone}
+          </span>
+        ))}
+      {instagramUrl && (
+        <a href={instagramUrl} target="_blank" rel="noreferrer" className={linkClass}>
+          <AtSign className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{channels.instagram!.replace(/^@/, "")}</span>
+          <span className="sr-only">(Instagram, abre em nova aba)</span>
+        </a>
+      )}
+      {websiteUrl && (
+        <a href={websiteUrl} target="_blank" rel="noreferrer" className={linkClass}>
+          <Globe className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="max-w-[16rem] truncate">{channels.website!.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "")}</span>
+          <span className="sr-only">(site, abre em nova aba)</span>
+        </a>
+      )}
+    </div>
   )
 }
 

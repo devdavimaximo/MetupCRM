@@ -75,10 +75,8 @@ public class ImportFoundLeadsCommandHandler(
 
         var existingCompanyIds = leads.Where(l => l.ExistingCompanyId != null).Select(l => l.ExistingCompanyId!.Value).Distinct().ToList();
         var existingCompanies = await context.Companies
-            .AsNoTracking()
             .Where(c => existingCompanyIds.Contains(c.Id) && c.OrganizationId == organizationId)
-            .Select(c => c.Id)
-            .ToListAsync(cancellationToken);
+            .ToDictionaryAsync(c => c.Id, cancellationToken);
         var openDealByCompany = await context.Deals
             .AsNoTracking()
             .Where(d => existingCompanyIds.Contains(d.CompanyId) && d.OrganizationId == organizationId && d.Status == DealStatus.Aberto)
@@ -95,9 +93,16 @@ public class ImportFoundLeadsCommandHandler(
 
         foreach (var lead in leads)
         {
-            var companyId = lead.ExistingCompanyId is { } existing && existingCompanies.Contains(existing)
-                ? existing
-                : AddCompany(lead, organizationId, searchQueries.GetValueOrDefault(lead.LeadSearchId));
+            Guid companyId;
+            if (lead.ExistingCompanyId is { } existing && existingCompanies.TryGetValue(existing, out var existingCompany))
+            {
+                FillMissingChannels(existingCompany, lead);
+                companyId = existing;
+            }
+            else
+            {
+                companyId = AddCompany(lead, organizationId, searchQueries.GetValueOrDefault(lead.LeadSearchId));
+            }
 
             if (!openDealByCompany.TryGetValue(companyId, out var dealId))
             {
@@ -158,6 +163,19 @@ public class ImportFoundLeadsCommandHandler(
         };
         context.Companies.Add(company);
         return company.Id;
+    }
+
+    /// <summary>
+    /// Empresa já cadastrada ganha do lead só o que ainda não tinha — o que o time digitou à mão
+    /// nunca é sobrescrito pelo buscador.
+    /// </summary>
+    private static void FillMissingChannels(Company company, FoundLead lead)
+    {
+        company.Instagram ??= Truncate(lead.Instagram, CompanyInstagramMaxLength);
+        company.Phone ??= Truncate(lead.Phone, CompanyPhoneMaxLength);
+        company.Website ??= Truncate(lead.Website, CompanyWebsiteMaxLength);
+        company.City ??= Truncate(lead.City, CompanyCityMaxLength);
+        company.Segment ??= Truncate(lead.Category, CompanySegmentMaxLength);
     }
 
     private static DateTime CallDueDate(OrganizationClockSnapshot clock)

@@ -369,6 +369,7 @@ export const company: Company = {
   city: "Curitiba",
   instagram: null,
   phone: null,
+  website: null,
   contacts: [
     { id: "contact-1", companyId: "company-1", name: "Marina Alves", role: "Sócia", phone: null, whatsApp: null, email: null },
   ],

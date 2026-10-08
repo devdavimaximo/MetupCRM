@@ -15,6 +15,12 @@ export function whatsAppHref(whatsApp: string | null): string | null {
   return digits.length >= 8 ? `https://wa.me/${digits.length <= 11 ? `55${digits}` : digits}` : null
 }
 
+export function websiteHref(website: string | null): string | null {
+  if (!website) return null
+  const url = website.trim()
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`
+}
+
 export function instagramHref(instagram: string | null): string | null {
   if (!instagram) return null
   const handle = instagram.trim()

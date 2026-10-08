@@ -17,6 +17,7 @@ export type Company = {
   city: string | null
   instagram: string | null
   phone: string | null
+  website: string | null
   contacts: Contact[]
 }
 
